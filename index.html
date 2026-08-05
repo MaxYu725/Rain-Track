@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="定點雨量">
-  <title>香港定點雨量預報 v1.3 PWA</title>
+  <title>香港定點雨量預報 v1.4 PWA</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
@@ -38,9 +38,18 @@
     .radar-timeline{left:50%;bottom:22px;z-index:755;width:min(500px,calc(100vw - 190px));transform:translateX(-50%);padding:8px 10px;border:1px solid #333;background:rgba(0,0,0,.9);pointer-events:auto}.timeline-head{display:flex;justify-content:space-between;color:#aaa;font-size:.69rem;margin-bottom:6px}.timeline-control{display:flex;align-items:center;gap:8px}.timeline-control input{flex:1;accent-color:var(--accent)}
     #loading-line{position:fixed;top:0;left:0;z-index:10000;width:100%;height:4px;overflow:hidden;background:#000}#loading-line::after{content:"";position:absolute;top:0;width:25%;height:100%;background:var(--accent);animation:loading 1.2s infinite ease-in-out}@keyframes loading{from{left:-25%}to{left:100%}}
     .pwa-install-row{display:grid;grid-template-columns:1fr;gap:7px}.pwa-status{margin-top:8px;color:#777;font-size:.73rem;line-height:1.5}
+    .mobile-only{display:none!important}.mobile-title{display:none}.mobile-status{display:none}.sheet-handle{display:none}.sheet-peek-summary{display:none}.mobile-data-alert{display:none}
     @media (display-mode: fullscreen){#app-container{padding-top:max(8px,var(--safe-top))}}
     @media (display-mode: standalone){#app-container{padding-top:calc(10px + var(--safe-top))}}
-    @media(max-width:700px){#app-container{padding-top:calc(10px + var(--safe-top))}.header-top-bar{padding-right:12px}.app-title{margin-left:15px;font-size:.7rem}.pivot-headers{min-height:54px;padding:0 15px 7px;gap:10px}.rain-summary{display:none!important}.storm-panel{width:min(92vw,350px)}.metro-fab{right:14px;bottom:14px}.source-badges{right:8px;top:8px}.source-badge{padding:3px 5px}.source-badge#badge-hko{display:none}#coordinate-readout{display:none}.map-hint{top:47px;max-width:calc(100vw - 30px);overflow:hidden;text-overflow:ellipsis}.forecast-panel{left:5px;bottom:5px;width:calc(100vw - 10px);max-height:47vh}.forecast-panel.collapsed{max-height:77px}.panel-inner{padding:11px 10px calc(12px + var(--safe-bottom))}.location-name{font-size:1rem}.metrics{grid-template-columns:repeat(2,1fr)}.period-grid{grid-template-columns:repeat(4,86px)}.radar-timeline{left:8px;right:70px;bottom:68px;width:auto;transform:none}}
+    @media(max-width:700px){
+      html,body{height:100dvh}.mobile-only{display:inline-flex!important}.desktop-only{display:none!important}
+      #app-container{height:100dvh;padding-top:0}.header-top-bar{position:relative;z-index:1200;min-height:calc(56px + var(--safe-top));height:calc(56px + var(--safe-top));margin:0;padding:var(--safe-top) 10px 0;background:#050505;border-bottom:1px solid #202020}.app-title{display:none}.mobile-title{display:flex;min-width:0;flex:1;flex-direction:column;margin-right:8px}.mobile-title-main{overflow:hidden;color:#fff;font-size:.94rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.mobile-title-sub{margin-top:2px;overflow:hidden;color:#777;font-size:.64rem;text-overflow:ellipsis;white-space:nowrap}.global-controls{gap:5px}.global-controls .metro-btn{width:42px;min-width:42px;height:42px;padding:0;border-color:#292929;background:#090909;color:#ccc}.global-controls .metro-btn:active{background:#fff;color:#000}.pivot-headers{display:none}.pivot-content-wrapper{height:calc(100dvh - 56px - var(--safe-top));flex:none}.storm-panel{position:fixed;top:0;width:min(92vw,360px);padding-top:calc(18px + var(--safe-top));padding-bottom:calc(18px + var(--safe-bottom))}.drawer-backdrop{position:fixed}
+      .source-badges{display:none}.mobile-status{top:10px;right:10px;display:inline-flex;align-items:center;gap:7px;max-width:calc(100vw - 115px);height:34px;padding:0 10px;border:1px solid #3a3a3a;background:rgba(0,0,0,.84);color:#ddd;font-size:.72rem;pointer-events:auto}.mobile-status::before{content:"";width:8px;height:8px;flex:none;border-radius:50%;background:#777}.mobile-status.ok::before{background:var(--green)}.mobile-status.loading::before{background:var(--amber)}.mobile-status.error::before{background:var(--red)}.mobile-status.empty::before{background:#777}.mobile-status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #coordinate-readout{display:none}.map-hint{top:52px;max-width:calc(100vw - 28px);padding:5px 9px;overflow:hidden;border-color:#3a3a3a;font-size:.68rem;text-overflow:ellipsis;transition:opacity .3s,transform .3s}.map-hint.hint-hidden{opacity:0;transform:translate(-50%,-7px);pointer-events:none}#toast{bottom:calc(108px + var(--safe-bottom));max-width:calc(100vw - 30px);text-align:center}
+      .metro-fab{display:none}.forecast-panel{position:absolute;left:0;right:0;bottom:0;width:100%;max-height:none;height:min(54dvh,560px);overflow:auto;border:0;border-top:1px solid #343434;border-radius:18px 18px 0 0;background:rgba(5,5,5,.97);box-shadow:0 -8px 28px rgba(0,0,0,.55);transition:height .24s cubic-bezier(.2,.8,.2,1);overscroll-behavior:contain}.forecast-panel.dragging{transition:none;user-select:none}.forecast-panel.sheet-peek{height:96px;overflow:hidden}.forecast-panel.sheet-half{height:min(54dvh,560px)}.forecast-panel.sheet-full{height:calc(100dvh - 68px - var(--safe-top))}.forecast-panel.collapsed{max-height:none}.forecast-toggle{display:none}.sheet-handle{position:sticky;top:0;z-index:5;display:flex;height:26px;align-items:center;justify-content:center;background:linear-gradient(#090909 65%,rgba(9,9,9,0));touch-action:none;cursor:ns-resize}.sheet-handle::before{content:"";width:46px;height:4px;border-radius:999px;background:#555}.panel-inner{padding:2px 16px calc(18px + var(--safe-bottom))}.location-row{align-items:center;padding-right:0}.location-name{font-size:1.05rem}.location-coord{font-size:.65rem}.mini-btn{min-width:40px;height:38px}.sheet-peek-summary{display:none;margin-top:7px;align-items:center;justify-content:space-between;gap:10px;color:#aaa;font-size:.68rem}.sheet-peek-summary strong{flex:none;color:#fff;font-size:.72rem}.forecast-panel.sheet-peek .sheet-peek-summary{display:flex}.forecast-panel.sheet-peek .location-coord,.forecast-panel.sheet-peek .mini-actions,.forecast-panel.sheet-peek .summary-card,.forecast-panel.sheet-peek .metrics,.forecast-panel.sheet-peek .section-head,.forecast-panel.sheet-peek .period-grid,.forecast-panel.sheet-peek .chart,.forecast-panel.sheet-peek .dry-state,.forecast-panel.sheet-peek .nearby-card,.forecast-panel.sheet-peek .source-note,.forecast-panel.sheet-peek .empty-state{display:none}
+      .summary-card{margin-top:10px;padding:10px 0 10px 12px;border-width:0 0 0 3px;background:transparent}.summary-main{font-size:.82rem}.summary-meta{gap:5px 9px;font-size:.64rem}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-top:3px;border-top:1px solid #252525;border-bottom:1px solid #252525}.metric{padding:10px 7px;border:0;background:transparent}.metric:nth-child(odd){border-right:1px solid #252525}.metric-value{font-size:.9rem}.metric-label{font-size:.64rem}.forecast-panel:not(.sheet-full) .metric-detail{display:none}.forecast-panel:not(.sheet-full) .meta-detail{display:none}.forecast-panel:not(.sheet-full) .nearby-card,.forecast-panel:not(.sheet-full) .source-note{display:none}.mobile-data-alert{display:block;margin-top:8px;color:var(--amber);font-size:.68rem}.mobile-data-alert.normal{display:none}
+      .section-head{margin-top:12px}.section-title{font-size:.84rem}.section-note{font-size:.62rem}.period-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;overflow:visible;border:1px solid #2d2d2d}.period-card{min-width:0;padding:9px 6px;border:0;background:transparent}.period-card:nth-child(odd){border-right:1px solid #292929}.period-card:nth-child(-n+2){border-bottom:1px solid #292929}.period-card.wet{background:#07141b}.weather-icon{height:36px}.weather-icon svg{width:42px;height:36px}.period-time{font-size:.7rem}.period-amount{font-size:.9rem}.period-unit,.period-nearby{font-size:.62rem}.chart{height:118px;border-color:#292929}.dry-state{border-color:#292929;background:#0c0c0c}.nearby-card{border-color:#292929}.source-note{font-size:.62rem}.radar-timeline{left:8px;right:8px;bottom:calc(104px + var(--safe-bottom));width:auto;transform:none}
+    }
 </style>
 </head>
 <body>
@@ -49,12 +58,17 @@
 <div id="app-container">
   <div class="header-top-bar">
     <div class="app-title">hong kong weather</div>
+    <div class="mobile-title">
+      <span class="mobile-title-main">香港定點雨量</span>
+      <span id="mobile-title-sub" class="mobile-title-sub">未來兩小時臨近預報</span>
+    </div>
     <div class="global-controls">
       <button id="locate-button" class="metro-btn" onclick="RainApp.locate()" title="使用目前位置" aria-label="使用目前位置">◎</button>
-      <button class="metro-btn" onclick="RainApp.centerHongKong()" title="返回香港全景" aria-label="返回香港全景">⌂</button>
-      <button class="metro-btn" onclick="RainApp.toggleBasemap()" title="切換明暗地圖" aria-label="切換明暗地圖">◐</button>
-      <button class="metro-btn" onclick="RainApp.toggleFullscreen()" title="全螢幕" aria-label="全螢幕">⛶</button>
+      <button class="metro-btn desktop-only" onclick="RainApp.centerHongKong()" title="返回香港全景" aria-label="返回香港全景">⌂</button>
+      <button class="metro-btn desktop-only" onclick="RainApp.toggleBasemap()" title="切換明暗地圖" aria-label="切換明暗地圖">◐</button>
+      <button class="metro-btn desktop-only" onclick="RainApp.toggleFullscreen()" title="全螢幕" aria-label="全螢幕">⛶</button>
       <button class="metro-btn" onclick="RainApp.refresh()" title="更新預報" aria-label="更新預報">↻</button>
+      <button class="metro-btn mobile-only" onclick="RainApp.toggleDrawer()" title="開啟設定" aria-label="開啟設定">☰</button>
     </div>
   </div>
   <div class="pivot-headers">
@@ -69,11 +83,13 @@
         <button id="badge-location" class="source-badge empty" type="button" onclick="RainApp.locate()">LOC</button>
         <button id="badge-radar" class="source-badge disabled" type="button">RADAR</button>
       </div>
-      <div class="map-hint map-hud">點選地圖選擇位置；首次開啟會自動嘗試定位</div>
+      <button id="mobile-status" class="mobile-status map-hud loading" type="button" onclick="RainApp.toggleDrawer(true)" aria-label="開啟資料狀態"><span id="mobile-status-text" class="mobile-status-text">正在載入預報</span></button>
+      <div class="map-hint map-hud">點選地圖選擇位置；首次開啟會自動定位</div>
       <div id="coordinate-readout" class="map-hud">--</div>
       <div id="toast" class="map-hud"></div>
 
-      <section id="forecast-panel" class="forecast-panel map-hud" aria-live="polite">
+      <section id="forecast-panel" class="forecast-panel map-hud" aria-live="polite" data-sheet="half">
+        <div id="sheet-handle" class="sheet-handle" role="button" tabindex="0" aria-label="拖曳或點擊調整預報面板高度"></div>
         <button id="forecast-toggle" class="forecast-toggle" onclick="RainApp.toggleForecastPanel()" title="收合預報">⌄</button>
         <div id="forecast-content" class="panel-inner"><div class="empty-state"><div class="spinner"></div><div>正在讀取定點雨量預報…</div></div></div>
       </section>
@@ -83,12 +99,15 @@
         <div class="timeline-control"><input id="radar-slider" type="range" min="0" max="0" value="0" oninput="RainApp.setRadarIndex(this.value)"></div>
       </section>
 
-      <button class="metro-fab" onclick="RainApp.toggleDrawer()" aria-label="開啟設定">
+      <button class="metro-fab desktop-only" onclick="RainApp.toggleDrawer()" aria-label="開啟設定">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
 
       <aside id="drawer" class="storm-panel" aria-label="雨量圖層及設定">
         <div class="panel-close" onclick="RainApp.toggleDrawer(false)" aria-label="關閉">×</div>
+        <div class="panel-title">資料狀態</div>
+        <div id="data-status-detail" class="panel-note">正在讀取預報資料…</div>
+
         <div class="panel-title">定位</div>
         <label class="toggle-row"><input id="auto-locate-toggle" type="checkbox" onchange="RainApp.toggleAutoLocate(this.checked)">啟動時自動定位</label>
         <button class="wide-btn" onclick="RainApp.locate()">◎ 立即使用目前位置</button>
@@ -110,7 +129,9 @@
         <div class="setting-row"><span>透明度</span><input id="radar-opacity" type="range" min="0" max="100" value="68" oninput="RainApp.setRadarOpacity(this.value)"><span id="radar-opacity-value">68%</span></div>
         <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
 
-        <div class="panel-title">應用程式</div>
+        <div class="panel-title">地圖及應用程式</div>
+        <button class="wide-btn" onclick="RainApp.centerHongKong()">⌂ 返回香港全景</button>
+        <button class="wide-btn" onclick="RainApp.toggleBasemap()">◐ 切換明暗地圖</button>
         <div class="pwa-install-row">
           <button id="install-app-button" class="wide-btn hidden" onclick="RainApp.installPwa()">安裝到裝置</button>
           <button class="wide-btn" onclick="RainApp.toggleFullscreen()">全螢幕顯示</button>
@@ -179,7 +200,8 @@ const RainApp = (() => {
     autoLocate:localStorage.getItem('hkRainAutoLocate')!=='off',
     layers:{marker:true,radius:true,radar:false},
     capabilities:{pointForecast:true,nowcastGrid:true,radarFrames:false},
-    radar:{frames:[],index:0,range:64,opacity:.68,playing:false,timer:null}
+    radar:{frames:[],index:0,range:64,opacity:.68,playing:false,timer:null},
+    sheet:{mode:localStorage.getItem('hkRainSheetMode')||'half',dragging:false,startY:0,startHeight:0,moved:false}
   };
 
   function init(){
@@ -191,6 +213,7 @@ const RainApp = (() => {
     document.getElementById('radar-opacity').value=String(Math.round(state.radar.opacity*100));
     document.getElementById('radar-opacity-value').textContent=Math.round(state.radar.opacity*100)+'%';
     initPwa();
+    initMobileSheet();
 
     state.map=L.map('rain-map',{zoomControl:true,attributionControl:true,preferCanvas:true,minZoom:8,maxZoom:18}).setView([state.selected.lat,state.selected.lon],12);
     state.darkTiles=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap © CARTO'});
@@ -213,6 +236,8 @@ const RainApp = (() => {
     setInterval(()=>refresh(true),12*60*1000);
     window.addEventListener('online',()=>refresh(true));
 
+    setTimeout(()=>document.querySelector('.map-hint')?.classList.add('hint-hidden'),6500);
+    window.addEventListener('resize',()=>{state.map?.invalidateSize();if(isMobileLayout())setSheetMode(state.sheet.mode,{persist:false,offset:false});});
     if(state.autoLocate && state.initialSource!=='share') setTimeout(()=>locate(true),450);
   }
 
@@ -400,7 +425,8 @@ const RainApp = (() => {
     else if(!options.keepAccuracy) state.accuracyMeters=null;
     localStorage.setItem('hkRainLastPoint',JSON.stringify(state.selected));
     renderMarker();
-    if(moveMap) state.map.setView([numericLat,numericLon],Math.max(state.map.getZoom(),13));
+    if(moveMap) centerPointForSheet(numericLat,numericLon,Math.max(state.map.getZoom(),13));
+    if(isMobileLayout())setSheetMode('half',{persist:false,offset:false});
     loadPointForecast();
     return true;
   }
@@ -435,7 +461,7 @@ const RainApp = (() => {
         if(!automatic) toast('目前位置不在香港雨量預報支援範圍');
         return;
       }
-      state.map.setView([latitude,longitude],14);
+      centerPointForSheet(latitude,longitude,14);
       selectPoint(latitude,longitude,'目前位置',false,{accuracy});
       setLocateState('ok',`${automatic?'已自動定位':'已定位'}：${state.selected.name}${Number.isFinite(accuracy)?`（約 ±${Math.round(accuracy)} 米）`:''}`);
       toast(`${automatic?'已自動顯示':'已使用'} ${state.selected.name}`);
@@ -450,8 +476,10 @@ const RainApp = (() => {
 
   function renderLoading(point){
     const content=document.getElementById('forecast-content');
-    content.innerHTML=`<div class="location-row"><div><h1 class="location-name"></h1><div class="location-coord">${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E</div></div></div><div class="empty-state"><div class="spinner"></div><div>正在計算未來兩小時雨量…</div></div>`;
+    content.innerHTML=`<div class="location-row"><div><h1 class="location-name"></h1><div class="location-coord">${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E</div></div></div><div class="sheet-peek-summary"><span>正在計算預報…</span><strong>請稍候</strong></div><div class="empty-state"><div class="spinner"></div><div>正在計算未來兩小時雨量…</div></div>`;
     content.querySelector('.location-name').textContent=point.name;
+    setMobileStatus('loading','正在載入預報');
+    if(isMobileLayout())setSheetMode('half',{persist:false,offset:false});
   }
 
   function renderForecast(){
@@ -479,19 +507,21 @@ const RainApp = (() => {
         <div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div>
         <div class="mini-actions"><button class="mini-btn" onclick="RainApp.saveCurrentPoint()" title="儲存位置" aria-label="儲存位置">＋</button><button class="mini-btn" onclick="RainApp.sharePoint()" title="分享位置" aria-label="分享位置">⇧</button></div>
       </div>
+      <div class="sheet-peek-summary"><span>${escapeHtml(data.summary.text)}</span><strong>${formatRain(data.summary.totalMm)} mm · ${escapeHtml(startText)}</strong></div>
       <div class="summary-card ${escapeHtml(qualityStatus)}">
         <div class="summary-main">${escapeHtml(data.summary.text)}</div>
         <div class="summary-meta">
-          <span>預報基準 ${escapeHtml(issueText)}</span>
-          <span>本頁取得 ${escapeHtml(fetchedText)}</span>
+          <span class="meta-detail">預報基準 ${escapeHtml(issueText)}</span>
+          <span class="meta-detail">本頁取得 ${escapeHtml(fetchedText)}</span>
           <span class="quality-pill ${escapeHtml(qualityStatus)}"><span class="quality-dot"></span>${escapeHtml(quality.label||'資料正常')}</span>
         </div>
       </div>
+      <div class="mobile-data-alert ${escapeHtml(qualityStatus)}">${qualityStatus==='normal'?'':`⚠ ${escapeHtml(quality.label||'資料狀態異常')}${Number.isFinite(quality.sourceAgeMinutes)?`（${quality.sourceAgeMinutes} 分鐘）`:''}`}</div>
       <div class="metrics">
-        <div class="metric"><div class="metric-value">${formatRain(data.summary.totalMm)} mm</div><div class="metric-label">兩小時總雨量</div></div>
-        <div class="metric"><div class="metric-value">${formatRain(data.summary.peakMm)} mm</div><div class="metric-label">最高／30分鐘</div></div>
-        <div class="metric"><div class="metric-value">${escapeHtml(startText)}</div><div class="metric-label">預計開始</div></div>
-        <div class="metric"><div class="metric-value">${quality.sourceAgeMinutes??'—'} 分鐘</div><div class="metric-label">資料時差</div></div>
+        <div class="metric metric-primary"><div class="metric-value">${formatRain(data.summary.totalMm)} mm</div><div class="metric-label">兩小時總雨量</div></div>
+        <div class="metric metric-detail"><div class="metric-value">${formatRain(data.summary.peakMm)} mm</div><div class="metric-label">最高／30分鐘</div></div>
+        <div class="metric metric-primary"><div class="metric-value">${escapeHtml(startText)}</div><div class="metric-label">預計開始</div></div>
+        <div class="metric metric-detail"><div class="metric-value">${quality.sourceAgeMinutes??'—'} 分鐘</div><div class="metric-label">資料時差</div></div>
       </div>
       <div class="section-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">每格為半小時累計雨量</div></div>
       <div class="period-grid">${periods.map(period=>renderPeriodCard(period,!isDry)).join('')}</div>
@@ -500,8 +530,13 @@ const RainApp = (() => {
       <div class="nearby-card"><strong>附近雨勢：</strong>${escapeHtml(nearbyMessage)}<br><span style="color:#788691">${escapeHtml(quality.note||'')}</span></div>
       <div class="source-note">資料來源：香港天文台「香港網格點降雨臨近預報」。目前顯示定點預報；雷達圖層介面已預留，待 Worker 提供可驗證雷達幀後可直接接入。定點值由相鄰四個官方網格作雙線性插值，屬自動預報結果，不是街道級實測。降雨預報本身具有不確定性，附近雨勢比較只用作提示雨區邊界。</div>`;
     document.getElementById('location-name').textContent=state.selected.name;
+    const mobileState=qualityStatus==='expired'||qualityStatus==='stale'?'error':qualityStatus==='delayed'||qualityStatus==='location-sensitive'?'loading':'ok';
+    setMobileStatus(mobileState,quality.label||'資料正常');
+    updateDataStatusDetail(data,quality,issueText,fetchedText);
+    document.getElementById('mobile-title-sub').textContent=`${state.selected.name} · ${quality.label||'資料正常'}`;
     setBadge('point','ok','POINT');
     setBadge('hko',qualityStatus==='expired'||qualityStatus==='stale'?'error':qualityStatus==='delayed'?'loading':'ok','HKO');
+    requestAnimationFrame(()=>keepSelectedVisible(false));
   }
 
   function renderPeriodCard(period,showNearby=true){
@@ -541,6 +576,8 @@ const RainApp = (() => {
     const content=document.getElementById('forecast-content');
     content.innerHTML=`<div class="location-row"><div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div></div><div class="empty-state"><div style="font-size:2rem;margin-bottom:8px">!</div><strong>未能取得定點預報</strong><div style="margin-top:8px;max-width:300px">${escapeHtml(message)}</div><button class="wide-btn" style="max-width:220px" onclick="RainApp.refresh()">重新載入</button></div>`;
     document.getElementById('location-name').textContent=state.selected.name;
+    setMobileStatus('error','未能取得預報');
+    document.getElementById('data-status-detail').textContent=`定點預報讀取失敗：${message}`;
     setBadge('point','error','POINT');
   }
 
@@ -613,10 +650,89 @@ const RainApp = (() => {
   }
 
   function toggleForecastPanel(force){
+    if(isMobileLayout()){
+      if(typeof force==='boolean')setSheetMode(force?'half':'peek');
+      else setSheetMode(state.sheet.mode==='peek'?'half':'peek');
+      return;
+    }
     const panel=document.getElementById('forecast-panel');
     const collapsed=typeof force==='boolean'?!force:!panel.classList.contains('collapsed');
     panel.classList.toggle('collapsed',collapsed);
     document.getElementById('forecast-toggle').textContent=collapsed?'⌃':'⌄';
+  }
+
+  function isMobileLayout(){return window.matchMedia('(max-width:700px)').matches;}
+
+  function initMobileSheet(){
+    const panel=document.getElementById('forecast-panel');
+    const handle=document.getElementById('sheet-handle');
+    const valid=['peek','half','full'];
+    if(!valid.includes(state.sheet.mode))state.sheet.mode='half';
+    const apply=()=>{if(isMobileLayout())setSheetMode(state.sheet.mode,{persist:false,offset:false});else panel.classList.remove('sheet-peek','sheet-half','sheet-full','dragging');};
+    apply();
+    window.matchMedia('(max-width:700px)').addEventListener?.('change',apply);
+    handle.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cycleSheetMode();}});
+    handle.addEventListener('click',()=>{if(!state.sheet.moved)cycleSheetMode();state.sheet.moved=false;});
+    handle.addEventListener('pointerdown',event=>{
+      if(!isMobileLayout())return;
+      state.sheet.dragging=true;state.sheet.moved=false;state.sheet.startY=event.clientY;state.sheet.startHeight=panel.getBoundingClientRect().height;
+      panel.classList.add('dragging');handle.setPointerCapture?.(event.pointerId);
+    });
+    handle.addEventListener('pointermove',event=>{
+      if(!state.sheet.dragging)return;
+      const delta=state.sheet.startY-event.clientY;if(Math.abs(delta)>5)state.sheet.moved=true;
+      const min=88,max=Math.max(180,window.innerHeight-68-parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-top')||0));
+      panel.style.height=`${clamp(state.sheet.startHeight+delta,min,max)}px`;
+    });
+    const finish=event=>{
+      if(!state.sheet.dragging)return;state.sheet.dragging=false;panel.classList.remove('dragging');
+      const height=panel.getBoundingClientRect().height;panel.style.height='';
+      const ratio=height/window.innerHeight;setSheetMode(ratio<.24?'peek':ratio<.72?'half':'full');
+      try{handle.releasePointerCapture?.(event.pointerId);}catch{}
+    };
+    handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
+  }
+
+  function cycleSheetMode(){setSheetMode(state.sheet.mode==='peek'?'half':state.sheet.mode==='half'?'full':'half');}
+
+  function setSheetMode(mode,{persist=true,offset=true}={}){
+    if(!['peek','half','full'].includes(mode))mode='half';
+    state.sheet.mode=mode;
+    const panel=document.getElementById('forecast-panel');
+    panel.classList.remove('collapsed','sheet-peek','sheet-half','sheet-full');
+    panel.classList.add(`sheet-${mode}`);panel.dataset.sheet=mode;
+    document.getElementById('sheet-handle')?.setAttribute('aria-expanded',mode!=='peek'?'true':'false');
+    if(persist)localStorage.setItem('hkRainSheetMode',mode);
+    requestAnimationFrame(()=>{state.map?.invalidateSize();if(offset)keepSelectedVisible(true);});
+  }
+
+  function centerPointForSheet(lat,lon,zoom){
+    state.map.setView([lat,lon],zoom);
+    requestAnimationFrame(()=>keepSelectedVisible(false));
+  }
+
+  function keepSelectedVisible(animate=true){
+    if(!isMobileLayout()||!state.map)return;
+    const panel=document.getElementById('forecast-panel');
+    const size=state.map.getSize();
+    const point=state.map.latLngToContainerPoint([state.selected.lat,state.selected.lon]);
+    const visibleBottom=Math.max(100,size.y-panel.getBoundingClientRect().height-14);
+    const targetY=Math.max(76,visibleBottom*.52);
+    const delta=point.y-targetY;
+    if(Math.abs(delta)>12)state.map.panBy([0,delta],{animate,duration:.22});
+  }
+
+  function setMobileStatus(status,label){
+    const element=document.getElementById('mobile-status');
+    const text=document.getElementById('mobile-status-text');
+    if(!element||!text)return;
+    element.className=`mobile-status map-hud ${status||'empty'}`;text.textContent=label||'資料狀態';
+  }
+
+  function updateDataStatusDetail(data,quality,issueText,fetchedText){
+    const detail=document.getElementById('data-status-detail');if(!detail)return;
+    const age=Number.isFinite(quality.sourceAgeMinutes)?`${quality.sourceAgeMinutes} 分鐘`:'不詳';
+    detail.innerHTML=`<strong style="color:#fff">${escapeHtml(quality.label||'資料正常')}</strong><br>預報基準：${escapeHtml(issueText)}<br>本頁取得：${escapeHtml(fetchedText)}<br>資料時差：${escapeHtml(age)}<br>${escapeHtml(quality.note||'')}`;
   }
 
   function toggleBasemap(){
@@ -845,6 +961,8 @@ const RainApp = (() => {
   function setLocateState(status,message){
     setBadge('location',status,'LOC');
     document.getElementById('location-status').textContent=message;
+    if(status==='loading')setMobileStatus('loading','正在定位');
+    else if((status==='error'||status==='empty')&&!state.forecast)setMobileStatus(status,'定位未完成');
   }
 
   function setLoading(on){document.getElementById('loading-line').classList.toggle('hidden',!on);}
