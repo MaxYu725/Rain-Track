@@ -5,21 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <title>香港定點雨量預報 v1.2</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌧️</text></svg>">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="定點雨量">
+  <title>香港定點雨量預報 v1.3 PWA</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <style>
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-ms-overflow-style:none;scrollbar-width:none}
     ::-webkit-scrollbar{display:none}
-    :root{--bg:#000;--panel:rgba(0,0,0,.94);--panel-solid:#090909;--text:#fff;--sub:#aaa;--muted:#6c6c6c;--accent:#1ba1e2;--border:#333;--green:#43d17a;--amber:#f0a000;--red:#e51400;--cyan:#00d8ff;--safe-bottom:env(safe-area-inset-bottom,0px)}
+    :root{--bg:#000;--panel:rgba(0,0,0,.94);--panel-solid:#090909;--text:#fff;--sub:#aaa;--muted:#6c6c6c;--accent:#1ba1e2;--border:#333;--green:#43d17a;--amber:#f0a000;--red:#e51400;--cyan:#00d8ff;--safe-bottom:env(safe-area-inset-bottom,0px);--safe-top:env(safe-area-inset-top,0px)}
     html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Microsoft JhengHei",sans-serif;overscroll-behavior:none}
     button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}
-    #app-container{display:flex;flex-direction:column;width:100%;height:100%;padding-top:14px;background:#000}
+    #app-container{display:flex;flex-direction:column;width:100%;height:100%;padding-top:calc(14px + var(--safe-top));background:#000}
     .header-top-bar{display:flex;align-items:center;justify-content:space-between;min-height:28px;padding-right:20px;margin-bottom:4px}
     .app-title{margin-left:24px;color:var(--sub);font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase}
     .global-controls{display:flex;gap:7px}.metro-btn{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;padding:0 9px;border:1px solid var(--border);border-radius:0;background:transparent;color:var(--sub);cursor:pointer}.metro-btn:hover{border-color:#777;color:#fff}.metro-btn:active,.metro-btn.active{background:#fff;color:#000}
-    .pivot-headers{display:flex;align-items:flex-end;gap:20px;min-height:62px;padding:0 24px 8px;overflow:hidden;white-space:nowrap}.pivot-header{flex-shrink:0;margin:0;color:var(--text);font-size:clamp(2.3rem,7vw,3.5rem);font-weight:300;letter-spacing:-1.5px;line-height:1;text-transform:lowercase}.rain-summary{min-width:0;padding-bottom:4px;overflow:hidden;color:var(--sub);font-size:.85rem;font-weight:300;text-overflow:ellipsis;white-space:nowrap}
+    .pivot-headers{display:flex;align-items:flex-end;min-height:62px;padding:0 24px 8px;overflow:hidden;white-space:nowrap}.pivot-header{flex-shrink:0;margin:0;color:var(--text);font-size:clamp(2.3rem,7vw,3.5rem);font-weight:300;letter-spacing:-1.5px;line-height:1;text-transform:lowercase}.rain-summary{display:none!important}
     .pivot-content-wrapper,#map-container,#rain-map{position:relative;width:100%;height:100%}.pivot-content-wrapper{flex:1;overflow:hidden}#rain-map{z-index:1;background:#050505}
     .map-hud{position:absolute;z-index:750}.map-hint{top:12px;left:50%;transform:translateX(-50%);padding:6px 10px;border:1px solid #555;background:rgba(0,0,0,.78);color:#ddd;font-size:.75rem;pointer-events:none;white-space:nowrap}.source-badges{top:12px;right:12px;display:flex;gap:6px}.source-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;border:1px solid #444;background:rgba(0,0,0,.78);color:#aaa;font-size:.7rem;letter-spacing:.5px}.source-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:#666}.source-badge.ok{color:#fff}.source-badge.ok::before{background:var(--green)}.source-badge.loading::before{background:var(--amber)}.source-badge.empty::before{background:#888}.source-badge.error::before{background:var(--red)}.source-badge.disabled{color:#666}.source-badge.disabled::before{background:#444}
     #coordinate-readout{left:10px;bottom:10px;padding:3px 6px;border:1px solid #333;background:rgba(0,0,0,.72);color:#aaa;font-size:.68rem;font-variant-numeric:tabular-nums}
@@ -33,7 +37,10 @@
     .selected-pin{width:19px;height:19px;border:3px solid #fff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px rgba(27,161,226,.22),0 2px 8px #000}.point-label,.radius-label{padding:3px 6px;border:1px solid #444;border-radius:0;background:rgba(0,0,0,.82);color:#fff;font-size:.68rem;white-space:nowrap}.point-label::before{display:none}.radius-label{color:#7fe7ff;border-color:#286078}.leaflet-control-zoom a{border-radius:0!important;background:#000!important;color:#fff!important;border-color:#333!important}.leaflet-control-attribution{background:rgba(0,0,0,.65)!important;color:#777!important;font-size:9px!important}.leaflet-control-attribution a{color:#999!important}
     .radar-timeline{left:50%;bottom:22px;z-index:755;width:min(500px,calc(100vw - 190px));transform:translateX(-50%);padding:8px 10px;border:1px solid #333;background:rgba(0,0,0,.9);pointer-events:auto}.timeline-head{display:flex;justify-content:space-between;color:#aaa;font-size:.69rem;margin-bottom:6px}.timeline-control{display:flex;align-items:center;gap:8px}.timeline-control input{flex:1;accent-color:var(--accent)}
     #loading-line{position:fixed;top:0;left:0;z-index:10000;width:100%;height:4px;overflow:hidden;background:#000}#loading-line::after{content:"";position:absolute;top:0;width:25%;height:100%;background:var(--accent);animation:loading 1.2s infinite ease-in-out}@keyframes loading{from{left:-25%}to{left:100%}}
-    @media(max-width:700px){#app-container{padding-top:10px}.header-top-bar{padding-right:12px}.app-title{margin-left:15px;font-size:.7rem}.pivot-headers{min-height:54px;padding:0 15px 7px;gap:10px}.rain-summary{font-size:.73rem}.storm-panel{width:min(92vw,350px)}.metro-fab{right:14px;bottom:14px}.source-badges{right:8px;top:8px}.source-badge{padding:3px 5px}.source-badge#badge-hko{display:none}#coordinate-readout{display:none}.map-hint{top:47px;max-width:calc(100vw - 30px);overflow:hidden;text-overflow:ellipsis}.forecast-panel{left:5px;bottom:5px;width:calc(100vw - 10px);max-height:47vh}.forecast-panel.collapsed{max-height:77px}.panel-inner{padding:11px 10px calc(12px + var(--safe-bottom))}.location-name{font-size:1rem}.metrics{grid-template-columns:repeat(2,1fr)}.period-grid{grid-template-columns:repeat(4,86px)}.radar-timeline{left:8px;right:70px;bottom:68px;width:auto;transform:none}}
+    .pwa-install-row{display:grid;grid-template-columns:1fr;gap:7px}.pwa-status{margin-top:8px;color:#777;font-size:.73rem;line-height:1.5}
+    @media (display-mode: fullscreen){#app-container{padding-top:max(8px,var(--safe-top))}}
+    @media (display-mode: standalone){#app-container{padding-top:calc(10px + var(--safe-top))}}
+    @media(max-width:700px){#app-container{padding-top:calc(10px + var(--safe-top))}.header-top-bar{padding-right:12px}.app-title{margin-left:15px;font-size:.7rem}.pivot-headers{min-height:54px;padding:0 15px 7px;gap:10px}.rain-summary{display:none!important}.storm-panel{width:min(92vw,350px)}.metro-fab{right:14px;bottom:14px}.source-badges{right:8px;top:8px}.source-badge{padding:3px 5px}.source-badge#badge-hko{display:none}#coordinate-readout{display:none}.map-hint{top:47px;max-width:calc(100vw - 30px);overflow:hidden;text-overflow:ellipsis}.forecast-panel{left:5px;bottom:5px;width:calc(100vw - 10px);max-height:47vh}.forecast-panel.collapsed{max-height:77px}.panel-inner{padding:11px 10px calc(12px + var(--safe-bottom))}.location-name{font-size:1rem}.metrics{grid-template-columns:repeat(2,1fr)}.period-grid{grid-template-columns:repeat(4,86px)}.radar-timeline{left:8px;right:70px;bottom:68px;width:auto;transform:none}}
 </style>
 </head>
 <body>
@@ -52,7 +59,6 @@
   </div>
   <div class="pivot-headers">
     <h1 class="pivot-header">rain</h1>
-    <div id="rain-summary" class="rain-summary">定點雨量預報｜正在初始化位置…</div>
   </div>
   <div class="pivot-content-wrapper">
     <div id="map-container">
@@ -104,6 +110,13 @@
         <div class="setting-row"><span>透明度</span><input id="radar-opacity" type="range" min="0" max="100" value="68" oninput="RainApp.setRadarOpacity(this.value)"><span id="radar-opacity-value">68%</span></div>
         <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
 
+        <div class="panel-title">應用程式</div>
+        <div class="pwa-install-row">
+          <button id="install-app-button" class="wide-btn hidden" onclick="RainApp.installPwa()">安裝到裝置</button>
+          <button class="wide-btn" onclick="RainApp.toggleFullscreen()">全螢幕顯示</button>
+        </div>
+        <div id="pwa-status" class="pwa-status">正在檢查 PWA 狀態…</div>
+
         <div class="panel-title">資料服務</div>
         <div class="setting-row"><span>Worker URL</span><input id="api-base-input" placeholder="https://...workers.dev"></div>
         <button class="wide-btn" onclick="RainApp.saveApiBase()">儲存並重新載入</button>
@@ -123,6 +136,7 @@ const RainApp = (() => {
   const CACHE_MS = 5 * 60 * 1000;
   const SUPPORTED_BOUNDS = { south:20, north:25, west:111, east:117 };
   const RADAR_CONTRACT_PATH = '/api/radar/frames?range=64';
+  let deferredInstallPrompt = null;
   const PLACE_CENTERS = [
     ['中環',22.2819,114.1589],['金鐘',22.2797,114.1654],['灣仔',22.2771,114.1730],['銅鑼灣',22.2802,114.1842],
     ['北角',22.2911,114.2009],['鰂魚涌',22.2849,114.2164],['太古',22.2863,114.2189],['西灣河',22.2821,114.2220],
@@ -176,6 +190,7 @@ const RainApp = (() => {
     document.getElementById('radar-range').value=String(state.radar.range);
     document.getElementById('radar-opacity').value=String(Math.round(state.radar.opacity*100));
     document.getElementById('radar-opacity-value').textContent=Math.round(state.radar.opacity*100)+'%';
+    initPwa();
 
     state.map=L.map('rain-map',{zoomControl:true,attributionControl:true,preferCanvas:true,minZoom:8,maxZoom:18}).setView([state.selected.lat,state.selected.lon],12);
     state.darkTiles=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap © CARTO'});
@@ -485,10 +500,8 @@ const RainApp = (() => {
       <div class="nearby-card"><strong>附近雨勢：</strong>${escapeHtml(nearbyMessage)}<br><span style="color:#788691">${escapeHtml(quality.note||'')}</span></div>
       <div class="source-note">資料來源：香港天文台「香港網格點降雨臨近預報」。目前顯示定點預報；雷達圖層介面已預留，待 Worker 提供可驗證雷達幀後可直接接入。定點值由相鄰四個官方網格作雙線性插值，屬自動預報結果，不是街道級實測。降雨預報本身具有不確定性，附近雨勢比較只用作提示雨區邊界。</div>`;
     document.getElementById('location-name').textContent=state.selected.name;
-    document.getElementById('header-status').textContent=`${state.selected.name}｜${data.summary.text}｜基準 ${formatTime(data.issueTime)}`;
     setBadge('point','ok','POINT');
     setBadge('hko',qualityStatus==='expired'||qualityStatus==='stale'?'error':qualityStatus==='delayed'?'loading':'ok','HKO');
-    document.getElementById('rain-summary').textContent=`${state.selected.name}｜${data.summary.text}｜基準 ${formatTime(data.issueTime)}`;
   }
 
   function renderPeriodCard(period,showNearby=true){
@@ -528,7 +541,6 @@ const RainApp = (() => {
     const content=document.getElementById('forecast-content');
     content.innerHTML=`<div class="location-row"><div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div></div><div class="empty-state"><div style="font-size:2rem;margin-bottom:8px">!</div><strong>未能取得定點預報</strong><div style="margin-top:8px;max-width:300px">${escapeHtml(message)}</div><button class="wide-btn" style="max-width:220px" onclick="RainApp.refresh()">重新載入</button></div>`;
     document.getElementById('location-name').textContent=state.selected.name;
-    document.getElementById('header-status').textContent='定點雨量預報暫時未能更新';
     setBadge('point','error','POINT');
   }
 
@@ -727,6 +739,102 @@ const RainApp = (() => {
 
   function preloadImage(url){return new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(true);image.onerror=()=>resolve(false);image.src=url;});}
 
+
+  function isInstalledPwa(){
+    return window.matchMedia('(display-mode: fullscreen)').matches ||
+      window.matchMedia('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+  }
+
+  function isIosDevice(){
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function initPwa(){
+    document.documentElement.classList.toggle('pwa-mode',isInstalledPwa());
+    updatePwaStatus();
+
+    window.addEventListener('beforeinstallprompt',event=>{
+      event.preventDefault();
+      deferredInstallPrompt=event;
+      updatePwaStatus();
+    });
+    window.addEventListener('appinstalled',()=>{
+      deferredInstallPrompt=null;
+      document.documentElement.classList.add('pwa-mode');
+      updatePwaStatus('已安裝為 PWA；下次可由主畫面全螢幕啟動。');
+      toast('PWA 已安裝');
+    });
+
+    const displayQueries=['(display-mode: fullscreen)','(display-mode: standalone)'];
+    displayQueries.forEach(query=>{
+      const media=window.matchMedia(query);
+      media.addEventListener?.('change',()=>{
+        document.documentElement.classList.toggle('pwa-mode',isInstalledPwa());
+        updatePwaStatus();
+      });
+    });
+
+    if(!('serviceWorker' in navigator)){
+      updatePwaStatus('此瀏覽器不支援 Service Worker，仍可使用一般網頁模式。');
+      return;
+    }
+    if(location.protocol!=='https:' && location.hostname!=='localhost'){
+      updatePwaStatus('PWA 需要 HTTPS；請部署至 Cloudflare Pages 後使用。');
+      return;
+    }
+
+    navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).then(registration=>{
+      updatePwaStatus();
+      registration.addEventListener('updatefound',()=>{
+        const installing=registration.installing;
+        installing?.addEventListener('statechange',()=>{
+          if(installing.state==='installed' && navigator.serviceWorker.controller){
+            updatePwaStatus('已有新版 PWA，重新開啟後會自動套用。');
+          }
+        });
+      });
+    }).catch(error=>{
+      updatePwaStatus(`離線快取啟動失敗：${error.message}`);
+    });
+  }
+
+  function updatePwaStatus(override=''){
+    const status=document.getElementById('pwa-status');
+    const button=document.getElementById('install-app-button');
+    if(!status||!button)return;
+    if(override){status.textContent=override;return;}
+    if(isInstalledPwa()){
+      button.classList.add('hidden');
+      status.textContent='PWA 模式已啟動；系統支援時會隱藏瀏覽器及狀態列。';
+    }else if(deferredInstallPrompt){
+      button.classList.remove('hidden');
+      status.textContent='可安裝到主畫面，安裝後以全螢幕模式啟動。';
+    }else{
+      button.classList.add('hidden');
+      status.textContent=isIosDevice()
+        ? 'iPhone／iPad：在 Safari 分享選單選擇「加至主畫面」。'
+        : '可從瀏覽器選單選擇「安裝應用程式」或「加到主畫面」。';
+    }
+  }
+
+  async function installPwa(){
+    if(isInstalledPwa()){
+      toast('目前已在 PWA 模式');
+      return;
+    }
+    if(!deferredInstallPrompt){
+      toast(isIosDevice()?'請在 Safari 分享選單選擇「加至主畫面」':'請使用瀏覽器選單安裝應用程式');
+      return;
+    }
+    deferredInstallPrompt.prompt();
+    const choice=await deferredInstallPrompt.userChoice.catch(()=>null);
+    deferredInstallPrompt=null;
+    updatePwaStatus();
+    if(choice?.outcome==='accepted')toast('正在安裝 PWA');
+  }
+
   function setBadge(key,status,label){
     const element=document.getElementById(`badge-${key}`);
     if(!element) return;
@@ -803,7 +911,7 @@ const RainApp = (() => {
   function loadJSON(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback;}catch{return fallback;}}
   function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
 
-  return {init,refresh,locate,centerHongKong,sharePoint,toggleDrawer,toggleForecastPanel,toggleBasemap,toggleFullscreen,toggleLayer,toggleAutoLocate,saveCurrentPoint,changeRadius,saveApiBase,setRadarIndex,changeRadarRange,setRadarOpacity};
+  return {init,refresh,locate,centerHongKong,sharePoint,toggleDrawer,toggleForecastPanel,toggleBasemap,toggleFullscreen,toggleLayer,toggleAutoLocate,saveCurrentPoint,changeRadius,saveApiBase,setRadarIndex,changeRadarRange,setRadarOpacity,installPwa};
 })();
 document.addEventListener('DOMContentLoaded',RainApp.init);
 </script>
