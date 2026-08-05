@@ -2,1036 +2,189 @@
 <html lang="zh-HK">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="定點雨量">
-  <title>香港定點雨量預報 v1.4 PWA</title>
+  <meta name="description" content="香港未來兩小時定點雨量預報及附近雨勢比較。">
+  <title>香港定點雨量預報 v1.5 Foundation</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
-  <style>
-    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-ms-overflow-style:none;scrollbar-width:none}
-    ::-webkit-scrollbar{display:none}
-    :root{--bg:#000;--panel:rgba(0,0,0,.94);--panel-solid:#090909;--text:#fff;--sub:#aaa;--muted:#6c6c6c;--accent:#1ba1e2;--border:#333;--green:#43d17a;--amber:#f0a000;--red:#e51400;--cyan:#00d8ff;--safe-bottom:env(safe-area-inset-bottom,0px);--safe-top:env(safe-area-inset-top,0px)}
-    html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Microsoft JhengHei",sans-serif;overscroll-behavior:none}
-    button,input,select{font:inherit}button{cursor:pointer}.hidden{display:none!important}
-    #app-container{display:flex;flex-direction:column;width:100%;height:100%;padding-top:calc(14px + var(--safe-top));background:#000}
-    .header-top-bar{display:flex;align-items:center;justify-content:space-between;min-height:28px;padding-right:20px;margin-bottom:4px}
-    .app-title{margin-left:24px;color:var(--sub);font-size:.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase}
-    .global-controls{display:flex;gap:7px}.metro-btn{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:28px;padding:0 9px;border:1px solid var(--border);border-radius:0;background:transparent;color:var(--sub);cursor:pointer}.metro-btn:hover{border-color:#777;color:#fff}.metro-btn:active,.metro-btn.active{background:#fff;color:#000}
-    .pivot-headers{display:flex;align-items:flex-end;min-height:62px;padding:0 24px 8px;overflow:hidden;white-space:nowrap}.pivot-header{flex-shrink:0;margin:0;color:var(--text);font-size:clamp(2.3rem,7vw,3.5rem);font-weight:300;letter-spacing:-1.5px;line-height:1;text-transform:lowercase}.rain-summary{display:none!important}
-    .pivot-content-wrapper,#map-container,#rain-map{position:relative;width:100%;height:100%}.pivot-content-wrapper{flex:1;overflow:hidden}#rain-map{z-index:1;background:#050505}
-    .map-hud{position:absolute;z-index:750}.map-hint{top:12px;left:50%;transform:translateX(-50%);padding:6px 10px;border:1px solid #555;background:rgba(0,0,0,.78);color:#ddd;font-size:.75rem;pointer-events:none;white-space:nowrap}.source-badges{top:12px;right:12px;display:flex;gap:6px}.source-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 7px;border:1px solid #444;background:rgba(0,0,0,.78);color:#aaa;font-size:.7rem;letter-spacing:.5px}.source-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:#666}.source-badge.ok{color:#fff}.source-badge.ok::before{background:var(--green)}.source-badge.loading::before{background:var(--amber)}.source-badge.empty::before{background:#888}.source-badge.error::before{background:var(--red)}.source-badge.disabled{color:#666}.source-badge.disabled::before{background:#444}
-    #coordinate-readout{left:10px;bottom:10px;padding:3px 6px;border:1px solid #333;background:rgba(0,0,0,.72);color:#aaa;font-size:.68rem;font-variant-numeric:tabular-nums}
-    #toast{left:50%;bottom:28px;transform:translateX(-50%);padding:7px 11px;border:1px solid #555;background:rgba(0,0,0,.92);color:#fff;font-size:.78rem;opacity:0;transition:opacity .2s;pointer-events:none}#toast.show{opacity:1}
-    .metro-fab{position:absolute;right:24px;bottom:24px;z-index:1000;display:flex;align-items:center;justify-content:center;width:48px;height:48px;border:2px solid #fff;border-radius:0;background:#000;color:#fff;box-shadow:0 5px 16px rgba(0,0,0,.55);cursor:pointer}.metro-fab:active{background:#333}
-    .storm-panel{position:absolute;top:0;right:0;z-index:1100;display:flex;flex-direction:column;width:350px;height:100%;padding:20px;overflow-y:auto;border-left:2px solid var(--border);background:var(--panel);transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1)}.storm-panel.open{transform:translateX(0)}.panel-close{align-self:flex-end;margin-bottom:8px;font-size:2rem;font-weight:100;line-height:1;cursor:pointer}.panel-title{margin:15px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--border);color:var(--accent);font-size:1rem;font-weight:600;letter-spacing:.3px;text-transform:uppercase}.toggle-row,.setting-row{display:flex;align-items:center;min-height:34px;margin-bottom:7px;font-size:.88rem;font-weight:300}.toggle-row{cursor:pointer}.toggle-row input{width:18px;height:18px;margin:0 11px 0 0;accent-color:var(--accent)}.setting-row{justify-content:space-between;gap:12px}.setting-row select,.setting-row input{min-width:130px;height:31px;padding:0 7px;border:1px solid #444;border-radius:0;background:#111;color:#fff;outline:none}.panel-note{color:#777;font-size:.73rem;line-height:1.5}.wide-btn{width:100%;min-height:36px;margin-top:7px;border:1px solid #555;border-radius:0;background:#111;color:#ddd}.wide-btn:hover{border-color:#fff;color:#fff}
-    .saved-list{display:flex;flex-direction:column;gap:7px}.saved-item{display:grid;grid-template-columns:1fr auto;align-items:center;gap:7px;padding:8px;border:1px solid #333;background:#0c0c0c}.saved-main{min-width:0;cursor:pointer}.saved-name{overflow:hidden;color:#fff;font-size:.86rem;text-overflow:ellipsis;white-space:nowrap}.saved-coord{margin-top:3px;color:#666;font-size:.67rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.delete-btn{width:32px;height:32px;border:1px solid #444;background:#111;color:#aaa}
-    .drawer-backdrop{position:fixed;inset:0;z-index:1050;background:rgba(0,0,0,.45)}
-    .forecast-panel{left:12px;bottom:36px;z-index:760;width:min(535px,calc(100vw - 88px));max-height:62vh;border:1px solid #3a3a3a;background:rgba(0,0,0,.91);color:#fff;box-shadow:0 5px 18px rgba(0,0,0,.55);overflow:auto;pointer-events:auto;transition:max-height .25s,width .25s}.forecast-panel.collapsed{max-height:88px;overflow:hidden}.forecast-panel.collapsed .summary-card,.forecast-panel.collapsed .metrics,.forecast-panel.collapsed .section-head,.forecast-panel.collapsed .period-grid,.forecast-panel.collapsed .chart,.forecast-panel.collapsed .dry-state,.forecast-panel.collapsed .nearby-card,.forecast-panel.collapsed .source-note,.forecast-panel.collapsed .empty-state{display:none}.forecast-toggle{position:sticky;top:0;float:right;z-index:3;width:34px;height:30px;margin:7px 7px -37px 0;border:1px solid #444;background:#111;color:#aaa}.panel-inner{padding:13px 14px 15px}.location-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding-right:35px}.location-name{margin:0;color:#fff;font-size:1.12rem;font-weight:650;line-height:1.25}.location-coord{margin-top:4px;color:#777;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.7rem}.mini-actions{display:flex;gap:5px}.mini-btn{min-width:34px;height:30px;padding:0 8px;border:1px solid #444;border-radius:0;background:#111;color:#aaa}.summary-card{margin-top:10px;padding:10px 11px;border:1px solid #333;border-left:3px solid var(--accent);border-radius:0;background:#101010}.summary-card.delayed{border-left-color:var(--amber)}.summary-card.stale,.summary-card.expired{border-left-color:var(--red)}.summary-main{font-size:.85rem;font-weight:600;line-height:1.45}.summary-meta{display:flex;flex-wrap:wrap;gap:5px 10px;margin-top:6px;color:#777;font-size:.68rem}.quality-pill{display:inline-flex;align-items:center;gap:5px}.quality-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}.quality-pill.location-sensitive .quality-dot,.quality-pill.delayed .quality-dot{background:var(--amber)}.quality-pill.stale .quality-dot,.quality-pill.expired .quality-dot{background:var(--red)}
-    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:9px}.metric{min-width:0;padding:7px 5px;border:1px solid #333;background:#101010;text-align:center}.metric-value{overflow:hidden;color:#fff;font-size:.84rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.metric-label{margin-top:2px;color:#666;font-size:.62rem}.section-head{display:flex;align-items:end;justify-content:space-between;gap:9px;margin-top:13px;margin-bottom:7px}.section-title{margin:0;color:var(--accent);font-size:.82rem;font-weight:650}.section-note{color:#666;font-size:.64rem}.period-grid{display:grid;grid-template-columns:repeat(4,minmax(84px,1fr));gap:6px;overflow-x:auto}.period-card{min-width:84px;padding:7px 5px;border:1px solid #333;background:#101010;text-align:center}.period-card.wet{border-color:#176a94;background:#07141b}.period-time{color:#999;font-size:.68rem}.weather-icon{display:flex;align-items:center;justify-content:center;height:42px;margin:2px 0}.weather-icon svg{width:46px;height:40px}.period-amount{font-size:.86rem;font-weight:650}.period-unit,.period-nearby{color:#666;font-size:.61rem}.period-nearby{margin-top:3px}.chart{display:flex;align-items:flex-end;gap:7px;height:105px;padding:9px 8px 5px;border:1px solid #333;background:#0d0d0d}.chart-col{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}.chart-value{margin-bottom:3px;color:#aaa;font-size:.62rem}.chart-bar-wrap{display:flex;align-items:flex-end;width:min(29px,70%);height:64px;background:#1a1a1a;overflow:hidden}.chart-bar{width:100%;min-height:2px;background:var(--accent)}.chart-bar.light{background:#1ba1e2}.chart-bar.moderate{background:#43d17a}.chart-bar.heavy{background:#f0a000}.chart-bar.very-heavy{background:#e51400}.chart-time{margin-top:4px;color:#666;font-size:.61rem}.dry-state{display:flex;align-items:center;gap:10px;padding:11px;border:1px solid #333;background:#101010}.dry-state-icon{width:40px;height:40px}.dry-state-title{font-size:.8rem;font-weight:650}.dry-state-note{margin-top:3px;color:#777;font-size:.66rem;line-height:1.4}.nearby-card{margin-top:8px;padding:9px 10px;border:1px solid #333;background:#0d0d0d;color:#aaa;font-size:.7rem;line-height:1.48}.source-note{margin-top:10px;padding-top:8px;border-top:1px solid #292929;color:#666;font-size:.64rem;line-height:1.5}.empty-state{display:flex;min-height:140px;flex-direction:column;align-items:center;justify-content:center;color:#888;text-align:center}.spinner{width:23px;height:23px;margin-bottom:11px;border:2px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
-    .selected-pin{width:19px;height:19px;border:3px solid #fff;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px rgba(27,161,226,.22),0 2px 8px #000}.point-label,.radius-label{padding:3px 6px;border:1px solid #444;border-radius:0;background:rgba(0,0,0,.82);color:#fff;font-size:.68rem;white-space:nowrap}.point-label::before{display:none}.radius-label{color:#7fe7ff;border-color:#286078}.leaflet-control-zoom a{border-radius:0!important;background:#000!important;color:#fff!important;border-color:#333!important}.leaflet-control-attribution{background:rgba(0,0,0,.65)!important;color:#777!important;font-size:9px!important}.leaflet-control-attribution a{color:#999!important}
-    .radar-timeline{left:50%;bottom:22px;z-index:755;width:min(500px,calc(100vw - 190px));transform:translateX(-50%);padding:8px 10px;border:1px solid #333;background:rgba(0,0,0,.9);pointer-events:auto}.timeline-head{display:flex;justify-content:space-between;color:#aaa;font-size:.69rem;margin-bottom:6px}.timeline-control{display:flex;align-items:center;gap:8px}.timeline-control input{flex:1;accent-color:var(--accent)}
-    #loading-line{position:fixed;top:0;left:0;z-index:10000;width:100%;height:4px;overflow:hidden;background:#000}#loading-line::after{content:"";position:absolute;top:0;width:25%;height:100%;background:var(--accent);animation:loading 1.2s infinite ease-in-out}@keyframes loading{from{left:-25%}to{left:100%}}
-    .pwa-install-row{display:grid;grid-template-columns:1fr;gap:7px}.pwa-status{margin-top:8px;color:#777;font-size:.73rem;line-height:1.5}
-    .mobile-only{display:none!important}.mobile-title{display:none}.mobile-status{display:none}.sheet-handle{display:none}.sheet-peek-summary{display:none}.mobile-data-alert{display:none}
-    @media (display-mode: fullscreen){#app-container{padding-top:max(8px,var(--safe-top))}}
-    @media (display-mode: standalone){#app-container{padding-top:calc(10px + var(--safe-top))}}
-    @media(max-width:700px){
-      html,body{height:100dvh}.mobile-only{display:inline-flex!important}.desktop-only{display:none!important}
-      #app-container{height:100dvh;padding-top:0}.header-top-bar{position:relative;z-index:1200;min-height:calc(56px + var(--safe-top));height:calc(56px + var(--safe-top));margin:0;padding:var(--safe-top) 10px 0;background:#050505;border-bottom:1px solid #202020}.app-title{display:none}.mobile-title{display:flex;min-width:0;flex:1;flex-direction:column;margin-right:8px}.mobile-title-main{overflow:hidden;color:#fff;font-size:.94rem;font-weight:650;text-overflow:ellipsis;white-space:nowrap}.mobile-title-sub{margin-top:2px;overflow:hidden;color:#777;font-size:.64rem;text-overflow:ellipsis;white-space:nowrap}.global-controls{gap:5px}.global-controls .metro-btn{width:42px;min-width:42px;height:42px;padding:0;border-color:#292929;background:#090909;color:#ccc}.global-controls .metro-btn:active{background:#fff;color:#000}.pivot-headers{display:none}.pivot-content-wrapper{height:calc(100dvh - 56px - var(--safe-top));flex:none}.storm-panel{position:fixed;top:0;width:min(92vw,360px);padding-top:calc(18px + var(--safe-top));padding-bottom:calc(18px + var(--safe-bottom))}.drawer-backdrop{position:fixed}
-      .source-badges{display:none}.mobile-status{top:10px;right:10px;display:inline-flex;align-items:center;gap:7px;max-width:calc(100vw - 115px);height:34px;padding:0 10px;border:1px solid #3a3a3a;background:rgba(0,0,0,.84);color:#ddd;font-size:.72rem;pointer-events:auto}.mobile-status::before{content:"";width:8px;height:8px;flex:none;border-radius:50%;background:#777}.mobile-status.ok::before{background:var(--green)}.mobile-status.loading::before{background:var(--amber)}.mobile-status.error::before{background:var(--red)}.mobile-status.empty::before{background:#777}.mobile-status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      #coordinate-readout{display:none}.map-hint{top:52px;max-width:calc(100vw - 28px);padding:5px 9px;overflow:hidden;border-color:#3a3a3a;font-size:.68rem;text-overflow:ellipsis;transition:opacity .3s,transform .3s}.map-hint.hint-hidden{opacity:0;transform:translate(-50%,-7px);pointer-events:none}#toast{bottom:calc(108px + var(--safe-bottom));max-width:calc(100vw - 30px);text-align:center}
-      .metro-fab{display:none}.forecast-panel{position:absolute;left:0;right:0;bottom:0;width:100%;max-height:none;height:min(54dvh,560px);overflow:auto;border:0;border-top:1px solid #343434;border-radius:18px 18px 0 0;background:rgba(5,5,5,.97);box-shadow:0 -8px 28px rgba(0,0,0,.55);transition:height .24s cubic-bezier(.2,.8,.2,1);overscroll-behavior:contain}.forecast-panel.dragging{transition:none;user-select:none}.forecast-panel.sheet-peek{height:96px;overflow:hidden}.forecast-panel.sheet-half{height:min(54dvh,560px)}.forecast-panel.sheet-full{height:calc(100dvh - 68px - var(--safe-top))}.forecast-panel.collapsed{max-height:none}.forecast-toggle{display:none}.sheet-handle{position:sticky;top:0;z-index:5;display:flex;height:26px;align-items:center;justify-content:center;background:linear-gradient(#090909 65%,rgba(9,9,9,0));touch-action:none;cursor:ns-resize}.sheet-handle::before{content:"";width:46px;height:4px;border-radius:999px;background:#555}.panel-inner{padding:2px 16px calc(18px + var(--safe-bottom))}.location-row{align-items:center;padding-right:0}.location-name{font-size:1.05rem}.location-coord{font-size:.65rem}.mini-btn{min-width:40px;height:38px}.sheet-peek-summary{display:none;margin-top:7px;align-items:center;justify-content:space-between;gap:10px;color:#aaa;font-size:.68rem}.sheet-peek-summary strong{flex:none;color:#fff;font-size:.72rem}.forecast-panel.sheet-peek .sheet-peek-summary{display:flex}.forecast-panel.sheet-peek .location-coord,.forecast-panel.sheet-peek .mini-actions,.forecast-panel.sheet-peek .summary-card,.forecast-panel.sheet-peek .metrics,.forecast-panel.sheet-peek .section-head,.forecast-panel.sheet-peek .period-grid,.forecast-panel.sheet-peek .chart,.forecast-panel.sheet-peek .dry-state,.forecast-panel.sheet-peek .nearby-card,.forecast-panel.sheet-peek .source-note,.forecast-panel.sheet-peek .empty-state{display:none}
-      .summary-card{margin-top:10px;padding:10px 0 10px 12px;border-width:0 0 0 3px;background:transparent}.summary-main{font-size:.82rem}.summary-meta{gap:5px 9px;font-size:.64rem}.metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;margin-top:3px;border-top:1px solid #252525;border-bottom:1px solid #252525}.metric{padding:10px 7px;border:0;background:transparent}.metric:nth-child(odd){border-right:1px solid #252525}.metric-value{font-size:.9rem}.metric-label{font-size:.64rem}.forecast-panel:not(.sheet-full) .metric-detail{display:none}.forecast-panel:not(.sheet-full) .meta-detail{display:none}.forecast-panel:not(.sheet-full) .nearby-card,.forecast-panel:not(.sheet-full) .source-note{display:none}.mobile-data-alert{display:block;margin-top:8px;color:var(--amber);font-size:.68rem}.mobile-data-alert.normal{display:none}
-      .section-head{margin-top:12px}.section-title{font-size:.84rem}.section-note{font-size:.62rem}.period-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0;overflow:visible;border:1px solid #2d2d2d}.period-card{min-width:0;padding:9px 6px;border:0;background:transparent}.period-card:nth-child(odd){border-right:1px solid #292929}.period-card:nth-child(-n+2){border-bottom:1px solid #292929}.period-card.wet{background:#07141b}.weather-icon{height:36px}.weather-icon svg{width:42px;height:36px}.period-time{font-size:.7rem}.period-amount{font-size:.9rem}.period-unit,.period-nearby{font-size:.62rem}.chart{height:118px;border-color:#292929}.dry-state{border-color:#292929;background:#0c0c0c}.nearby-card{border-color:#292929}.source-note{font-size:.62rem}.radar-timeline{left:8px;right:8px;bottom:calc(104px + var(--safe-bottom));width:auto;transform:none}
-    }
-</style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="./css/app.css">
 </head>
 <body>
+  <div id="app-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="loading-line" class="hidden" aria-hidden="true"></div>
 
-<div id="loading-line" class="hidden" aria-hidden="true"></div>
-<div id="app-container">
-  <div class="header-top-bar">
-    <div class="app-title">hong kong weather</div>
-    <div class="mobile-title">
-      <span class="mobile-title-main">香港定點雨量</span>
-      <span id="mobile-title-sub" class="mobile-title-sub">未來兩小時臨近預報</span>
-    </div>
-    <div class="global-controls">
-      <button id="locate-button" class="metro-btn" onclick="RainApp.locate()" title="使用目前位置" aria-label="使用目前位置">◎</button>
-      <button class="metro-btn desktop-only" onclick="RainApp.centerHongKong()" title="返回香港全景" aria-label="返回香港全景">⌂</button>
-      <button class="metro-btn desktop-only" onclick="RainApp.toggleBasemap()" title="切換明暗地圖" aria-label="切換明暗地圖">◐</button>
-      <button class="metro-btn desktop-only" onclick="RainApp.toggleFullscreen()" title="全螢幕" aria-label="全螢幕">⛶</button>
-      <button class="metro-btn" onclick="RainApp.refresh()" title="更新預報" aria-label="更新預報">↻</button>
-      <button class="metro-btn mobile-only" onclick="RainApp.toggleDrawer()" title="開啟設定" aria-label="開啟設定">☰</button>
-    </div>
+  <div id="pwa-update-bar" class="pwa-update-bar hidden" role="status">
+    <span>已有新版可用</span>
+    <button id="pwa-update-button" type="button">立即更新</button>
+    <button id="pwa-update-dismiss" type="button" aria-label="稍後更新">×</button>
   </div>
-  <div class="pivot-headers">
-    <h1 class="pivot-header">rain</h1>
-  </div>
-  <div class="pivot-content-wrapper">
-    <div id="map-container">
-      <div id="rain-map"></div>
-      <div class="source-badges map-hud">
-        <button id="badge-hko" class="source-badge loading" type="button">HKO</button>
-        <button id="badge-point" class="source-badge loading" type="button">POINT</button>
-        <button id="badge-location" class="source-badge empty" type="button" onclick="RainApp.locate()">LOC</button>
-        <button id="badge-radar" class="source-badge disabled" type="button">RADAR</button>
+
+  <div id="app-container">
+    <header class="header-top-bar">
+      <div class="app-title">hong kong weather</div>
+      <div class="mobile-title">
+        <span class="mobile-title-main">香港定點雨量</span>
+        <span id="mobile-title-sub" class="mobile-title-sub">未來兩小時臨近預報</span>
       </div>
-      <button id="mobile-status" class="mobile-status map-hud loading" type="button" onclick="RainApp.toggleDrawer(true)" aria-label="開啟資料狀態"><span id="mobile-status-text" class="mobile-status-text">正在載入預報</span></button>
-      <div class="map-hint map-hud">點選地圖選擇位置；首次開啟會自動定位</div>
-      <div id="coordinate-readout" class="map-hud">--</div>
-      <div id="toast" class="map-hud"></div>
+      <nav class="global-controls" aria-label="主要操作">
+        <button id="locate-button" class="metro-btn" type="button" title="使用目前位置" aria-label="使用目前位置">◎</button>
+        <button id="center-hk-button" class="metro-btn desktop-only" type="button" title="返回香港全景" aria-label="返回香港全景">⌂</button>
+        <button id="basemap-button" class="metro-btn desktop-only" type="button" title="切換明暗地圖" aria-label="切換明暗地圖">◐</button>
+        <button id="fullscreen-button" class="metro-btn desktop-only" type="button" title="全螢幕" aria-label="全螢幕">⛶</button>
+        <button id="refresh-button" class="metro-btn" type="button" title="更新預報" aria-label="更新預報">↻</button>
+        <button id="drawer-button" class="metro-btn mobile-only" type="button" title="開啟設定" aria-label="開啟設定">☰</button>
+      </nav>
+    </header>
 
-      <section id="forecast-panel" class="forecast-panel map-hud" aria-live="polite" data-sheet="half">
-        <div id="sheet-handle" class="sheet-handle" role="button" tabindex="0" aria-label="拖曳或點擊調整預報面板高度"></div>
-        <button id="forecast-toggle" class="forecast-toggle" onclick="RainApp.toggleForecastPanel()" title="收合預報">⌄</button>
-        <div id="forecast-content" class="panel-inner"><div class="empty-state"><div class="spinner"></div><div>正在讀取定點雨量預報…</div></div></div>
-      </section>
+    <div class="pivot-headers"><h1 class="pivot-header">rain</h1></div>
 
-      <section id="radar-timeline" class="radar-timeline map-hud hidden" aria-label="雷達時間軸">
-        <div class="timeline-head"><span>雨量雷達</span><span id="radar-timeline-time">--</span></div>
-        <div class="timeline-control"><input id="radar-slider" type="range" min="0" max="0" value="0" oninput="RainApp.setRadarIndex(this.value)"></div>
-      </section>
+    <main class="pivot-content-wrapper">
+      <div id="map-container">
+        <div id="rain-map" aria-label="香港地圖，點選位置查看未來兩小時雨量"></div>
 
-      <button class="metro-fab desktop-only" onclick="RainApp.toggleDrawer()" aria-label="開啟設定">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-      </button>
-
-      <aside id="drawer" class="storm-panel" aria-label="雨量圖層及設定">
-        <div class="panel-close" onclick="RainApp.toggleDrawer(false)" aria-label="關閉">×</div>
-        <div class="panel-title">資料狀態</div>
-        <div id="data-status-detail" class="panel-note">正在讀取預報資料…</div>
-
-        <div class="panel-title">定位</div>
-        <label class="toggle-row"><input id="auto-locate-toggle" type="checkbox" onchange="RainApp.toggleAutoLocate(this.checked)">啟動時自動定位</label>
-        <button class="wide-btn" onclick="RainApp.locate()">◎ 立即使用目前位置</button>
-        <div id="location-status" class="panel-note" style="margin-top:8px">等待定位</div>
-
-        <div class="panel-title">預報位置</div>
-        <div id="saved-list" class="saved-list"></div>
-        <button class="wide-btn" onclick="RainApp.saveCurrentPoint()">＋ 儲存目前位置</button>
-        <button class="wide-btn" onclick="RainApp.sharePoint()">分享目前位置</button>
-
-        <div class="panel-title">顯示圖層</div>
-        <label class="toggle-row"><input id="toggle-marker" type="checkbox" checked onchange="RainApp.toggleLayer('marker',this.checked)">定點標記及附近地名</label>
-        <label class="toggle-row"><input id="toggle-radius" type="checkbox" checked onchange="RainApp.toggleLayer('radius',this.checked)">附近雨勢比較範圍</label>
-        <div class="setting-row"><span>附近半徑</span><select id="radius-select" onchange="RainApp.changeRadius(this.value)"><option value="1">1 公里</option><option value="2">2 公里</option><option value="3">3 公里</option><option value="5">5 公里</option></select></div>
-
-        <div class="panel-title">雨量雷達（預留）</div>
-        <label class="toggle-row"><input id="toggle-radar" type="checkbox" disabled onchange="RainApp.toggleLayer('radar',this.checked)">雷達影像圖層</label>
-        <div class="setting-row"><span>覆蓋範圍</span><select id="radar-range" onchange="RainApp.changeRadarRange(this.value)"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
-        <div class="setting-row"><span>透明度</span><input id="radar-opacity" type="range" min="0" max="100" value="68" oninput="RainApp.setRadarOpacity(this.value)"><span id="radar-opacity-value">68%</span></div>
-        <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
-
-        <div class="panel-title">地圖及應用程式</div>
-        <button class="wide-btn" onclick="RainApp.centerHongKong()">⌂ 返回香港全景</button>
-        <button class="wide-btn" onclick="RainApp.toggleBasemap()">◐ 切換明暗地圖</button>
-        <div class="pwa-install-row">
-          <button id="install-app-button" class="wide-btn hidden" onclick="RainApp.installPwa()">安裝到裝置</button>
-          <button class="wide-btn" onclick="RainApp.toggleFullscreen()">全螢幕顯示</button>
+        <div class="source-badges map-hud" aria-label="資料來源狀態">
+          <span id="badge-hko" class="source-badge loading">HKO</span>
+          <span id="badge-point" class="source-badge loading">POINT</span>
+          <button id="badge-location" class="source-badge empty" type="button" aria-label="使用目前位置">LOC</button>
+          <span id="badge-radar" class="source-badge disabled">RADAR</span>
         </div>
-        <div id="pwa-status" class="pwa-status">正在檢查 PWA 狀態…</div>
 
-        <div class="panel-title">資料服務</div>
-        <div class="setting-row"><span>Worker URL</span><input id="api-base-input" placeholder="https://...workers.dev"></div>
-        <button class="wide-btn" onclick="RainApp.saveApiBase()">儲存並重新載入</button>
-        <div class="panel-note" style="margin-top:9px">定點預報使用 <code>/api/rain/point</code>。雷達介面預期使用 <code>/api/radar/frames</code>，目前不會抓取或顯示未驗證影像。</div>
-      </aside>
-      <div id="drawer-backdrop" class="drawer-backdrop hidden" onclick="RainApp.toggleDrawer(false)"></div>
-    </div>
+        <button id="mobile-status" class="mobile-status map-hud loading" type="button" aria-label="開啟資料狀態">
+          <span id="mobile-status-text" class="mobile-status-text">正在載入預報</span>
+        </button>
+
+        <div class="map-hint map-hud">點選地圖選擇位置</div>
+        <div id="coordinate-readout" class="map-hud">—</div>
+        <div id="toast" class="map-hud" role="status" aria-live="polite"></div>
+
+        <section id="location-permission-card" class="location-permission-card map-hud hidden" aria-labelledby="location-permission-title">
+          <div id="location-permission-title" class="location-permission-title">顯示附近雨量</div>
+          <div class="location-permission-message">允許定位後可自動顯示附近兩小時雨量。</div>
+          <button id="location-permission-action" class="compact-action" type="button">顯示附近雨量</button>
+        </section>
+
+        <section id="forecast-panel" class="forecast-panel map-hud" data-sheet="half" aria-labelledby="forecast-heading">
+          <h2 id="forecast-heading" class="visually-hidden">定點雨量預報</h2>
+          <div id="sheet-handle" class="sheet-handle" role="button" tabindex="0" aria-expanded="true" aria-label="拖曳或使用上下方向鍵調整預報面板高度"></div>
+          <button id="forecast-toggle" class="forecast-toggle" type="button" title="收合預報" aria-expanded="true">⌄</button>
+          <div id="forecast-content" class="panel-inner">
+            <div class="empty-state"><div class="spinner" aria-hidden="true"></div><div>正在讀取定點雨量預報…</div></div>
+          </div>
+        </section>
+
+        <section id="radar-timeline" class="radar-timeline map-hud hidden" aria-label="雷達時間軸">
+          <div class="timeline-head"><span>雨量雷達</span><span id="radar-timeline-time">—</span></div>
+          <div class="timeline-control"><input id="radar-slider" type="range" min="0" max="0" value="0" aria-label="選擇雷達影像時間"></div>
+        </section>
+
+        <button id="desktop-drawer-button" class="metro-fab desktop-only" type="button" aria-label="開啟設定">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+
+        <aside id="settings-drawer" class="settings-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawer-title" tabindex="-1">
+          <div class="drawer-heading"><h2 id="drawer-title">設定</h2><button id="drawer-close" class="panel-close" type="button" aria-label="關閉設定">×</button></div>
+
+          <section><h3 class="panel-title">資料狀態</h3><div id="data-status-detail" class="panel-note">正在讀取預報資料…</div></section>
+
+          <section>
+            <h3 class="panel-title">定位</h3>
+            <label class="toggle-row"><input id="auto-locate-toggle" type="checkbox">啟動時自動定位</label>
+            <button id="drawer-locate-button" class="wide-btn" type="button">◎ 立即使用目前位置</button>
+            <div id="location-status" class="panel-note spaced-note">等待定位</div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">搜尋地區</h3>
+            <label class="visually-hidden" for="place-search-input">搜尋香港地區或已儲存位置</label>
+            <input id="place-search-input" class="search-input" type="search" autocomplete="off" placeholder="搜尋地區或已儲存位置">
+            <div id="place-search-results" class="search-results hidden"></div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">預報位置</h3>
+            <div id="saved-list" class="saved-list"></div>
+            <button id="save-current-button" class="wide-btn" type="button">＋ 儲存目前位置</button>
+            <button id="share-current-button" class="wide-btn" type="button">分享目前位置</button>
+          </section>
+
+          <section>
+            <h3 class="panel-title">顯示圖層</h3>
+            <label class="toggle-row"><input id="toggle-marker" type="checkbox" checked>定點標記及附近地名</label>
+            <label class="toggle-row"><input id="toggle-radius" type="checkbox" checked>附近雨勢比較範圍</label>
+            <label class="toggle-row"><input id="toggle-coverage" type="checkbox">官方預報網格範圍</label>
+            <div class="setting-row"><label for="radius-select">附近半徑</label><select id="radius-select"><option value="1">1 公里</option><option value="2">2 公里</option><option value="3">3 公里</option><option value="5">5 公里</option></select></div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">雨量雷達（Foundation）</h3>
+            <label class="toggle-row"><input id="toggle-radar" type="checkbox" disabled>雷達影像圖層</label>
+            <div class="setting-row"><label for="radar-range">覆蓋範圍</label><select id="radar-range"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
+            <div class="setting-row range-setting"><label for="radar-opacity">透明度</label><input id="radar-opacity" type="range" min="0" max="100" value="68"><span id="radar-opacity-value">68%</span></div>
+            <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">地圖及應用程式</h3>
+            <button id="drawer-center-hk-button" class="wide-btn" type="button">⌂ 返回香港全景</button>
+            <button id="drawer-basemap-button" class="wide-btn" type="button">◐ 切換明暗地圖</button>
+            <button id="install-app-button" class="wide-btn hidden" type="button">安裝到裝置</button>
+            <button id="drawer-fullscreen-button" class="wide-btn" type="button">全螢幕顯示</button>
+            <div id="pwa-status" class="pwa-status">正在檢查 PWA 狀態…</div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">資料服務</h3>
+            <div class="setting-row vertical-setting"><label for="api-base-input">Worker URL</label><input id="api-base-input" inputmode="url" placeholder="https://...workers.dev"></div>
+            <button id="save-api-button" class="wide-btn" type="button">儲存並重新載入</button>
+            <div id="worker-status" class="panel-note spaced-note">正在檢查 Worker 版本…</div>
+            <div class="panel-note spaced-note">v1.5 只使用 <code>/api/rain/point</code>，不再下載完整網格作前端後備。雷達契約已定義，但資料功能仍保持關閉。</div>
+          </section>
+
+          <section>
+            <h3 class="panel-title">個人資料及快取</h3>
+            <div id="storage-status" class="panel-note">正在計算…</div>
+            <button id="reset-app-button" class="wide-btn danger-btn" type="button">清除個人資料並重設</button>
+          </section>
+        </aside>
+        <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+      </div>
+    </main>
   </div>
-</div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script>
-const RainApp = (() => {
-  'use strict';
-  const DEFAULT_API_BASE = 'https://radar.maxyu0725.workers.dev';
-  const DEFAULT_POINT = { lat:22.3023, lon:114.1746, name:'香港天文台' };
-  const CACHE_MS = 5 * 60 * 1000;
-  const SUPPORTED_BOUNDS = { south:20, north:25, west:111, east:117 };
-  const RADAR_CONTRACT_PATH = '/api/radar/frames?range=64';
-  let deferredInstallPrompt = null;
-  const PLACE_CENTERS = [
-    ['中環',22.2819,114.1589],['金鐘',22.2797,114.1654],['灣仔',22.2771,114.1730],['銅鑼灣',22.2802,114.1842],
-    ['北角',22.2911,114.2009],['鰂魚涌',22.2849,114.2164],['太古',22.2863,114.2189],['西灣河',22.2821,114.2220],
-    ['柴灣',22.2647,114.2371],['筲箕灣',22.2780,114.2285],['香港仔',22.2480,114.1550],['黃竹坑',22.2474,114.1685],
-    ['赤柱',22.2186,114.2113],['薄扶林',22.2590,114.1362],['堅尼地城',22.2832,114.1287],['西營盤',22.2855,114.1421],
-    ['尖沙咀',22.2976,114.1722],['佐敦',22.3049,114.1717],['油麻地',22.3130,114.1707],['旺角',22.3193,114.1694],
-    ['太子',22.3245,114.1684],['深水埗',22.3315,114.1621],['長沙灣',22.3359,114.1577],['荔枝角',22.3372,114.1483],
-    ['美孚',22.3374,114.1402],['九龍城',22.3282,114.1916],['啟德',22.3298,114.1997],['新蒲崗',22.3368,114.1973],
-    ['黃大仙',22.3420,114.1931],['鑽石山',22.3398,114.2018],['九龍灣',22.3234,114.2140],['觀塘',22.3121,114.2258],
-    ['藍田',22.3070,114.2340],['油塘',22.2953,114.2380],['將軍澳',22.3119,114.2580],['調景嶺',22.3043,114.2523],
-    ['坑口',22.3158,114.2644],['寶琳',22.3225,114.2577],['沙田',22.3814,114.1880],['火炭',22.3974,114.1962],
-    ['大圍',22.3727,114.1787],['馬鞍山',22.4240,114.2310],['大埔',22.4500,114.1688],['粉嶺',22.4918,114.1413],
-    ['上水',22.5010,114.1277],['元朗',22.4445,114.0222],['天水圍',22.4603,114.0018],['屯門',22.3910,113.9767],
-    ['荃灣',22.3714,114.1142],['葵涌',22.3637,114.1316],['葵芳',22.3566,114.1279],['青衣',22.3524,114.1020],
-    ['東涌',22.2892,113.9418],['赤鱲角',22.3080,113.9185],['愉景灣',22.2950,114.0167],['梅窩',22.2644,114.0018],
-    ['長洲',22.2080,114.0289],['坪洲',22.2850,114.0382],['南丫島',22.2090,114.1190],['西貢',22.3820,114.2705]
-  ];
-  const initialPoint = loadInitialPoint();
-  const state = {
-    apiBase:(localStorage.getItem('hkRainApiBase') || localStorage.getItem('hkRadarApiBase') || DEFAULT_API_BASE).replace(/\/$/,''),
-    map:null,
-    darkTiles:null,
-    lightTiles:null,
-    activeTiles:localStorage.getItem('hkRainBasemap')==='light'?'light':'dark',
-    markerLayer:null,
-    radiusLayer:null,
-    accuracyLayer:null,
-    radarLayer:null,
-    selected:{lat:initialPoint.lat,lon:initialPoint.lon,name:initialPoint.name},
-    initialSource:initialPoint.source,
-    radiusKm:Number(localStorage.getItem('hkRainRadiusKm')) || 2,
-    saved:loadSavedPoints(),
-    forecast:null,
-    requestToken:0,
-    abortController:null,
-    cache:new Map(),
-    rawNowcast:null,
-    preparedRaw:null,
-    accuracyMeters:null,
-    autoLocate:localStorage.getItem('hkRainAutoLocate')!=='off',
-    layers:{marker:true,radius:true,radar:false},
-    capabilities:{pointForecast:true,nowcastGrid:true,radarFrames:false},
-    radar:{frames:[],index:0,range:64,opacity:.68,playing:false,timer:null},
-    sheet:{mode:localStorage.getItem('hkRainSheetMode')||'half',dragging:false,startY:0,startHeight:0,moved:false}
-  };
-
-  function init(){
-    if(['自選位置','目前位置','分享位置'].includes(state.selected.name)) state.selected.name=automaticLocationName(state.selected.lat,state.selected.lon);
-    document.getElementById('api-base-input').value=state.apiBase;
-    document.getElementById('radius-select').value=String(state.radiusKm);
-    document.getElementById('auto-locate-toggle').checked=state.autoLocate;
-    document.getElementById('radar-range').value=String(state.radar.range);
-    document.getElementById('radar-opacity').value=String(Math.round(state.radar.opacity*100));
-    document.getElementById('radar-opacity-value').textContent=Math.round(state.radar.opacity*100)+'%';
-    initPwa();
-    initMobileSheet();
-
-    state.map=L.map('rain-map',{zoomControl:true,attributionControl:true,preferCanvas:true,minZoom:8,maxZoom:18}).setView([state.selected.lat,state.selected.lon],12);
-    state.darkTiles=L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap © CARTO'});
-    state.lightTiles=L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20,attribution:'© OpenStreetMap © CARTO'});
-    (state.activeTiles==='light'?state.lightTiles:state.darkTiles).addTo(state.map);
-
-    state.radiusLayer=L.layerGroup().addTo(state.map);
-    state.accuracyLayer=L.layerGroup().addTo(state.map);
-    state.markerLayer=L.layerGroup().addTo(state.map);
-    state.map.on('click',event=>selectPoint(event.latlng.lat,event.latlng.lng,'自選位置',true));
-    state.map.on('mousemove',event=>{document.getElementById('coordinate-readout').textContent=formatLatLon(event.latlng.lat,event.latlng.lng);});
-    state.map.on('mouseout',()=>{document.getElementById('coordinate-readout').textContent='--';});
-    document.addEventListener('keydown',event=>{if(event.key==='Escape'){toggleDrawer(false);toggleForecastPanel(false);}});
-
-    renderMarker();
-    renderSaved();
-    updateLayerControls();
-    refresh();
-    loadCapabilities();
-    setInterval(()=>refresh(true),12*60*1000);
-    window.addEventListener('online',()=>refresh(true));
-
-    setTimeout(()=>document.querySelector('.map-hint')?.classList.add('hint-hidden'),6500);
-    window.addEventListener('resize',()=>{state.map?.invalidateSize();if(isMobileLayout())setSheetMode(state.sheet.mode,{persist:false,offset:false});});
-    if(state.autoLocate && state.initialSource!=='share') setTimeout(()=>locate(true),450);
-  }
-
-  function loadInitialPoint(){
-    const params=new URLSearchParams(location.search);
-    const hasShared=params.get('share')==='1';
-    const latRaw=params.get('lat'),lonRaw=params.get('lon');
-    const lat=latRaw!==null&&latRaw.trim()!==''?Number(latRaw):NaN;
-    const lon=lonRaw!==null&&lonRaw.trim()!==''?Number(lonRaw):NaN;
-    const name=(params.get('name')||'').trim();
-    if((hasShared||(latRaw!==null&&lonRaw!==null))&&isSupportedPoint(lat,lon)) return {lat,lon,name:name||'分享位置',source:'share'};
-
-    const stored=loadJSON('hkRainLastPoint',null);
-    if(stored&&isSupportedPoint(Number(stored.lat),Number(stored.lon))){
-      return {lat:Number(stored.lat),lon:Number(stored.lon),name:String(stored.name||'上次位置'),source:'stored'};
-    }
-    return {...DEFAULT_POINT,source:'default'};
-  }
-
-  function loadSavedPoints(){
-    const current=loadJSON('hkRainSavedPoints',null);
-    if(Array.isArray(current))return current;
-    const legacy=loadJSON('hkRadarSavedPoints',[]);
-    return Array.isArray(legacy)?legacy:[];
-  }
-
-  async function refresh(silent=false){
-    await loadPointForecast({force:true,silent});
-  }
-
-  async function loadPointForecast({force=false,silent=false}={}){
-    const point={...state.selected};
-    const cacheKey=`${point.lat.toFixed(3)}|${point.lon.toFixed(3)}|${state.radiusKm}`;
-    const cached=state.cache.get(cacheKey);
-    const stored=loadJSON('hkRainLastForecast',null);
-    const storedMatch=stored?.cacheKey===cacheKey&&stored?.data?stored:null;
-    if(!force&&cached&&Date.now()-cached.savedAt<CACHE_MS){state.forecast=cached.data;renderForecast();return;}
-    if(!force&&!cached&&storedMatch&&Date.now()-storedMatch.savedAt<CACHE_MS){state.forecast=storedMatch.data;state.cache.set(cacheKey,storedMatch);renderForecast();return;}
-
-    const token=++state.requestToken;
-    state.abortController?.abort();
-    state.abortController=new AbortController();
-    if(!silent)setLoading(true);
-    if(!silent||!state.forecast)renderLoading(point);
-
-    try{
-      let data;
-      try{
-        data=await api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${state.radiusKm}`,state.abortController.signal);
-      }catch(error){
-        if(error.name==='AbortError')throw error;
-        if(error.status!==404)throw error;
-        data=await calculateFromLegacyWorker(point,state.abortController.signal);
-      }
-      if(token!==state.requestToken)return;
-      state.forecast=data;
-      const savedAt=Date.now();
-      state.cache.set(cacheKey,{data,savedAt});
-      localStorage.setItem('hkRainLastForecast',JSON.stringify({cacheKey,data,savedAt}));
-      renderForecast();
-      syncUrl();
-    }catch(error){
-      if(error.name==='AbortError'||token!==state.requestToken)return;
-      const fallback=state.cache.get(cacheKey)||storedMatch;
-      if(fallback?.data){
-        state.forecast=fallback.data;
-        renderForecast();
-        toast(`網絡暫時中斷，正在顯示 ${formatTime(fallback.data.issueTime)} 的快取預報`);
-      }else{
-        state.forecast=null;
-        renderError(error.message||String(error));
-      }
-    }finally{
-      if(token===state.requestToken)setLoading(false);
-    }
-  }
-
-  async function api(path,signal){
-    const response=await fetch(state.apiBase+path,{cache:'no-store',signal});
-    if(!response.ok){
-      let detail='';
-      try{detail=(await response.json()).error||'';}catch{}
-      const error=new Error(detail||`HTTP ${response.status}`);
-      error.status=response.status;
-      throw error;
-    }
-    return response.json();
-  }
-
-  async function calculateFromLegacyWorker(point,signal){
-    if(!state.rawNowcast){
-      state.rawNowcast=await api('/api/rain/nowcast',signal);
-      state.preparedRaw=prepareRawNowcast(state.rawNowcast);
-    }
-    const prepared=state.preparedRaw;
-    const grid=state.rawNowcast.grid||{};
-    if(point.lat<grid.minLat||point.lat>grid.maxLat||point.lon<grid.minLon||point.lon>grid.maxLon){
-      const error=new Error('所選位置超出官方雨量預報網格範圍');error.status=422;throw error;
-    }
-    const samples=makeNearbySamples(point.lat,point.lon,state.radiusKm);
-    const periods=prepared.frames.map(item=>{
-      const center=interpolatePrepared(item.index,prepared.axes,point.lat,point.lon);
-      if(!center)return null;
-      const nearby=samples.map(sample=>interpolatePrepared(item.index,prepared.axes,sample.lat,sample.lon)).filter(Boolean).map(result=>result.value);
-      const nearbyMax=nearby.length?Math.max(...nearby):center.value;
-      const nearbyMean=nearby.length?nearby.reduce((sum,value)=>sum+value,0)/nearby.length:center.value;
-      return {
-        time:item.time,
-        leadMinutes:item.leadMinutes,
-        amountMm:round(center.value,2),
-        nearbyMaxMm:round(nearbyMax,2),
-        nearbyMeanMm:round(nearbyMean,2),
-        nearestGridKm:round(center.nearestGridKm,2),
-        spatialSpreadMm:round(center.spatialSpreadMm,2),
-        level:rainLevel(center.value)
-      };
-    }).filter(Boolean);
-    const summary=summarisePeriods(periods);
-    const issueTime=state.rawNowcast.issueTime||state.rawNowcast.baseTime;
-    const sourceAgeMinutes=issueTime?Math.max(0,Math.round((Date.now()-Date.parse(issueTime))/60000)):null;
-    const nearbyDeltaMax=Math.max(...periods.map(period=>Math.max(0,period.nearbyMaxMm-period.amountMm)));
-    return {
-      ok:true,
-      version:'legacy-client-fallback',
-      source:'Hong Kong Observatory gridded rainfall nowcast',
-      generatedAt:new Date().toISOString(),
-      issueTime,
-      unit:'mm / 30 min',
-      location:{lat:point.lat,lon:point.lon},
-      nearbyRadiusKm:state.radiusKm,
-      interpolation:'client-bilinear-four-grid-points',
-      summary,
-      dataQuality:assessDataQuality(sourceAgeMinutes,nearbyDeltaMax,periods),
-      periods
-    };
-  }
-
-  function prepareRawNowcast(nowcast){
-    const sample=nowcast.frames?.find(frame=>frame.points?.length)?.points||[];
-    const axes={
-      lats:[...new Set(sample.map(point=>Number(point[0])))].sort((a,b)=>a-b),
-      lons:[...new Set(sample.map(point=>Number(point[1])))].sort((a,b)=>a-b)
-    };
-    const frames=(nowcast.frames||[]).map(frame=>({
-      time:frame.time,
-      leadMinutes:frame.leadMinutes,
-      index:new Map((frame.points||[]).map(point=>[coordKey(point[0],point[1]),Number(point[2])]))
-    }));
-    return {axes,frames};
-  }
-
-  function interpolatePrepared(index,axes,lat,lon){
-    const latPair=bracket(axes.lats,lat),lonPair=bracket(axes.lons,lon);
-    if(!latPair||!lonPair)return null;
-    const [lat0,lat1]=latPair,[lon0,lon1]=lonPair;
-    const corners=[
-      {lat:lat0,lon:lon0,value:index.get(coordKey(lat0,lon0))},
-      {lat:lat0,lon:lon1,value:index.get(coordKey(lat0,lon1))},
-      {lat:lat1,lon:lon0,value:index.get(coordKey(lat1,lon0))},
-      {lat:lat1,lon:lon1,value:index.get(coordKey(lat1,lon1))}
-    ].filter(corner=>Number.isFinite(corner.value));
-    if(!corners.length)return null;
-    let value;
-    if(corners.length===4&&lat1!==lat0&&lon1!==lon0){
-      const tx=clamp((lon-lon0)/(lon1-lon0),0,1),ty=clamp((lat-lat0)/(lat1-lat0),0,1);
-      const q00=index.get(coordKey(lat0,lon0)),q01=index.get(coordKey(lat0,lon1)),q10=index.get(coordKey(lat1,lon0)),q11=index.get(coordKey(lat1,lon1));
-      value=(q00*(1-tx)+q01*tx)*(1-ty)+(q10*(1-tx)+q11*tx)*ty;
-    }else{
-      const weighted=corners.map(corner=>{const distance=Math.max(.02,haversine(lat,lon,corner.lat,corner.lon));return{...corner,weight:1/(distance*distance)}});
-      value=weighted.reduce((sum,corner)=>sum+corner.value*corner.weight,0)/weighted.reduce((sum,corner)=>sum+corner.weight,0);
-    }
-    const values=corners.map(corner=>corner.value);
-    return {value:Math.max(0,value),nearestGridKm:Math.min(...corners.map(corner=>haversine(lat,lon,corner.lat,corner.lon))),spatialSpreadMm:Math.max(...values)-Math.min(...values)};
-  }
-
-  function selectPoint(lat,lon,name='自選位置',moveMap=false,options={}){
-    const numericLat=Number(lat),numericLon=Number(lon);
-    if(!isSupportedPoint(numericLat,numericLon)){
-      toast('所選位置超出香港雨量預報支援範圍');
-      return false;
-    }
-    const automaticName=['自選位置','目前位置','分享位置'].includes(name)?automaticLocationName(numericLat,numericLon):name;
-    state.selected={lat:numericLat,lon:numericLon,name:automaticName};
-    if(Number.isFinite(options.accuracy)) state.accuracyMeters=options.accuracy;
-    else if(!options.keepAccuracy) state.accuracyMeters=null;
-    localStorage.setItem('hkRainLastPoint',JSON.stringify(state.selected));
-    renderMarker();
-    if(moveMap) centerPointForSheet(numericLat,numericLon,Math.max(state.map.getZoom(),13));
-    if(isMobileLayout())setSheetMode('half',{persist:false,offset:false});
-    loadPointForecast();
-    return true;
-  }
-
-  function renderMarker(){
-    state.markerLayer.clearLayers();
-    state.radiusLayer.clearLayers();
-    state.accuracyLayer.clearLayers();
-    const center=[state.selected.lat,state.selected.lon];
-    if(state.layers.radius){
-      L.circle(center,{radius:state.radiusKm*1000,color:'#1ba1e2',weight:1.5,opacity:.8,dashArray:'7,7',fillColor:'#1ba1e2',fillOpacity:.06,interactive:false}).addTo(state.radiusLayer);
-      const northLat=state.selected.lat+(state.radiusKm/110.574);
-      const radiusIcon=L.divIcon({className:'',html:`<div class="radius-label">附近 ${state.radiusKm} km</div>`,iconSize:[76,20],iconAnchor:[38,10]});
-      L.marker([northLat,state.selected.lon],{icon:radiusIcon,interactive:false,zIndexOffset:300}).addTo(state.radiusLayer);
-    }
-    if(state.layers.marker){
-      const icon=L.divIcon({className:'',html:'<div class="selected-pin"></div>',iconSize:[24,24],iconAnchor:[12,12]});
-      L.marker(center,{icon,zIndexOffset:1000}).bindTooltip(state.selected.name,{permanent:true,direction:'right',className:'point-label',offset:[12,0]}).addTo(state.markerLayer);
-    }
-    if(Number.isFinite(state.accuracyMeters)&&state.accuracyMeters>0){
-      L.circle(center,{radius:Math.min(state.accuracyMeters,1500),color:'#7fe7ff',weight:1,opacity:.55,fillColor:'#7fe7ff',fillOpacity:.05,interactive:false}).addTo(state.accuracyLayer);
-    }
-  }
-
-  async function locate(automatic=false){
-    if(!navigator.geolocation){if(!automatic)toast('瀏覽器不支援定位');return;}
-    setLocateState('loading',automatic?'正在自動定位…':'正在取得目前位置…');
-    navigator.geolocation.getCurrentPosition(position=>{
-      const {latitude,longitude,accuracy}=position.coords;
-      if(!isSupportedPoint(latitude,longitude)){
-        setLocateState('error','目前位置不在香港預報範圍');
-        if(!automatic) toast('目前位置不在香港雨量預報支援範圍');
-        return;
-      }
-      centerPointForSheet(latitude,longitude,14);
-      selectPoint(latitude,longitude,'目前位置',false,{accuracy});
-      setLocateState('ok',`${automatic?'已自動定位':'已定位'}：${state.selected.name}${Number.isFinite(accuracy)?`（約 ±${Math.round(accuracy)} 米）`:''}`);
-      toast(`${automatic?'已自動顯示':'已使用'} ${state.selected.name}`);
-    },error=>{
-      const denied=error.code===1;
-      setLocateState(denied?'empty':'error',denied?'未獲定位權限':'定位失敗');
-      if(!automatic) toast('定位失敗：'+error.message);
-    },{enableHighAccuracy:true,timeout:12000,maximumAge:120000});
-  }
-
-  function centerHongKong(){state.map.setView([22.35,114.15],11);}
-
-  function renderLoading(point){
-    const content=document.getElementById('forecast-content');
-    content.innerHTML=`<div class="location-row"><div><h1 class="location-name"></h1><div class="location-coord">${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E</div></div></div><div class="sheet-peek-summary"><span>正在計算預報…</span><strong>請稍候</strong></div><div class="empty-state"><div class="spinner"></div><div>正在計算未來兩小時雨量…</div></div>`;
-    content.querySelector('.location-name').textContent=point.name;
-    setMobileStatus('loading','正在載入預報');
-    if(isMobileLayout())setSheetMode('half',{persist:false,offset:false});
-  }
-
-  function renderForecast(){
-    const data=state.forecast;
-    if(!data?.periods?.length){renderError('沒有可用的定點預報');return;}
-    const content=document.getElementById('forecast-content');
-    const quality=data.dataQuality||{};
-    const periods=data.periods;
-    const isDry=periods.every(period=>(period.amountMm||0)<.2&&(period.nearbyMaxMm||0)<.2);
-    const startText=data.summary.rainStartTime?formatTime(data.summary.rainStartTime):'暫無';
-    const issueText=data.issueTime?formatDateTime(data.issueTime):'時間不詳';
-    const fetchedText=data.generatedAt?formatTime(data.generatedAt):formatTime(new Date().toISOString());
-    const nearbyPeak=Math.max(...periods.map(period=>period.nearbyMaxMm||0));
-    const pointPeak=Math.max(...periods.map(period=>period.amountMm||0));
-    const nearbyMessage=nearbyPeak>=.2&&nearbyPeak>pointPeak+.15
-      ? `附近 ${data.nearbyRadiusKm||state.radiusKm} 公里最高預測 ${formatRain(nearbyPeak)} mm／30分鐘，比定點高 ${formatRain(nearbyPeak-pointPeak)} mm；雨區邊界可能接近。`
-      : `附近 ${data.nearbyRadiusKm||state.radiusKm} 公里的預報與定點差異不大。`;
-    const qualityStatus=quality.status||'normal';
-    const trendMarkup=isDry
-      ? `<div class="dry-state"><div class="dry-state-icon">${rainIconSvg('dry')}</div><div><div class="dry-state-title">未來兩小時雨量維持 0 mm</div><div class="dry-state-note">定點及附近 ${data.nearbyRadiusKm||state.radiusKm} 公里預報均未見明顯降雨。</div></div></div>`
-      : `<div class="chart">${periods.map(renderChartColumn).join('')}</div>`;
-
-    content.innerHTML=`
-      <div class="location-row">
-        <div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div>
-        <div class="mini-actions"><button class="mini-btn" onclick="RainApp.saveCurrentPoint()" title="儲存位置" aria-label="儲存位置">＋</button><button class="mini-btn" onclick="RainApp.sharePoint()" title="分享位置" aria-label="分享位置">⇧</button></div>
-      </div>
-      <div class="sheet-peek-summary"><span>${escapeHtml(data.summary.text)}</span><strong>${formatRain(data.summary.totalMm)} mm · ${escapeHtml(startText)}</strong></div>
-      <div class="summary-card ${escapeHtml(qualityStatus)}">
-        <div class="summary-main">${escapeHtml(data.summary.text)}</div>
-        <div class="summary-meta">
-          <span class="meta-detail">預報基準 ${escapeHtml(issueText)}</span>
-          <span class="meta-detail">本頁取得 ${escapeHtml(fetchedText)}</span>
-          <span class="quality-pill ${escapeHtml(qualityStatus)}"><span class="quality-dot"></span>${escapeHtml(quality.label||'資料正常')}</span>
-        </div>
-      </div>
-      <div class="mobile-data-alert ${escapeHtml(qualityStatus)}">${qualityStatus==='normal'?'':`⚠ ${escapeHtml(quality.label||'資料狀態異常')}${Number.isFinite(quality.sourceAgeMinutes)?`（${quality.sourceAgeMinutes} 分鐘）`:''}`}</div>
-      <div class="metrics">
-        <div class="metric metric-primary"><div class="metric-value">${formatRain(data.summary.totalMm)} mm</div><div class="metric-label">兩小時總雨量</div></div>
-        <div class="metric metric-detail"><div class="metric-value">${formatRain(data.summary.peakMm)} mm</div><div class="metric-label">最高／30分鐘</div></div>
-        <div class="metric metric-primary"><div class="metric-value">${escapeHtml(startText)}</div><div class="metric-label">預計開始</div></div>
-        <div class="metric metric-detail"><div class="metric-value">${quality.sourceAgeMinutes??'—'} 分鐘</div><div class="metric-label">資料時差</div></div>
-      </div>
-      <div class="section-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">每格為半小時累計雨量</div></div>
-      <div class="period-grid">${periods.map(period=>renderPeriodCard(period,!isDry)).join('')}</div>
-      <div class="section-head"><h2 class="section-title">雨量趨勢</h2><div class="section-note">${isDry?'乾燥模式':'固定雨量級別'}</div></div>
-      ${trendMarkup}
-      <div class="nearby-card"><strong>附近雨勢：</strong>${escapeHtml(nearbyMessage)}<br><span style="color:#788691">${escapeHtml(quality.note||'')}</span></div>
-      <div class="source-note">資料來源：香港天文台「香港網格點降雨臨近預報」。目前顯示定點預報；雷達圖層介面已預留，待 Worker 提供可驗證雷達幀後可直接接入。定點值由相鄰四個官方網格作雙線性插值，屬自動預報結果，不是街道級實測。降雨預報本身具有不確定性，附近雨勢比較只用作提示雨區邊界。</div>`;
-    document.getElementById('location-name').textContent=state.selected.name;
-    const mobileState=qualityStatus==='expired'||qualityStatus==='stale'?'error':qualityStatus==='delayed'||qualityStatus==='location-sensitive'?'loading':'ok';
-    setMobileStatus(mobileState,quality.label||'資料正常');
-    updateDataStatusDetail(data,quality,issueText,fetchedText);
-    document.getElementById('mobile-title-sub').textContent=`${state.selected.name} · ${quality.label||'資料正常'}`;
-    setBadge('point','ok','POINT');
-    setBadge('hko',qualityStatus==='expired'||qualityStatus==='stale'?'error':qualityStatus==='delayed'?'loading':'ok','HKO');
-    requestAnimationFrame(()=>keepSelectedVisible(false));
-  }
-
-  function renderPeriodCard(period,showNearby=true){
-    const wet=period.amountMm>=.2?' wet':'';
-    const nearby=showNearby?`<div class="period-nearby">附近最高 ${formatRain(period.nearbyMaxMm)}</div>`:'';
-    return `<div class="period-card${wet}"><div class="period-time">${escapeHtml(formatTime(period.time))}</div><div class="weather-icon">${rainIconSvg(period.level)}</div><div class="period-amount">${formatRain(period.amountMm)} <span class="period-unit">mm</span></div>${nearby}</div>`;
-  }
-
-  function renderChartColumn(period){
-    const height=rainBarHeight(period.amountMm);
-    const level=period.level||rainLevel(period.amountMm);
-    return `<div class="chart-col"><div class="chart-value">${formatRain(period.amountMm)}</div><div class="chart-bar-wrap"><div class="chart-bar ${escapeHtml(level)}" style="height:${height}px"></div></div><div class="chart-time">${escapeHtml(formatTime(period.time))}</div></div>`;
-  }
-
-  function rainBarHeight(value){
-    const amount=Math.max(0,Number(value)||0);
-    if(amount<=0)return 2;
-    if(amount<.5)return Math.round(5+(amount/.5)*13);
-    if(amount<2)return Math.round(18+((amount-.5)/1.5)*18);
-    if(amount<10)return Math.round(36+((amount-2)/8)*30);
-    return 72;
-  }
-
-  function rainIconSvg(level){
-    if(level==='dry')return `<svg viewBox="0 0 60 50" aria-hidden="true"><path d="M30 6C24 15 17 22 17 31a13 13 0 0 0 26 0C43 22 36 15 30 6z" fill="none" stroke="#8aa0ae" stroke-width="3"/><line x1="15" y1="10" x2="45" y2="42" stroke="#8aa0ae" stroke-width="3.5" stroke-linecap="round"/></svg>`;
-    const drops={light:1,moderate:2,heavy:3,'very-heavy':4}[level]??1;
-    let shapes='';
-    const startX=30-((drops-1)*7);
-    for(let i=0;i<drops;i++){
-      const x=startX+i*14,y=i%2?12:8,scale=level==='very-heavy'?1.06:1;
-      shapes+=`<path d="M ${x} ${y} C ${x-5*scale} ${y+8*scale}, ${x-8*scale} ${y+12*scale}, ${x-8*scale} ${y+19*scale} A ${8*scale} ${8*scale} 0 0 0 ${x+8*scale} ${y+19*scale} C ${x+8*scale} ${y+12*scale}, ${x+5*scale} ${y+8*scale}, ${x} ${y} Z" fill="#168bd2" opacity="${.72+i*.07}"/>`;
-    }
-    return `<svg viewBox="0 0 60 50" aria-hidden="true">${shapes}</svg>`;
-  }
-
-  function renderError(message){
-    const content=document.getElementById('forecast-content');
-    content.innerHTML=`<div class="location-row"><div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div></div><div class="empty-state"><div style="font-size:2rem;margin-bottom:8px">!</div><strong>未能取得定點預報</strong><div style="margin-top:8px;max-width:300px">${escapeHtml(message)}</div><button class="wide-btn" style="max-width:220px" onclick="RainApp.refresh()">重新載入</button></div>`;
-    document.getElementById('location-name').textContent=state.selected.name;
-    setMobileStatus('error','未能取得預報');
-    document.getElementById('data-status-detail').textContent=`定點預報讀取失敗：${message}`;
-    setBadge('point','error','POINT');
-  }
-
-  function saveCurrentPoint(){
-    const proposed=state.selected.name==='自選位置'?'新定點':state.selected.name;
-    const name=prompt('定點名稱',proposed);
-    if(!name)return;
-    const item={lat:state.selected.lat,lon:state.selected.lon,name:name.trim()||'定點'};
-    const existing=state.saved.findIndex(point=>haversine(point.lat,point.lon,item.lat,item.lon)<.05);
-    if(existing>=0)state.saved[existing]=item;else state.saved.push(item);
-    state.selected.name=item.name;
-    localStorage.setItem('hkRainSavedPoints',JSON.stringify(state.saved));
-    renderSaved();renderForecast();syncUrl();toast('已儲存位置');
-  }
-
-  function renderSaved(){
-    const box=document.getElementById('saved-list');
-    const all=[DEFAULT_POINT,...state.saved];
-    box.innerHTML=all.map((point,index)=>`<div class="saved-item"><div class="saved-main" data-index="${index}"><div class="saved-name">${escapeHtml(point.name)}</div><div class="saved-coord">${point.lat.toFixed(4)}, ${point.lon.toFixed(4)}</div></div>${index===0?'<span></span>':`<button class="delete-btn" data-delete="${index-1}" title="刪除">×</button>`}</div>`).join('');
-    box.querySelectorAll('.saved-main').forEach(element=>element.onclick=()=>{
-      const point=all[Number(element.dataset.index)];
-      state.map.setView([point.lat,point.lon],13);selectPoint(point.lat,point.lon,point.name);toggleDrawer(false);
-    });
-    box.querySelectorAll('[data-delete]').forEach(button=>button.onclick=event=>{
-      event.stopPropagation();state.saved.splice(Number(button.dataset.delete),1);localStorage.setItem('hkRainSavedPoints',JSON.stringify(state.saved));renderSaved();
-    });
-  }
-
-  function sharePoint(){
-    const url=new URL(location.href);
-    url.search='';
-    url.searchParams.set('share','1');
-    url.searchParams.set('lat',state.selected.lat.toFixed(5));
-    url.searchParams.set('lon',state.selected.lon.toFixed(5));
-    url.searchParams.set('name',state.selected.name);
-    const value=url.toString();
-    if(navigator.share){navigator.share({title:'定點雨量預報',text:state.selected.name,url:value}).catch(()=>{});return;}
-    navigator.clipboard?.writeText(value).then(()=>toast('位置連結已複製')).catch(()=>toast(value));
-  }
-
-  function syncUrl(){
-    const params=new URLSearchParams(location.search);
-    if(params.get('share')!=='1'&&!(params.has('lat')&&params.has('lon'))) return;
-    const url=new URL(location.href);
-    url.searchParams.set('lat',state.selected.lat.toFixed(5));
-    url.searchParams.set('lon',state.selected.lon.toFixed(5));
-    url.searchParams.set('name',state.selected.name);
-    history.replaceState(null,'',url);
-  }
-
-  function changeRadius(value){
-    state.radiusKm=[1,2,3,5].includes(Number(value))?Number(value):2;
-    localStorage.setItem('hkRainRadiusKm',String(state.radiusKm));
-    state.cache.clear();
-    renderMarker();
-    loadPointForecast({force:true});
-  }
-
-  function saveApiBase(){
-    const value=document.getElementById('api-base-input').value.trim().replace(/\/$/,'');
-    if(!/^https:\/\//i.test(value)){toast('請輸入 HTTPS Worker URL');return;}
-    localStorage.setItem('hkRainApiBase',value);location.reload();
-  }
-
-  function toggleDrawer(force){
-    const drawer=document.getElementById('drawer');
-    const open=typeof force==='boolean'?force:!drawer.classList.contains('open');
-    drawer.classList.toggle('open',open);
-    document.getElementById('drawer-backdrop').classList.toggle('hidden',!open);
-  }
-
-  function toggleForecastPanel(force){
-    if(isMobileLayout()){
-      if(typeof force==='boolean')setSheetMode(force?'half':'peek');
-      else setSheetMode(state.sheet.mode==='peek'?'half':'peek');
-      return;
-    }
-    const panel=document.getElementById('forecast-panel');
-    const collapsed=typeof force==='boolean'?!force:!panel.classList.contains('collapsed');
-    panel.classList.toggle('collapsed',collapsed);
-    document.getElementById('forecast-toggle').textContent=collapsed?'⌃':'⌄';
-  }
-
-  function isMobileLayout(){return window.matchMedia('(max-width:700px)').matches;}
-
-  function initMobileSheet(){
-    const panel=document.getElementById('forecast-panel');
-    const handle=document.getElementById('sheet-handle');
-    const valid=['peek','half','full'];
-    if(!valid.includes(state.sheet.mode))state.sheet.mode='half';
-    const apply=()=>{if(isMobileLayout())setSheetMode(state.sheet.mode,{persist:false,offset:false});else panel.classList.remove('sheet-peek','sheet-half','sheet-full','dragging');};
-    apply();
-    window.matchMedia('(max-width:700px)').addEventListener?.('change',apply);
-    handle.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();cycleSheetMode();}});
-    handle.addEventListener('click',()=>{if(!state.sheet.moved)cycleSheetMode();state.sheet.moved=false;});
-    handle.addEventListener('pointerdown',event=>{
-      if(!isMobileLayout())return;
-      state.sheet.dragging=true;state.sheet.moved=false;state.sheet.startY=event.clientY;state.sheet.startHeight=panel.getBoundingClientRect().height;
-      panel.classList.add('dragging');handle.setPointerCapture?.(event.pointerId);
-    });
-    handle.addEventListener('pointermove',event=>{
-      if(!state.sheet.dragging)return;
-      const delta=state.sheet.startY-event.clientY;if(Math.abs(delta)>5)state.sheet.moved=true;
-      const min=88,max=Math.max(180,window.innerHeight-68-parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-top')||0));
-      panel.style.height=`${clamp(state.sheet.startHeight+delta,min,max)}px`;
-    });
-    const finish=event=>{
-      if(!state.sheet.dragging)return;state.sheet.dragging=false;panel.classList.remove('dragging');
-      const height=panel.getBoundingClientRect().height;panel.style.height='';
-      const ratio=height/window.innerHeight;setSheetMode(ratio<.24?'peek':ratio<.72?'half':'full');
-      try{handle.releasePointerCapture?.(event.pointerId);}catch{}
-    };
-    handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
-  }
-
-  function cycleSheetMode(){setSheetMode(state.sheet.mode==='peek'?'half':state.sheet.mode==='half'?'full':'half');}
-
-  function setSheetMode(mode,{persist=true,offset=true}={}){
-    if(!['peek','half','full'].includes(mode))mode='half';
-    state.sheet.mode=mode;
-    const panel=document.getElementById('forecast-panel');
-    panel.classList.remove('collapsed','sheet-peek','sheet-half','sheet-full');
-    panel.classList.add(`sheet-${mode}`);panel.dataset.sheet=mode;
-    document.getElementById('sheet-handle')?.setAttribute('aria-expanded',mode!=='peek'?'true':'false');
-    if(persist)localStorage.setItem('hkRainSheetMode',mode);
-    requestAnimationFrame(()=>{state.map?.invalidateSize();if(offset)keepSelectedVisible(true);});
-  }
-
-  function centerPointForSheet(lat,lon,zoom){
-    state.map.setView([lat,lon],zoom);
-    requestAnimationFrame(()=>keepSelectedVisible(false));
-  }
-
-  function keepSelectedVisible(animate=true){
-    if(!isMobileLayout()||!state.map)return;
-    const panel=document.getElementById('forecast-panel');
-    const size=state.map.getSize();
-    const point=state.map.latLngToContainerPoint([state.selected.lat,state.selected.lon]);
-    const visibleBottom=Math.max(100,size.y-panel.getBoundingClientRect().height-14);
-    const targetY=Math.max(76,visibleBottom*.52);
-    const delta=point.y-targetY;
-    if(Math.abs(delta)>12)state.map.panBy([0,delta],{animate,duration:.22});
-  }
-
-  function setMobileStatus(status,label){
-    const element=document.getElementById('mobile-status');
-    const text=document.getElementById('mobile-status-text');
-    if(!element||!text)return;
-    element.className=`mobile-status map-hud ${status||'empty'}`;text.textContent=label||'資料狀態';
-  }
-
-  function updateDataStatusDetail(data,quality,issueText,fetchedText){
-    const detail=document.getElementById('data-status-detail');if(!detail)return;
-    const age=Number.isFinite(quality.sourceAgeMinutes)?`${quality.sourceAgeMinutes} 分鐘`:'不詳';
-    detail.innerHTML=`<strong style="color:#fff">${escapeHtml(quality.label||'資料正常')}</strong><br>預報基準：${escapeHtml(issueText)}<br>本頁取得：${escapeHtml(fetchedText)}<br>資料時差：${escapeHtml(age)}<br>${escapeHtml(quality.note||'')}`;
-  }
-
-  function toggleBasemap(){
-    const useLight=state.activeTiles!=='light';
-    const next=useLight?state.lightTiles:state.darkTiles;
-    const previous=useLight?state.darkTiles:state.lightTiles;
-    if(state.map.hasLayer(previous)) state.map.removeLayer(previous);
-    next.addTo(state.map);
-    next.bringToBack();
-    state.activeTiles=useLight?'light':'dark';
-    localStorage.setItem('hkRainBasemap',state.activeTiles);
-  }
-
-  function toggleFullscreen(){
-    if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-    else document.exitFullscreen?.();
-  }
-
-  function toggleLayer(key,value){
-    if(!(key in state.layers)) return;
-    state.layers[key]=Boolean(value);
-    if(key==='radar'){
-      if(!state.capabilities.radarFrames){
-        state.layers.radar=false;
-        document.getElementById('toggle-radar').checked=false;
-        toast('雷達介面已準備，但目前 Worker 尚未提供雷達幀');
-        return;
-      }
-      if(state.layers.radar) loadRadarFrames(); else clearRadar();
-    } else renderMarker();
-  }
-
-  function toggleAutoLocate(value){
-    state.autoLocate=Boolean(value);
-    localStorage.setItem('hkRainAutoLocate',state.autoLocate?'on':'off');
-    if(state.autoLocate) locate(true);
-  }
-
-  function updateLayerControls(){
-    document.getElementById('toggle-marker').checked=state.layers.marker;
-    document.getElementById('toggle-radius').checked=state.layers.radius;
-    document.getElementById('toggle-radar').checked=state.layers.radar;
-  }
-
-  async function loadCapabilities(){
-    try{
-      const health=await api('/health');
-      const routes=Array.isArray(health.routes)?health.routes:[];
-      state.capabilities={...state.capabilities,...(health.capabilities||{})};
-      state.capabilities.radarFrames=Boolean(state.capabilities.radarFrames||routes.some(route=>String(route).includes('/api/radar/frames')));
-      const toggle=document.getElementById('toggle-radar');
-      toggle.disabled=!state.capabilities.radarFrames;
-      document.getElementById('radar-status-note').textContent=state.capabilities.radarFrames?'Worker 已提供雷達幀，可啟用圖層。':`已預留 ${RADAR_CONTRACT_PATH} 接口；目前 Worker 未啟用雷達。`;
-      setBadge('radar',state.capabilities.radarFrames?'empty':'disabled','RADAR');
-    }catch(error){
-      document.getElementById('radar-status-note').textContent='未能讀取 Worker 能力資訊；定點預報仍可獨立運作。';
-      setBadge('radar','error','RADAR');
-    }
-  }
-
-  async function loadRadarFrames(){
-    if(!state.capabilities.radarFrames) return;
-    setBadge('radar','loading','RADAR');
-    try{
-      const data=await api(`/api/radar/frames?range=${state.radar.range}`);
-      state.radar.frames=Array.isArray(data.frames)?data.frames:[];
-      state.radar.index=Math.max(0,state.radar.frames.length-1);
-      if(!state.radar.frames.length) throw new Error('沒有可用雷達幀');
-      await showRadarFrame();
-      configureRadarTimeline();
-      setBadge('radar','ok','RADAR');
-    }catch(error){
-      clearRadar();
-      setBadge('radar','error','RADAR');
-      toast('雷達載入失敗：'+error.message);
-    }
-  }
-
-  async function showRadarFrame(){
-    const frame=state.radar.frames[state.radar.index];
-    if(!frame?.imageUrl||!frame?.bounds) return;
-    const url=/^https?:/i.test(frame.imageUrl)?frame.imageUrl:state.apiBase+(frame.imageUrl.startsWith('/')?'':'/')+frame.imageUrl;
-    const bounds=[[frame.bounds.south,frame.bounds.west],[frame.bounds.north,frame.bounds.east]];
-    const image=await preloadImage(url);
-    if(!image) return;
-    const next=L.imageOverlay(url,bounds,{opacity:state.radar.opacity,interactive:false}).addTo(state.map);
-    if(state.radarLayer) state.map.removeLayer(state.radarLayer);
-    state.radarLayer=next;
-    document.getElementById('radar-timeline-time').textContent=formatDateTime(frame.time);
-  }
-
-  function configureRadarTimeline(){
-    const panel=document.getElementById('radar-timeline');
-    const slider=document.getElementById('radar-slider');
-    panel.classList.toggle('hidden',!state.radar.frames.length);
-    slider.max=Math.max(0,state.radar.frames.length-1);
-    slider.value=state.radar.index;
-  }
-
-  function setRadarIndex(value){
-    state.radar.index=clamp(Number(value)||0,0,Math.max(0,state.radar.frames.length-1));
-    showRadarFrame();
-  }
-
-  function changeRadarRange(value){
-    state.radar.range=String(value)==='256'?256:64;
-    if(state.layers.radar) loadRadarFrames();
-  }
-
-  function setRadarOpacity(value){
-    state.radar.opacity=clamp(Number(value)/100,0,1);
-    document.getElementById('radar-opacity-value').textContent=Math.round(state.radar.opacity*100)+'%';
-    state.radarLayer?.setOpacity(state.radar.opacity);
-  }
-
-  function clearRadar(){
-    if(state.radarLayer){state.map.removeLayer(state.radarLayer);state.radarLayer=null;}
-    document.getElementById('radar-timeline').classList.add('hidden');
-  }
-
-  function preloadImage(url){return new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(true);image.onerror=()=>resolve(false);image.src=url;});}
-
-
-  function isInstalledPwa(){
-    return window.matchMedia('(display-mode: fullscreen)').matches ||
-      window.matchMedia('(display-mode: standalone)').matches ||
-      window.navigator.standalone === true;
-  }
-
-  function isIosDevice(){
-    return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  }
-
-  function initPwa(){
-    document.documentElement.classList.toggle('pwa-mode',isInstalledPwa());
-    updatePwaStatus();
-
-    window.addEventListener('beforeinstallprompt',event=>{
-      event.preventDefault();
-      deferredInstallPrompt=event;
-      updatePwaStatus();
-    });
-    window.addEventListener('appinstalled',()=>{
-      deferredInstallPrompt=null;
-      document.documentElement.classList.add('pwa-mode');
-      updatePwaStatus('已安裝為 PWA；下次可由主畫面全螢幕啟動。');
-      toast('PWA 已安裝');
-    });
-
-    const displayQueries=['(display-mode: fullscreen)','(display-mode: standalone)'];
-    displayQueries.forEach(query=>{
-      const media=window.matchMedia(query);
-      media.addEventListener?.('change',()=>{
-        document.documentElement.classList.toggle('pwa-mode',isInstalledPwa());
-        updatePwaStatus();
-      });
-    });
-
-    if(!('serviceWorker' in navigator)){
-      updatePwaStatus('此瀏覽器不支援 Service Worker，仍可使用一般網頁模式。');
-      return;
-    }
-    if(location.protocol!=='https:' && location.hostname!=='localhost'){
-      updatePwaStatus('PWA 需要 HTTPS；請部署至 Cloudflare Pages 後使用。');
-      return;
-    }
-
-    navigator.serviceWorker.register('./service-worker.js',{scope:'./'}).then(registration=>{
-      updatePwaStatus();
-      registration.addEventListener('updatefound',()=>{
-        const installing=registration.installing;
-        installing?.addEventListener('statechange',()=>{
-          if(installing.state==='installed' && navigator.serviceWorker.controller){
-            updatePwaStatus('已有新版 PWA，重新開啟後會自動套用。');
-          }
-        });
-      });
-    }).catch(error=>{
-      updatePwaStatus(`離線快取啟動失敗：${error.message}`);
-    });
-  }
-
-  function updatePwaStatus(override=''){
-    const status=document.getElementById('pwa-status');
-    const button=document.getElementById('install-app-button');
-    if(!status||!button)return;
-    if(override){status.textContent=override;return;}
-    if(isInstalledPwa()){
-      button.classList.add('hidden');
-      status.textContent='PWA 模式已啟動；系統支援時會隱藏瀏覽器及狀態列。';
-    }else if(deferredInstallPrompt){
-      button.classList.remove('hidden');
-      status.textContent='可安裝到主畫面，安裝後以全螢幕模式啟動。';
-    }else{
-      button.classList.add('hidden');
-      status.textContent=isIosDevice()
-        ? 'iPhone／iPad：在 Safari 分享選單選擇「加至主畫面」。'
-        : '可從瀏覽器選單選擇「安裝應用程式」或「加到主畫面」。';
-    }
-  }
-
-  async function installPwa(){
-    if(isInstalledPwa()){
-      toast('目前已在 PWA 模式');
-      return;
-    }
-    if(!deferredInstallPrompt){
-      toast(isIosDevice()?'請在 Safari 分享選單選擇「加至主畫面」':'請使用瀏覽器選單安裝應用程式');
-      return;
-    }
-    deferredInstallPrompt.prompt();
-    const choice=await deferredInstallPrompt.userChoice.catch(()=>null);
-    deferredInstallPrompt=null;
-    updatePwaStatus();
-    if(choice?.outcome==='accepted')toast('正在安裝 PWA');
-  }
-
-  function setBadge(key,status,label){
-    const element=document.getElementById(`badge-${key}`);
-    if(!element) return;
-    element.className='source-badge '+status;
-    element.textContent=label;
-  }
-
-  function setLocateState(status,message){
-    setBadge('location',status,'LOC');
-    document.getElementById('location-status').textContent=message;
-    if(status==='loading')setMobileStatus('loading','正在定位');
-    else if((status==='error'||status==='empty')&&!state.forecast)setMobileStatus(status,'定位未完成');
-  }
-
-  function setLoading(on){document.getElementById('loading-line').classList.toggle('hidden',!on);}
-  let toastTimer;
-  function toast(text){const element=document.getElementById('toast');element.textContent=text;element.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>element.classList.remove('show'),3500);}
-
-  function makeNearbySamples(lat,lon,radiusKm){
-    const points=[{lat,lon}],latKm=110.574,lonKm=Math.max(1,111.320*Math.cos(lat*Math.PI/180));
-    for(let bearing=0;bearing<360;bearing+=45){const angle=bearing*Math.PI/180;points.push({lat:lat+(Math.cos(angle)*radiusKm)/latKm,lon:lon+(Math.sin(angle)*radiusKm)/lonKm});}
-    return points;
-  }
-
-  function summarisePeriods(periods){
-    const wet=periods.filter(period=>period.amountMm>=.2);
-    const totalMm=round(periods.reduce((sum,period)=>sum+period.amountMm,0),2);
-    const peak=periods.reduce((best,period)=>period.amountMm>best.amountMm?period:best,periods[0]);
-    const nearbyWet=periods.some(period=>period.nearbyMaxMm>=.2);
-    let text;
-    if(!wet.length)text=nearbyWet?'定點未來兩小時暫未見明顯降雨，但附近地區可能有雨。':'未來兩小時暫未預測有明顯降雨。';
-    else text=`預計約 ${leadLabel(wet[0].leadMinutes)} 開始有雨，最強時段約 ${formatTime(peak.time)}。`;
-    return {text,totalMm,peakMm:round(peak.amountMm,2),peakTime:peak.time,rainStartTime:wet[0]?.time||null,rainStartLeadMinutes:wet[0]?.leadMinutes??null,rainEndTime:wet[wet.length-1]?.time||null,wetPeriodCount:wet.length};
-  }
-
-  function assessDataQuality(sourceAgeMinutes,nearbyDeltaMax,periods){
-    const maxSpread=Math.max(...periods.map(period=>period.spatialSpreadMm));
-    if(sourceAgeMinutes!==null&&sourceAgeMinutes>60)return{status:'expired',label:'資料已過期',note:'官方網格資料基準已超過60分鐘，結果只供參考，請稍後重新整理。',sourceAgeMinutes,nearbyDeltaMaxMm:round(nearbyDeltaMax,2)};
-    if(sourceAgeMinutes!==null&&sourceAgeMinutes>30)return{status:'stale',label:'資料可能過期',note:'官方網格資料基準已超過30分鐘，可能仍在等待上游更新。',sourceAgeMinutes,nearbyDeltaMaxMm:round(nearbyDeltaMax,2)};
-    if(sourceAgeMinutes!==null&&sourceAgeMinutes>18)return{status:'delayed',label:'更新稍有延遲',note:'官方網格資料基準已超過18分鐘，但仍可作短時參考。',sourceAgeMinutes,nearbyDeltaMaxMm:round(nearbyDeltaMax,2)};
-    if(nearbyDeltaMax>=2||maxSpread>=3)return{status:'location-sensitive',label:'位置較敏感',note:'附近網格雨量差異較大，小幅移動位置可能改變結果。',sourceAgeMinutes,nearbyDeltaMaxMm:round(nearbyDeltaMax,2)};
-    return{status:'normal',label:'資料正常',note:'定點與附近網格的預報變化相對平順。',sourceAgeMinutes,nearbyDeltaMaxMm:round(nearbyDeltaMax,2)};
-  }
-
-  function automaticLocationName(lat,lon){
-    let nearest=null;
-    for(const [name,placeLat,placeLon] of PLACE_CENTERS){
-      const distance=haversine(lat,lon,placeLat,placeLon);
-      if(!nearest||distance<nearest.distance)nearest={name,distance};
-    }
-    if(!nearest)return'自選位置';
-    return nearest.distance<1.2?nearest.name:`${nearest.name}附近`;
-  }
-
-  function isSupportedPoint(lat,lon){
-    return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=SUPPORTED_BOUNDS.south&&lat<=SUPPORTED_BOUNDS.north&&lon>=SUPPORTED_BOUNDS.west&&lon<=SUPPORTED_BOUNDS.east;
-  }
-
-  function formatLatLon(lat,lon){return `${Number(lat).toFixed(4)}°N, ${Number(lon).toFixed(4)}°E`;}
-
-  function bracket(values,target){
-    if(!values.length||target<values[0]||target>values[values.length-1])return null;
-    let low=0,high=values.length-1;
-    while(low<=high){const mid=Math.floor((low+high)/2),value=values[mid];if(Math.abs(value-target)<1e-9)return[value,value];if(value<target)low=mid+1;else high=mid-1;}
-    return[values[Math.max(0,high)],values[Math.min(values.length-1,low)]];
-  }
-  function coordKey(lat,lon){return`${Number(lat).toFixed(6)}|${Number(lon).toFixed(6)}`;}
-  function leadLabel(minutes){if(!Number.isFinite(minutes))return'稍後';if(minutes<=30)return'半小時內';if(minutes<=60)return'一小時內';return`${minutes}分鐘內`;}
-  function rainLevel(value){if(value>=10)return'very-heavy';if(value>=2)return'heavy';if(value>=.5)return'moderate';if(value>=.2)return'light';return'dry';}
-  function formatTime(value){if(!value)return'—';const date=new Date(value);return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat('zh-HK',{timeZone:'Asia/Hong_Kong',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);}
-  function formatDateTime(value){if(!value)return'—';const date=new Date(value);return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat('zh-HK',{timeZone:'Asia/Hong_Kong',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).format(date);}
-  function formatRain(value){const number=Number(value);if(!Number.isFinite(number))return'—';return number<10?number.toFixed(1):Math.round(number).toString();}
-  function haversine(a,b,c,d){const R=6371,toRad=value=>value*Math.PI/180,dLat=toRad(c-a),dLon=toRad(d-b),q=Math.sin(dLat/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(q));}
-  function round(value,digits=1){const factor=10**digits;return Math.round((Number(value)+Number.EPSILON)*factor)/factor;}
-  function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
-  function loadJSON(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback;}catch{return fallback;}}
-  function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
-
-  return {init,refresh,locate,centerHongKong,sharePoint,toggleDrawer,toggleForecastPanel,toggleBasemap,toggleFullscreen,toggleLayer,toggleAutoLocate,saveCurrentPoint,changeRadius,saveApiBase,setRadarIndex,changeRadarRange,setRadarOpacity,installPwa};
-})();
-document.addEventListener('DOMContentLoaded',RainApp.init);
-</script>
+  <dialog id="point-name-dialog" class="app-dialog">
+    <form id="point-name-form" method="dialog">
+      <h2>儲存位置</h2>
+      <label for="point-name-input">位置名稱</label>
+      <input id="point-name-input" type="text" maxlength="40" required>
+      <div class="dialog-actions"><button type="button" data-dialog-cancel>取消</button><button type="submit" class="primary">儲存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="share-dialog" class="app-dialog">
+    <form id="share-form" method="dialog">
+      <h2>分享位置</h2>
+      <label class="radio-row"><input type="radio" name="share-precision" value="nearby" checked><span><strong>分享附近地區</strong><small>預設選項，不分享裝置精確座標</small></span></label>
+      <label class="radio-row"><input type="radio" name="share-precision" value="exact"><span><strong>分享精確位置</strong><small>連結會包含目前定點座標</small></span></label>
+      <div class="dialog-actions"><button type="button" data-dialog-cancel>取消</button><button type="submit" class="primary">分享</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="app-dialog">
+    <form id="confirm-form" method="dialog">
+      <h2 id="confirm-title">確認</h2>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions"><button type="button" data-dialog-cancel>取消</button><button id="confirm-accept" type="submit" class="danger">確認</button></div>
+    </form>
+  </dialog>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,44 @@
+import { REQUEST_TIMEOUT_MS } from './config.js';
+import { state } from './state.js';
+
+function linkedAbortController(externalSignal, timeoutMs) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(externalSignal?.reason);
+  if (externalSignal?.aborted) abort();
+  else externalSignal?.addEventListener('abort', abort, { once:true });
+  const timer = setTimeout(() => controller.abort(new DOMException('Request timed out', 'TimeoutError')), timeoutMs);
+  return { controller, cleanup:() => { clearTimeout(timer); externalSignal?.removeEventListener('abort', abort); } };
+}
+
+export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  const { controller, cleanup } = linkedAbortController(signal, timeoutMs);
+  try {
+    const response = await fetch(state.apiBase + path, { cache:'no-store', signal:controller.signal, headers:{ Accept:'application/json' } });
+    let data = null;
+    try { data = await response.json(); } catch {}
+    if (!response.ok) {
+      const error = new Error(data?.error || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.payload = data;
+      throw error;
+    }
+    return data;
+  } catch (error) {
+    if (controller.signal.aborted && !signal?.aborted) {
+      const timeoutError = new Error('連線逾時，請稍後再試');
+      timeoutError.name = 'TimeoutError';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    cleanup();
+  }
+}
+
+export function fetchPointForecast(point, radiusKm, options = {}) {
+  return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
+}
+
+export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
+export function fetchHealth(options = {}) { return api('/health', options); }
+export function fetchRadarFrames(range, options = {}) { return api(`/api/radar/frames?range=${range}`, options); }

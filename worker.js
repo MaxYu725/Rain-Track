@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.2.0
+ * Hong Kong Point Rainfall Forecast Worker v2.3.0
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -10,9 +10,21 @@
  *   GET /api/capabilities
  */
 
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
+const RADAR_CONTRACT = Object.freeze({
+  version: '1.0',
+  enabled: false,
+  endpoint: '/api/radar/frames?range=64|256',
+  rangesKm: [64, 256],
+  response: {
+    contractVersion: '1.0',
+    rangeKm: '64|256',
+    issueTime: 'ISO-8601|null',
+    frames: [{ id: 'string', time: 'ISO-8601', imageUrl: 'string', bounds: { north: 'number', south: 'number', east: 'number', west: 'number' } }]
+  }
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -48,15 +60,18 @@ export default {
             pointForecast: true,
             nowcastGrid: true,
             radarFrames: false,
-            radarContract: '/api/radar/frames?range=64|256'
+            radar: RADAR_CONTRACT
           },
+          radarContract: RADAR_CONTRACT,
           time: new Date().toISOString()
         });
       }
 
       if (url.pathname === '/api/capabilities') return json({
-        ok: true, version: VERSION,
-        capabilities: { pointForecast: true, nowcastGrid: true, radarFrames: false, radarContract: '/api/radar/frames?range=64|256' }
+        ok: true,
+        version: VERSION,
+        capabilities: { pointForecast: true, nowcastGrid: true, radarFrames: false, radar: RADAR_CONTRACT },
+        radarContract: RADAR_CONTRACT
       }, 200, { 'Cache-Control': 'public, max-age=300' });
       if (url.pathname === '/api/rain/point') return await handlePointForecast(url);
       if (url.pathname === '/api/rain/nowcast') return await handleNowcast(false);
@@ -89,7 +104,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.2)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.3)',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -334,6 +349,8 @@ function summarisePeriods(periods) {
   const wet = periods.filter(period => period.amountMm >= wetThreshold);
   const peak = periods.reduce((best, period) => period.amountMm > best.amountMm ? period : best, periods[0]);
   const nearbyWet = periods.some(period => period.nearbyMaxMm >= wetThreshold);
+  const firstWet = wet[0] || null;
+  const lastWet = wet[wet.length - 1] || null;
 
   let text;
   if (!wet.length) {
@@ -341,8 +358,7 @@ function summarisePeriods(periods) {
       ? '定點未來兩小時暫未見明顯降雨，但附近地區可能有雨。'
       : '未來兩小時暫未預測有明顯降雨。';
   } else {
-    const first = wet[0];
-    text = `預計約 ${leadLabel(first.leadMinutes)} 開始有雨，最強時段約 ${formatHkTime(peak.time)}。`;
+    text = `可能於 ${formatHkWindow(firstWet.time)} 期間開始有雨，較強時段約為 ${formatHkWindow(peak.time)}。`;
   }
 
   return {
@@ -350,28 +366,58 @@ function summarisePeriods(periods) {
     totalMm,
     peakMm: round(peak.amountMm, 2),
     peakTime: peak.time,
-    rainStartTime: wet[0]?.time || null,
-    rainStartLeadMinutes: wet[0]?.leadMinutes ?? null,
-    rainEndTime: wet[wet.length - 1]?.time || null,
+    peakWindowStart: subtractMinutesIso(peak.time, 30),
+    peakWindowEnd: peak.time,
+    rainStartTime: firstWet?.time || null,
+    rainStartWindowStart: firstWet ? subtractMinutesIso(firstWet.time, 30) : null,
+    rainStartWindowEnd: firstWet?.time || null,
+    rainStartLeadMinutes: firstWet?.leadMinutes ?? null,
+    rainEndTime: lastWet?.time || null,
+    rainEndWindowStart: lastWet ? subtractMinutesIso(lastWet.time, 30) : null,
+    rainEndWindowEnd: lastWet?.time || null,
     wetPeriodCount: wet.length
   };
 }
 
 function assessDataQuality(sourceAgeMinutes, nearbyDeltaMax, periods) {
   const maxSpread = Math.max(...periods.map(period => period.spatialSpreadMm));
+  let freshness;
   if (sourceAgeMinutes !== null && sourceAgeMinutes > 60) {
-    return { status: 'expired', label: '資料已過期', note: '官方網格資料基準已超過60分鐘，結果只供參考，請稍後重新整理。' };
+    freshness = { status: 'expired', label: '資料已過期', note: '官方網格資料基準已超過60分鐘，結果只供參考，請稍後重新整理。', sourceAgeMinutes };
+  } else if (sourceAgeMinutes !== null && sourceAgeMinutes > 30) {
+    freshness = { status: 'stale', label: '資料可能過期', note: '官方網格資料基準已超過30分鐘，可能仍在等待上游更新。', sourceAgeMinutes };
+  } else if (sourceAgeMinutes !== null && sourceAgeMinutes > 18) {
+    freshness = { status: 'delayed', label: '更新稍有延遲', note: '官方網格資料基準已超過18分鐘，但仍可作短時參考。', sourceAgeMinutes };
+  } else {
+    freshness = { status: 'normal', label: '資料更新正常', note: '官方網格資料更新時間正常。', sourceAgeMinutes };
   }
-  if (sourceAgeMinutes !== null && sourceAgeMinutes > 30) {
-    return { status: 'stale', label: '資料可能過期', note: '官方網格資料基準已超過30分鐘，可能仍在等待上游更新。' };
-  }
-  if (sourceAgeMinutes !== null && sourceAgeMinutes > 18) {
-    return { status: 'delayed', label: '更新稍有延遲', note: '官方網格資料基準已超過18分鐘，但仍可作短時參考。' };
-  }
-  if (nearbyDeltaMax >= 2 || maxSpread >= 3) {
-    return { status: 'location-sensitive', label: '位置較敏感', note: '附近網格雨量差異較大，小幅移動位置可能改變結果。' };
-  }
-  return { status: 'normal', label: '資料正常', note: '定點與附近網格的預報變化相對平順。' };
+
+  const sensitive = nearbyDeltaMax >= 2 || maxSpread >= 3;
+  const spatial = sensitive
+    ? { status: 'sensitive', label: '位置較敏感', note: '附近網格雨量差異較大，小幅移動位置可能改變結果。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) }
+    : { status: 'stable', label: '位置變化穩定', note: '定點與附近網格的預報變化相對平順。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) };
+
+  const legacyStatus = freshness.status !== 'normal' ? freshness.status : (sensitive ? 'location-sensitive' : 'normal');
+  return {
+    status: legacyStatus,
+    label: freshness.status !== 'normal' ? freshness.label : spatial.label,
+    note: freshness.status !== 'normal' ? freshness.note : spatial.note,
+    freshness,
+    spatial
+  };
+}
+
+function subtractMinutesIso(value, minutes) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getTime() - minutes * 60000).toISOString();
+}
+
+function formatHkWindow(endValue) {
+  const end = new Date(endValue);
+  if (Number.isNaN(end.getTime())) return '時間不詳';
+  const start = new Date(end.getTime() - 30 * 60000);
+  return `${formatHkTime(start)}–${formatHkTime(end)}`;
 }
 
 function rainLevel(value) {
