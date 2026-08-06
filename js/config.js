@@ -1,6 +1,6 @@
 export const APP_VERSION = '1.5.0';
 export const REQUIRED_WORKER_VERSION = '2.3.0';
-export const DEFAULT_API_BASE = 'https://radar.maxyu0725.workers.dev';
+export const DEFAULT_API_BASE = 'https://radar.max-yu.workers.dev';
 export const DEFAULT_POINT = Object.freeze({ lat: 22.3023, lon: 114.1746, name: '香港天文台' });
 export const SUPPORTED_BOUNDS = Object.freeze({ south: 20, north: 25, west: 111, east: 117 });
 export const CACHE_MS = 5 * 60 * 1000;
