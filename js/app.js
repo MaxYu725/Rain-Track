@@ -1,4 +1,4 @@
-import { CACHE_MS, DEFAULT_POINT, REFRESH_INTERVAL_MS, REQUIRED_WORKER_VERSION } from './config.js';
+import { APP_VERSION, CACHE_MS, DEFAULT_POINT, REFRESH_INTERVAL_MS, REQUIRED_WORKER_VERSION } from './config.js';
 import { fetchCapabilities, fetchHealth, fetchPointForecast } from './api.js';
 import { state } from './state.js';
 import { automaticLocationName, insideGrid, isMobileLayout, isSupportedPoint, loadJSON, saveJSON, semverAtLeast } from './utils.js';
@@ -9,7 +9,7 @@ import {
   announce, askConfirm, askPointName, askSharePrecision, closestPlaceCenter, hideLocationPrompt, initDialogs,
   initDrawer, initMobileSheet, initPlaceSearch, renderSavedPoints, setBadge, setLoading, setLocationStatus,
   setMobileStatus, setSheetMode, setUpdating, showLocationPrompt, toast, toggleDrawer, toggleForecastPanel,
-  updateLayerControls, updateStorageStatus
+  updateDiagnostics, updateLayerControls, updateStorageStatus
 } from './ui.js';
 import { applyPwaUpdate, initPwa, installPwa } from './pwa.js';
 import { changeRadarRange, setRadarIndex, setRadarOpacity, toggleRadar, updateRadarCapability } from './radar.js';
@@ -37,7 +37,8 @@ async function init() {
   await Promise.allSettled([loadCapabilities(), loadPointForecast({ force:false })]);
   const shortcut = new URLSearchParams(location.search).get('action') === 'locate';
   await maybeAutoLocate({ shortcut });
-  setTimeout(() => document.querySelector('.map-hint')?.classList.add('hint-hidden'), 6500);
+  if (localStorage.getItem('hkRainHintDismissed') === '1') document.querySelector('.map-hint')?.classList.add('hint-hidden');
+  else setTimeout(() => document.querySelector('.map-hint')?.classList.add('hint-hidden'), 6500);
 }
 
 function hydrateControls() {
@@ -47,7 +48,9 @@ function hydrateControls() {
   const radarRange = document.getElementById('radar-range'); if (radarRange) radarRange.value = String(state.radar.range);
   const radarOpacity = document.getElementById('radar-opacity'); if (radarOpacity) radarOpacity.value = String(Math.round(state.radar.opacity * 100));
   const opacityValue = document.getElementById('radar-opacity-value'); if (opacityValue) opacityValue.textContent = `${Math.round(state.radar.opacity * 100)}%`;
+  updateDiagnostics({ appVersion:APP_VERSION });
 }
+
 
 function bindEvents() {
   document.getElementById('locate-button')?.addEventListener('click', () => requestLocation({ automatic:false, refine:true }));
@@ -125,11 +128,13 @@ async function loadCapabilities() {
     const versionText = state.worker.version || '不詳';
     const status = document.getElementById('worker-status');
     if (status) status.textContent = state.worker.compatible ? `Worker v${versionText} · Foundation 相容` : `Worker v${versionText} · 請升級至 v${REQUIRED_WORKER_VERSION}`;
+    updateDiagnostics({ appVersion:APP_VERSION });
     updateRadarCapability(capabilities, data.radarContract || capabilities.radar || null);
     if (!state.worker.compatible) setBadge('point','error','POINT');
   } catch (error) {
     state.worker.compatible = null;
     const status = document.getElementById('worker-status'); if (status) status.textContent = `未能檢查 Worker：${error.message}`;
+    updateDiagnostics({ appVersion:APP_VERSION, workerError:error.message });
     updateRadarCapability({ radarFrames:false }, null);
   }
 }
@@ -207,7 +212,8 @@ function selectPoint(lat, lon, name = '自選位置', options = {}) {
   saveJSON('hkRainLastPoint', state.selected);
   renderPointLayers();
   if (options.moveMap) centerPointForSheet(numericLat, numericLon, Math.max(state.map?.getZoom() || 13, 13));
-  if (isMobileLayout()) setSheetMode('half', { persist:false, offset:false });
+  if (name === '自選位置') { localStorage.setItem('hkRainHintDismissed','1'); document.querySelector('.map-hint')?.classList.add('hint-hidden'); }
+  if (isMobileLayout() && !state.sheet.userMode) setSheetMode('half', { persist:false, offset:false });
   loadPointForecast({ force:false });
   return true;
 }
@@ -290,6 +296,7 @@ function saveApiBase() {
   const value = document.getElementById('api-base-input')?.value.trim().replace(/\/$/, '');
   if (!/^https:\/\//i.test(value)) { toast('請輸入 HTTPS Worker URL'); return; }
   localStorage.setItem('hkRainApiBase', value);
+  updateDiagnostics({ appVersion:APP_VERSION });
   location.reload();
 }
 

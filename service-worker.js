@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.5.0';
+const CACHE_VERSION = 'point-rain-pwa-v1.5.2';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;

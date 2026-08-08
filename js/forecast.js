@@ -1,12 +1,13 @@
 import { state } from './state.js';
-import { announce, setBadge, setMobileStatus } from './ui.js';
-import { escapeHtml, formatDateTime, formatPeriodWindow, formatRain, formatTime, rainLevel } from './utils.js';
+import { announce, setBadge, setMobileStatus, setSheetMode } from './ui.js';
+import { escapeHtml, formatDateTime, formatPeriodWindow, formatRain, formatTime, isMobileLayout, rainLevel } from './utils.js';
 import { keepSelectedVisible, renderPointLayers } from './map.js';
 
 export function renderLoading(point, { retain = false } = {}) {
   if (retain && state.forecast) return;
   const content = document.getElementById('forecast-content');
   if (!content) return;
+  document.getElementById('forecast-panel')?.classList.remove('dry-forecast');
   content.innerHTML = `<div class="location-row"><div><h1 class="location-name"></h1><div class="location-coord">${point.lat.toFixed(4)}°N, ${point.lon.toFixed(4)}°E</div></div></div><div class="sheet-peek-summary"><span>正在計算預報…</span><strong>請稍候</strong></div><div class="empty-state"><div class="spinner" aria-hidden="true"></div><div>正在計算未來兩小時雨量…</div></div>`;
   content.querySelector('.location-name').textContent = point.name;
   setMobileStatus('loading','正在載入預報');
@@ -16,6 +17,7 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   const data = state.forecast;
   if (!data?.periods?.length) { renderError('沒有可用的定點預報'); return; }
   const content = document.getElementById('forecast-content');
+  const panel = document.getElementById('forecast-panel');
   const quality = normalizeQuality(data);
   const periods = data.periods;
   const isDry = periods.every(period => (period.amountMm || 0) < .2 && (period.nearbyMaxMm || 0) < .2);
@@ -27,12 +29,16 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   const pointPeak = Math.max(...periods.map(period => period.amountMm || 0));
   const nearbyMessage = nearbyPeak >= .2 && nearbyPeak > pointPeak + .15
     ? `附近 ${data.nearbyRadiusKm || state.radiusKm} 公里最高預測 ${formatRain(nearbyPeak)} mm／30分鐘，比定點高 ${formatRain(nearbyPeak - pointPeak)} mm；雨區邊界可能接近。`
-    : `附近 ${data.nearbyRadiusKm || state.radiusKm} 公里的預報與定點差異不大。`;
+    : `附近 ${data.nearbyRadiusKm || state.radiusKm} 公里差異小。`;
   const trendMarkup = isDry
     ? `<div class="dry-state"><div class="dry-state-icon">${rainIconSvg('dry')}</div><div><div class="dry-state-title">未來兩小時雨量維持 0 mm</div><div class="dry-state-note">定點及附近 ${data.nearbyRadiusKm || state.radiusKm} 公里預報均未見明顯降雨。</div></div></div>`
     : `<div class="chart">${periods.map(renderChartColumn).join('')}</div>`;
   const cacheMarkup = cacheNotice ? `<div class="cache-notice">${escapeHtml(cacheNotice)}</div>` : '';
-  const spatialClass = quality.spatial.status === 'sensitive' ? 'location-sensitive' : 'normal';
+  const statusPills = buildStatusPills(quality);
+  const summaryText = data.summary?.text || buildSummaryText(periods);
+  const peekText = isDry ? '未來兩小時暫無明顯降雨' : summaryText;
+
+  panel?.classList.toggle('dry-forecast', isDry);
 
   content.innerHTML = `
     <div class="location-row">
@@ -40,15 +46,14 @@ export function renderForecast({ cacheNotice = '' } = {}) {
       <div class="mini-actions"><button id="save-point-button" class="mini-btn" type="button" title="儲存位置" aria-label="儲存位置">＋</button><button id="share-point-button" class="mini-btn" type="button" title="分享位置" aria-label="分享位置">⇧</button></div>
     </div>
     <div id="forecast-updating" class="forecast-updating hidden"><span class="mini-spinner" aria-hidden="true"></span>正在更新資料</div>
-    <div class="sheet-peek-summary"><span>${escapeHtml(data.summary?.text || buildSummaryText(periods))}</span><strong>${formatRain(data.summary?.totalMm)} mm · ${escapeHtml(startText)}</strong></div>
+    <div class="sheet-peek-summary"><span>${escapeHtml(peekText)}</span><strong>${formatRain(data.summary?.totalMm)} mm · ${escapeHtml(startText)}</strong></div>
     ${cacheMarkup}
     <div class="summary-card ${escapeHtml(quality.freshness.status)}">
-      <div class="summary-main">${escapeHtml(data.summary?.text || buildSummaryText(periods))}</div>
+      <div class="summary-main">${escapeHtml(summaryText)}</div>
       <div class="summary-meta">
         <span class="meta-detail">預報基準 ${escapeHtml(issueText)}</span>
         <span class="meta-detail">本頁取得 ${escapeHtml(fetchedText)}</span>
-        <span class="quality-pill ${escapeHtml(quality.freshness.status)}"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>
-        <span class="quality-pill ${escapeHtml(spatialClass)}"><span class="quality-dot"></span>${escapeHtml(quality.spatial.label)}</span>
+        ${statusPills}
       </div>
     </div>
     <div class="mobile-data-alert ${escapeHtml(quality.freshness.status)}">${quality.freshness.status === 'normal' ? '' : `⚠ ${escapeHtml(quality.freshness.label)}${Number.isFinite(quality.freshness.sourceAgeMinutes) ? `（${quality.freshness.sourceAgeMinutes} 分鐘）` : ''}`}</div>
@@ -58,16 +63,16 @@ export function renderForecast({ cacheNotice = '' } = {}) {
       <div class="metric metric-primary"><div class="metric-value">${escapeHtml(startText)}</div><div class="metric-label">可能開始時段</div></div>
       <div class="metric metric-detail"><div class="metric-value">${Number.isFinite(quality.freshness.sourceAgeMinutes) ? `${quality.freshness.sourceAgeMinutes} 分鐘` : '—'}</div><div class="metric-label">資料時差</div></div>
     </div>
-    <div class="section-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">每格為半小時累計雨量</div></div>
-    <div class="period-grid">${periods.map(period => renderPeriodCard(period, !isDry)).join('')}</div>
-    <div class="section-head"><h2 class="section-title">雨量趨勢</h2><div class="section-note">${isDry ? '乾燥模式' : '固定雨量級別'}</div></div>
+    <div class="section-head period-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">相對時間優先；每格為半小時累計雨量</div></div>
+    <div class="period-grid ${isDry ? 'dry-period-grid' : ''}">${periods.map((period, index) => renderPeriodCard(period, index, !isDry, isDry)).join('')}</div>
+    <div class="section-head trend-head"><h2 class="section-title">雨量趨勢</h2><div class="section-note">${isDry ? '乾燥模式' : '固定雨量級別'}</div></div>
     ${trendMarkup}
     <div class="nearby-card"><strong>附近雨勢：</strong>${escapeHtml(nearbyMessage)}<br><span class="quality-note"><strong>${escapeHtml(quality.spatial.label)}：</strong>${escapeHtml(quality.spatial.note)}</span></div>
-    <div class="source-note">資料來源：香港天文台「香港網格點降雨臨近預報」。時段顯示為半小時累計區間；定點值由相鄰四個官方網格作雙線性插值，屬自動預報結果，不是街道級實測。資料更新狀態與位置穩定度分開顯示，並不代表預報保證準確。</div>`;
+    <div class="source-note">資料來源：香港天文台「香港網格點降雨臨近預報」。時段顯示為半小時累計區間；定點值由相鄰四個官方網格作雙線性插值，屬自動預報結果，不是街道級實測。資料更新狀態與附近差異分開顯示，並不代表預報保證準確。</div>`;
 
   document.getElementById('location-name').textContent = state.selected.name;
   renderPointLayers();
-  document.getElementById('mobile-title-sub').textContent = `${state.selected.name} · ${quality.freshness.label}`;
+  document.getElementById('mobile-title-sub').textContent = isDry && quality.freshness.status === 'normal' ? `${state.selected.name} · 暫無明顯降雨` : `${state.selected.name} · ${quality.freshness.label}`;
   document.getElementById('save-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:save-point')));
   document.getElementById('share-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:share-point')));
 
@@ -79,8 +84,32 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   setBadge('point','ok','POINT');
   setBadge('hko', quality.freshness.status === 'expired' || quality.freshness.status === 'stale' ? 'error' : quality.freshness.status === 'delayed' ? 'loading' : 'ok', 'HKO');
   updateDataStatusDetail(data, quality, issueText, fetchedText, cacheNotice);
+  applyAutomaticSheetMode(isDry, quality, periods);
   requestAnimationFrame(() => keepSelectedVisible(false));
-  announce(`${state.selected.name}預報已更新。${data.summary?.text || buildSummaryText(periods)}`);
+  announce(`${state.selected.name}預報已更新。${summaryText}`);
+}
+
+function buildStatusPills(quality) {
+  const chips = [];
+  if (quality.freshness.status !== 'normal') {
+    chips.push(`<span class="quality-pill ${escapeHtml(quality.freshness.status)}"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>`);
+  }
+  if (quality.spatial.status === 'sensitive') {
+    chips.push(`<span class="quality-pill location-sensitive"><span class="quality-dot"></span>${escapeHtml(quality.spatial.label)}</span>`);
+  }
+  if (!chips.length) {
+    chips.push(`<span class="quality-pill normal desktop-status-chip"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>`);
+    chips.push(`<span class="quality-pill normal desktop-status-chip"><span class="quality-dot"></span>${escapeHtml(quality.spatial.label)}</span>`);
+  }
+  return chips.join('');
+}
+
+function applyAutomaticSheetMode(isDry, quality, periods) {
+  if (!isMobileLayout() || state.sheet.userMode) return;
+  const hasRain = periods.some(period => (period.amountMm || 0) >= .2 || (period.nearbyMaxMm || 0) >= .2);
+  const abnormal = quality.freshness.status !== 'normal' || quality.spatial.status === 'sensitive';
+  const mode = isDry && !abnormal && !hasRain ? 'peek' : 'half';
+  setSheetMode(mode, { persist:false, offset:false });
 }
 
 function normalizeQuality(data) {
@@ -93,10 +122,12 @@ function normalizeQuality(data) {
   };
   const spatial = raw.spatial || {
     status: raw.status === 'location-sensitive' ? 'sensitive' : 'stable',
-    label: raw.status === 'location-sensitive' ? '位置較敏感' : '位置變化穩定',
+    label: raw.status === 'location-sensitive' ? '雨區邊界接近' : '附近差異小',
     note: raw.status === 'location-sensitive' ? raw.note : '定點與附近網格的預報變化相對平順。',
     nearbyDeltaMaxMm: raw.nearbyDeltaMaxMm ?? 0
   };
+  if (spatial.status === 'stable' && spatial.label === '位置變化穩定') spatial.label = '附近差異小';
+  if (spatial.status === 'sensitive' && spatial.label === '位置較敏感') spatial.label = '雨區邊界接近';
   return { freshness, spatial };
 }
 
@@ -118,10 +149,14 @@ function buildSummaryText(periods) {
   return `可能於 ${firstWindow} 期間開始有雨，較強時段約為 ${formatPeriodWindow(peak.time)}。`;
 }
 
-function renderPeriodCard(period, showNearby = true) {
+function renderPeriodCard(period, index = 0, showNearby = true, dryMode = false) {
   const wet = period.amountMm >= .2 ? ' wet' : '';
+  const relative = `${index * 30}–${(index + 1) * 30}分鐘`;
   const nearby = showNearby ? `<div class="period-nearby">附近最高 ${formatRain(period.nearbyMaxMm)}</div>` : '';
-  return `<div class="period-card${wet}"><div class="period-time">${escapeHtml(formatPeriodWindow(period.time))}</div><div class="weather-icon">${rainIconSvg(period.level)}</div><div class="period-amount">${formatRain(period.amountMm)} <span class="period-unit">mm</span></div>${nearby}</div>`;
+  const amount = dryMode
+    ? `<div class="period-amount dry-label">無雨</div><div class="period-nearby">${formatRain(period.amountMm)} mm</div>`
+    : `<div class="period-amount">${formatRain(period.amountMm)} <span class="period-unit">mm</span></div>`;
+  return `<div class="period-card${wet}${dryMode ? ' dry-card' : ''}"><div class="period-relative">${escapeHtml(relative)}</div><div class="period-time">${escapeHtml(formatPeriodWindow(period.time))}</div><div class="weather-icon">${rainIconSvg(period.level)}</div>${amount}${nearby}</div>`;
 }
 
 function renderChartColumn(period) {
@@ -153,6 +188,7 @@ function rainIconSvg(level) {
 
 export function renderError(message) {
   const content = document.getElementById('forecast-content');
+  document.getElementById('forecast-panel')?.classList.remove('dry-forecast');
   content.innerHTML = `<div class="location-row"><div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div></div><div class="empty-state"><div class="error-symbol" aria-hidden="true">!</div><strong>未能取得定點預報</strong><div class="error-message">${escapeHtml(message)}</div><button id="retry-forecast-button" class="wide-btn retry-button" type="button">重新載入</button></div>`;
   document.getElementById('location-name').textContent = state.selected.name;
   document.getElementById('retry-forecast-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:refresh')));

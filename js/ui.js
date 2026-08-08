@@ -74,8 +74,8 @@ export function initMobileSheet() {
   window.matchMedia('(max-width:700px)').addEventListener?.('change', apply);
   handle.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); cycleSheetMode(); }
-    if (event.key === 'ArrowUp') { event.preventDefault(); setSheetMode(state.sheet.mode === 'peek' ? 'half' : 'full'); }
-    if (event.key === 'ArrowDown') { event.preventDefault(); setSheetMode(state.sheet.mode === 'full' ? 'half' : 'peek'); }
+    if (event.key === 'ArrowUp') { event.preventDefault(); setSheetMode(state.sheet.mode === 'peek' ? 'half' : 'full', { user:true }); }
+    if (event.key === 'ArrowDown') { event.preventDefault(); setSheetMode(state.sheet.mode === 'full' ? 'half' : 'peek', { user:true }); }
   });
   handle.addEventListener('click', () => { if (!state.sheet.moved) cycleSheetMode(); state.sheet.moved = false; });
   handle.addEventListener('pointerdown', event => {
@@ -98,16 +98,16 @@ export function initMobileSheet() {
     state.sheet.dragging = false; panel.classList.remove('dragging');
     const height = panel.getBoundingClientRect().height; panel.style.height = '';
     const ratio = height / window.innerHeight;
-    setSheetMode(ratio < .24 ? 'peek' : ratio < .72 ? 'half' : 'full');
+    setSheetMode(ratio < .24 ? 'peek' : ratio < .72 ? 'half' : 'full', { user:true });
     try { handle.releasePointerCapture?.(event.pointerId); } catch {}
   };
   handle.addEventListener('pointerup', finish);
   handle.addEventListener('pointercancel', finish);
 }
 
-export function cycleSheetMode() { setSheetMode(state.sheet.mode === 'peek' ? 'half' : state.sheet.mode === 'half' ? 'full' : 'half'); }
+export function cycleSheetMode() { setSheetMode(state.sheet.mode === 'peek' ? 'half' : state.sheet.mode === 'half' ? 'full' : 'half', { user:true }); }
 
-export function setSheetMode(mode, { persist = true, offset = true } = {}) {
+export function setSheetMode(mode, { persist = true, offset = true, user = false } = {}) {
   if (!['peek','half','full'].includes(mode)) mode = 'half';
   state.sheet.mode = mode;
   const panel = document.getElementById('forecast-panel');
@@ -117,14 +117,17 @@ export function setSheetMode(mode, { persist = true, offset = true } = {}) {
   const handle = document.getElementById('sheet-handle');
   handle?.setAttribute('aria-expanded', mode !== 'peek' ? 'true' : 'false');
   handle?.setAttribute('aria-label', `預報面板目前為${mode === 'peek' ? '收起' : mode === 'half' ? '半開' : '全開'}，可拖曳或使用上下方向鍵調整`);
+  if (user) { state.sheet.userMode = true; localStorage.setItem('hkRainSheetUserMode', '1'); }
+  document.body.classList.toggle('sheet-peek-active', mode === 'peek' && isMobileLayout());
+  document.body.classList.toggle('sheet-expanded-active', mode !== 'peek' && isMobileLayout());
   if (persist) localStorage.setItem('hkRainSheetMode', mode);
   requestAnimationFrame(() => { invalidateMap(); if (offset) keepSelectedVisible(true); });
 }
 
 export function toggleForecastPanel(force) {
   if (isMobileLayout()) {
-    if (typeof force === 'boolean') setSheetMode(force ? 'half' : 'peek');
-    else setSheetMode(state.sheet.mode === 'peek' ? 'half' : 'peek');
+    if (typeof force === 'boolean') setSheetMode(force ? 'half' : 'peek', { user:true });
+    else setSheetMode(state.sheet.mode === 'peek' ? 'half' : 'peek', { user:true });
     return;
   }
   const panel = document.getElementById('forecast-panel');
@@ -260,6 +263,18 @@ export function updateLayerControls() {
     if (input) input.checked = Boolean(state.layers[key]);
   }
   const radius = document.getElementById('radius-select'); if (radius) radius.value = String(state.radiusKm);
+}
+
+
+export function updateDiagnostics({ appVersion = '', workerError = '' } = {}) {
+  const box = document.getElementById('diagnostics-status');
+  if (!box) return;
+  let apiHost = state.apiBase;
+  try { apiHost = new URL(state.apiBase).host; } catch {}
+  const workerText = workerError
+    ? `Worker：檢查失敗（${escapeHtml(workerError)}）`
+    : `Worker：${state.worker.version ? `v${escapeHtml(state.worker.version)}` : '未確認'}${state.worker.compatible === false ? ' · 需要升級' : state.worker.compatible ? ' · 正常' : ''}`;
+  box.innerHTML = `<strong>App v${escapeHtml(appVersion || '1.5.2')}</strong><span>API：${escapeHtml(apiHost)}</span><span>${workerText}</span>`;
 }
 
 export function updateStorageStatus() {

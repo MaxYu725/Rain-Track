@@ -1,5 +1,20 @@
-import { DEFAULT_API_BASE, DEFAULT_POINT } from './config.js';
+import { DEFAULT_API_BASE, DEFAULT_POINT, LEGACY_API_BASES } from './config.js';
 import { automaticLocationName, isSupportedPoint, loadJSON } from './utils.js';
+
+
+function normalizeApiBase(value) {
+  return String(value || '').trim().replace(/\/$/, '');
+}
+
+function migrateLegacyApiBase() {
+  const legacy = LEGACY_API_BASES.map(normalizeApiBase);
+  for (const key of ['hkRainApiBase', 'hkRadarApiBase']) {
+    const value = normalizeApiBase(localStorage.getItem(key));
+    if (value && legacy.includes(value)) localStorage.removeItem(key);
+  }
+}
+
+migrateLegacyApiBase();
 
 function loadInitialPoint() {
   const params = new URLSearchParams(location.search);
@@ -30,7 +45,7 @@ const initialPoint = loadInitialPoint();
 if (['自選位置','目前位置','分享位置'].includes(initialPoint.name)) initialPoint.name = automaticLocationName(initialPoint.lat, initialPoint.lon);
 
 export const state = {
-  apiBase: (localStorage.getItem('hkRainApiBase') || localStorage.getItem('hkRadarApiBase') || DEFAULT_API_BASE).replace(/\/$/, ''),
+  apiBase: normalizeApiBase(localStorage.getItem('hkRainApiBase') || localStorage.getItem('hkRadarApiBase') || DEFAULT_API_BASE),
   selected: { lat:initialPoint.lat, lon:initialPoint.lon, name:initialPoint.name },
   initialSource: initialPoint.source,
   saved: loadSavedPoints(),
@@ -47,7 +62,7 @@ export const state = {
   worker: { version:null, compatible:null, capabilities:{ pointForecast:true, nowcastGrid:true, radarFrames:false }, radarContract:null },
   map: null,
   mapLayers: {},
-  sheet: { mode:localStorage.getItem('hkRainSheetMode') || 'half', dragging:false, startY:0, startHeight:0, moved:false },
+  sheet: { mode:localStorage.getItem('hkRainSheetMode') || 'half', dragging:false, startY:0, startHeight:0, moved:false, userMode:localStorage.getItem('hkRainSheetUserMode') === '1' },
   radar: { frames:[], index:0, range:64, opacity:.68, layer:null },
   refreshTimer: null,
   lastSuccessfulRefreshAt: 0,

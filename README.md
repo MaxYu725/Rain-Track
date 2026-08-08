@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.5 Foundation
+# 香港定點雨量預報 v1.5.2
 
 ## 部署內容
 
@@ -19,7 +19,19 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-將 `worker.js` 貼到 Cloudflare Worker 並部署。前端 v1.5 要求 Worker v2.3 或以上，不再使用舊 `/api/rain/nowcast` 前端插值後備。
+將 `worker.js` 貼到 Cloudflare Worker 並部署。前端 v1.5.2 要求 Worker v2.3 或以上，不再使用舊 `/api/rain/nowcast` 前端插值後備。
+
+
+## v1.5.2 UI Compression & Diagnostics
+
+- 自動清除舊 `radar.maxyu0725.workers.dev` 本地設定，改用 `https://radar.max-yu.workers.dev`。
+- 設定頁新增 App／Worker／API 診斷資訊。
+- 手機頂部工具列壓縮，Bottom Sheet 展開時隱藏地圖右上狀態。
+- 無雨、資料正常時自動收起 Bottom Sheet，減少遮擋地圖。
+- 無雨模式減少重複的 `0.0 mm` 顯示。
+- 時段卡改為「0–30分鐘」等相對時間優先，實際時間區間改為輔助文字。
+- `位置變化穩定` 改名為 `附近差異小`，敏感狀態改為 `雨區邊界接近`。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.5.2`。
 
 ## v1.5 Foundation 內容
 

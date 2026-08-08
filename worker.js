@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.3.0
+ * Hong Kong Point Rainfall Forecast Worker v2.3.1
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -10,7 +10,7 @@
  *   GET /api/capabilities
  */
 
-const VERSION = '2.3.0';
+const VERSION = '2.3.1';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
 const RADAR_CONTRACT = Object.freeze({
@@ -394,8 +394,8 @@ function assessDataQuality(sourceAgeMinutes, nearbyDeltaMax, periods) {
 
   const sensitive = nearbyDeltaMax >= 2 || maxSpread >= 3;
   const spatial = sensitive
-    ? { status: 'sensitive', label: '位置較敏感', note: '附近網格雨量差異較大，小幅移動位置可能改變結果。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) }
-    : { status: 'stable', label: '位置變化穩定', note: '定點與附近網格的預報變化相對平順。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) };
+    ? { status: 'sensitive', label: '雨區邊界接近', note: '附近網格雨量差異較大，小幅移動位置可能改變結果。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) }
+    : { status: 'stable', label: '附近差異小', note: '定點與附近網格的預報變化相對平順。', nearbyDeltaMaxMm: round(nearbyDeltaMax, 2), maxSpatialSpreadMm: round(maxSpread, 2) };
 
   const legacyStatus = freshness.status !== 'normal' ? freshness.status : (sensitive ? 'location-sensitive' : 'normal');
   return {
