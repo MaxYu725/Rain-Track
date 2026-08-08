@@ -54,11 +54,11 @@ export function renderPointLayers() {
 
   if (state.layers.radius) {
     L.circle(center, {
-      radius:state.radiusKm * 1000, color:'#1ba1e2', weight:1.5, opacity:.8,
-      dashArray:'7,7', fillColor:'#1ba1e2', fillOpacity:.06, interactive:false
+      radius:state.radiusKm * 1000, color:'#1ba1e2', weight:1.25, opacity:.58,
+      dashArray:'7,8', fillColor:'#1ba1e2', fillOpacity:.035, interactive:false
     }).addTo(radius);
     const northLat = state.selected.lat + state.radiusKm / 110.574;
-    const label = L.divIcon({ className:'', html:`<div class="radius-label">附近 ${state.radiusKm} km</div>`, iconSize:[86,22], iconAnchor:[43,11] });
+    const label = L.divIcon({ className:'', html:`<div class="radius-label" style="opacity:.72">附近 ${state.radiusKm} km</div>`, iconSize:[86,22], iconAnchor:[43,11] });
     L.marker([northLat, state.selected.lon], { icon:label, interactive:false, zIndexOffset:300 }).addTo(radius);
   }
 
@@ -119,8 +119,30 @@ export function toggleBasemap() {
 }
 
 export function centerPointForSheet(lat, lon, zoom = 14) {
-  state.map?.setView([lat, lon], zoom);
-  requestAnimationFrame(() => keepSelectedVisible(false));
+  if (!state.map) return;
+  requestAnimationFrame(() => {
+    const map = state.map;
+    if (!map) return;
+    const L = leaflet();
+    const target = L.latLng(lat, lon);
+    const targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), Number(zoom) || 14));
+    map.stop();
+
+    if (!isMobileLayout()) {
+      map.setView(target, targetZoom, { animate:false });
+      return;
+    }
+
+    const panel = document.getElementById('forecast-panel');
+    const size = map.getSize();
+    const panelHeight = panel?.getBoundingClientRect().height || 0;
+    const visibleBottom = Math.max(100, size.y - panelHeight - 14);
+    const desiredMarkerY = Math.max(76, visibleBottom * .52);
+    const targetPixel = map.project(target, targetZoom);
+    const centerPixel = L.point(targetPixel.x, targetPixel.y + size.y / 2 - desiredMarkerY);
+    const center = map.unproject(centerPixel, targetZoom);
+    map.setView(center, targetZoom, { animate:false });
+  });
 }
 
 export function keepSelectedVisible(animate = true) {
