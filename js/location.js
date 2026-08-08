@@ -3,6 +3,7 @@ import { isSupportedPoint } from './utils.js';
 
 let callbacks = {};
 let permissionStatus = null;
+let activeRequest = null;
 
 export async function initLocation(options = {}) {
   callbacks = options;
@@ -59,6 +60,18 @@ export async function maybeAutoLocate({ shortcut = false } = {}) {
 }
 
 export async function requestLocation({ automatic = false, refine = true } = {}) {
+  if (activeRequest) return activeRequest;
+  activeRequest = performLocation({ automatic, refine });
+  setBusy(true);
+  try {
+    return await activeRequest;
+  } finally {
+    activeRequest = null;
+    setBusy(false);
+  }
+}
+
+async function performLocation({ automatic, refine }) {
   if (!navigator.geolocation) {
     callbacks.onStatus?.('error','瀏覽器不支援定位');
     return false;
@@ -71,26 +84,32 @@ export async function requestLocation({ automatic = false, refine = true } = {})
 
   callbacks.onStatus?.('loading', automatic ? '正在自動定位…' : '正在取得目前位置…');
   try {
-    const coarse = await getPosition({ enableHighAccuracy:false, timeout:7000, maximumAge:300000 });
+    const coarse = await getPosition({
+      enableHighAccuracy:false,
+      timeout:7000,
+      maximumAge:automatic ? 300000 : 30000
+    });
     state.locationPermission = 'granted';
-    if (!acceptPosition(coarse, automatic)) return false;
-    callbacks.onPosition?.(coarse, { automatic, refined:false });
-    callbacks.onStatus?.('ok', buildSuccessText(coarse, automatic, false));
+    if (!isAcceptedPosition(coarse)) return rejectUnsupported(automatic);
 
-    if (refine && coarse.coords.accuracy > 250) {
+    let finalPosition = coarse;
+    let refined = false;
+
+    if (refine && Number.isFinite(coarse.coords.accuracy) && coarse.coords.accuracy > 250) {
       callbacks.onStatus?.('loading', `已取得約 ±${Math.round(coarse.coords.accuracy)} 米位置，正在提高精度…`);
       try {
         const precise = await getPosition({ enableHighAccuracy:true, timeout:10000, maximumAge:0 });
-        if (acceptPosition(precise, automatic) && precise.coords.accuracy + 30 < coarse.coords.accuracy) {
-          callbacks.onPosition?.(precise, { automatic, refined:true });
-          callbacks.onStatus?.('ok', buildSuccessText(precise, automatic, true));
-        } else {
-          callbacks.onStatus?.('ok', buildSuccessText(coarse, automatic, false));
+        if (isAcceptedPosition(precise) && isMeaningfullyBetter(precise, coarse)) {
+          finalPosition = precise;
+          refined = true;
         }
       } catch {
-        callbacks.onStatus?.('ok', buildSuccessText(coarse, automatic, false));
+        // 高精度定位失敗時保留已取得的一般定位；不要再次移動地圖。
       }
     }
+
+    callbacks.onPosition?.(finalPosition, { automatic, refined });
+    callbacks.onStatus?.('ok', buildSuccessText(finalPosition, automatic, refined));
     return true;
   } catch (error) {
     if (error.code === 1) {
@@ -109,14 +128,33 @@ function getPosition(options) {
   return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
 }
 
-function acceptPosition(position, automatic) {
+function isAcceptedPosition(position) {
   const { latitude, longitude } = position.coords;
-  if (!isSupportedPoint(latitude, longitude)) {
-    callbacks.onStatus?.('error','目前位置不在香港預報範圍');
-    callbacks.onError?.(new Error('目前位置不在香港雨量預報支援範圍'), { automatic });
-    return false;
+  return Number.isFinite(latitude) && Number.isFinite(longitude) && isSupportedPoint(latitude, longitude);
+}
+
+function rejectUnsupported(automatic) {
+  callbacks.onStatus?.('error','目前位置不在香港預報範圍');
+  callbacks.onError?.(new Error('目前位置不在香港雨量預報支援範圍'), { automatic });
+  return false;
+}
+
+function isMeaningfullyBetter(next, previous) {
+  const nextAccuracy = Number(next.coords.accuracy);
+  const previousAccuracy = Number(previous.coords.accuracy);
+  if (!Number.isFinite(nextAccuracy)) return false;
+  if (!Number.isFinite(previousAccuracy)) return true;
+  return nextAccuracy + 30 < previousAccuracy;
+}
+
+function setBusy(busy) {
+  callbacks.onBusy?.(busy);
+  for (const id of ['locate-button','badge-location','drawer-locate-button','location-permission-action']) {
+    const button = document.getElementById(id);
+    if (!button) continue;
+    button.disabled = Boolean(busy);
+    button.setAttribute('aria-busy', busy ? 'true' : 'false');
   }
-  return true;
 }
 
 function buildSuccessText(position, automatic, refined) {
