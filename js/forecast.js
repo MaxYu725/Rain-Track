@@ -1,7 +1,7 @@
 import { state } from './state.js';
 import { announce, setBadge, setMobileStatus, setSheetMode } from './ui.js';
 import { escapeHtml, formatDateTime, formatPeriodWindow, formatRain, formatTime, isMobileLayout, rainLevel } from './utils.js';
-import { keepSelectedVisible, renderPointLayers } from './map.js';
+import { renderPointLayers } from './map.js';
 
 export function renderLoading(point, { retain = false } = {}) {
   if (retain && state.forecast) return;
@@ -24,7 +24,9 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   const startWindow = getRainStartWindow(data, periods);
   const startText = startWindow ? `${formatTime(startWindow.start)}–${formatTime(startWindow.end)}` : '暫無';
   const issueText = data.issueTime ? formatDateTime(data.issueTime) : '時間不詳';
-  const fetchedText = data.generatedAt ? formatTime(data.generatedAt) : formatTime(new Date().toISOString());
+  const fetchedAt = state.forecastMeta.fetchedAt ? new Date(state.forecastMeta.fetchedAt).toISOString() : data.generatedAt;
+  const fetchedText = fetchedAt ? formatTime(fetchedAt) : formatTime(new Date().toISOString());
+  const validUntilText = getValidUntilText(periods);
   const nearbyPeak = Math.max(...periods.map(period => period.nearbyMaxMm || 0));
   const pointPeak = Math.max(...periods.map(period => period.amountMm || 0));
   const nearbyMessage = nearbyPeak >= .2 && nearbyPeak > pointPeak + .15
@@ -37,13 +39,18 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   const statusPills = buildStatusPills(quality);
   const summaryText = data.summary?.text || buildSummaryText(periods);
   const peekText = isDry ? '未來兩小時暫無明顯降雨' : summaryText;
+  const now = Date.now();
+  const nextFutureIndex = periods.findIndex(period => periodWindow(period).start > now);
 
   panel?.classList.toggle('dry-forecast', isDry);
 
   content.innerHTML = `
     <div class="location-row">
       <div><h1 id="location-name" class="location-name"></h1><div class="location-coord">${state.selected.lat.toFixed(4)}°N, ${state.selected.lon.toFixed(4)}°E</div></div>
-      <div class="mini-actions"><button id="save-point-button" class="mini-btn" type="button" title="儲存位置" aria-label="儲存位置">＋</button><button id="share-point-button" class="mini-btn" type="button" title="分享位置" aria-label="分享位置">⇧</button></div>
+      <div class="mini-actions">
+        <button id="save-point-button" class="mini-btn" type="button" title="儲存位置" aria-label="儲存位置">${bookmarkSvg()}</button>
+        <button id="share-point-button" class="mini-btn" type="button" title="分享位置" aria-label="分享位置">${shareSvg()}</button>
+      </div>
     </div>
     <div id="forecast-updating" class="forecast-updating hidden"><span class="mini-spinner" aria-hidden="true"></span>正在更新資料</div>
     <div class="sheet-peek-summary"><span>${escapeHtml(peekText)}</span><strong>${formatRain(data.summary?.totalMm)} mm · ${escapeHtml(startText)}</strong></div>
@@ -51,20 +58,21 @@ export function renderForecast({ cacheNotice = '' } = {}) {
     <div class="summary-card ${escapeHtml(quality.freshness.status)}">
       <div class="summary-main">${escapeHtml(summaryText)}</div>
       <div class="summary-meta">
-        <span class="meta-detail">預報基準 ${escapeHtml(issueText)}</span>
+        <span>預報基準 ${escapeHtml(issueText)}</span>
+        <span>有效至 ${escapeHtml(validUntilText)}</span>
         <span class="meta-detail">本頁取得 ${escapeHtml(fetchedText)}</span>
         ${statusPills}
       </div>
     </div>
-    <div class="mobile-data-alert ${escapeHtml(quality.freshness.status)}">${quality.freshness.status === 'normal' ? '' : `⚠ ${escapeHtml(quality.freshness.label)}${Number.isFinite(quality.freshness.sourceAgeMinutes) ? `（${quality.freshness.sourceAgeMinutes} 分鐘）` : ''}`}</div>
+    <div class="mobile-data-alert ${escapeHtml(quality.freshness.status)}">${quality.freshness.status === 'normal' ? '' : `⚠ ${escapeHtml(quality.freshness.label)}${Number.isFinite(quality.freshness.sourceAgeMinutes) ? ` · ${quality.freshness.sourceAgeMinutes} 分鐘` : ''}`}</div>
     <div class="metrics">
       <div class="metric metric-primary"><div class="metric-value">${formatRain(data.summary?.totalMm)} mm</div><div class="metric-label">兩小時總雨量</div></div>
       <div class="metric metric-detail"><div class="metric-value">${formatRain(data.summary?.peakMm)} mm</div><div class="metric-label">最高／30分鐘</div></div>
       <div class="metric metric-primary"><div class="metric-value">${escapeHtml(startText)}</div><div class="metric-label">可能開始時段</div></div>
-      <div class="metric metric-detail"><div class="metric-value">${Number.isFinite(quality.freshness.sourceAgeMinutes) ? `${quality.freshness.sourceAgeMinutes} 分鐘` : '—'}</div><div class="metric-label">資料時差</div></div>
+      <div class="metric metric-detail"><div class="metric-value">${escapeHtml(validUntilText)}</div><div class="metric-label">預報有效至</div></div>
     </div>
-    <div class="section-head period-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">相對時間優先；每格為半小時累計雨量</div></div>
-    <div class="period-grid ${isDry ? 'dry-period-grid' : ''}">${periods.map((period, index) => renderPeriodCard(period, index, !isDry, isDry)).join('')}</div>
+    <div class="section-head period-head"><h2 class="section-title">未來兩小時</h2><div class="section-note">每格為30分鐘累計雨量</div></div>
+    <div class="period-grid ${isDry ? 'dry-period-grid' : ''}">${periods.map((period, index) => renderPeriodCard(period, index, !isDry, isDry, now, nextFutureIndex)).join('')}</div>
     <div class="section-head trend-head"><h2 class="section-title">雨量趨勢</h2><div class="section-note">${isDry ? '乾燥模式' : '固定雨量級別'}</div></div>
     ${trendMarkup}
     <div class="nearby-card"><strong>附近雨勢：</strong>${escapeHtml(nearbyMessage)}<br><span class="quality-note"><strong>${escapeHtml(quality.spatial.label)}：</strong>${escapeHtml(quality.spatial.note)}</span></div>
@@ -72,7 +80,11 @@ export function renderForecast({ cacheNotice = '' } = {}) {
 
   document.getElementById('location-name').textContent = state.selected.name;
   renderPointLayers();
-  document.getElementById('mobile-title-sub').textContent = isDry && quality.freshness.status === 'normal' ? `${state.selected.name} · 暫無明顯降雨` : `${state.selected.name} · ${quality.freshness.label}`;
+  const seriousFreshness = ['stale','expired'].includes(quality.freshness.status);
+  const titleSummary = seriousFreshness
+    ? quality.freshness.label
+    : isDry ? '暫無明顯降雨' : `預報至 ${validUntilText}`;
+  document.getElementById('mobile-title-sub').textContent = `${state.selected.name} · ${titleSummary}`;
   document.getElementById('save-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:save-point')));
   document.getElementById('share-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:share-point')));
 
@@ -83,19 +95,18 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   setMobileStatus(mobileState, mobileLabel);
   setBadge('point','ok','POINT');
   setBadge('hko', quality.freshness.status === 'expired' || quality.freshness.status === 'stale' ? 'error' : quality.freshness.status === 'delayed' ? 'loading' : 'ok', 'HKO');
-  updateDataStatusDetail(data, quality, issueText, fetchedText, cacheNotice);
+  updateDataStatusDetail(data, quality, issueText, fetchedText, validUntilText, cacheNotice);
   applyAutomaticSheetMode(isDry, quality, periods);
-  requestAnimationFrame(() => keepSelectedVisible(false));
   announce(`${state.selected.name}預報已更新。${summaryText}`);
 }
 
 function buildStatusPills(quality) {
   const chips = [];
   if (quality.freshness.status !== 'normal') {
-    chips.push(`<span class="quality-pill ${escapeHtml(quality.freshness.status)}"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>`);
+    chips.push(`<span class="quality-pill ${escapeHtml(quality.freshness.status)} desktop-status-chip"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>`);
   }
   if (quality.spatial.status === 'sensitive') {
-    chips.push(`<span class="quality-pill location-sensitive"><span class="quality-dot"></span>${escapeHtml(quality.spatial.label)}</span>`);
+    chips.push(`<span class="quality-pill location-sensitive desktop-status-chip"><span class="quality-dot"></span>${escapeHtml(quality.spatial.label)}</span>`);
   }
   if (!chips.length) {
     chips.push(`<span class="quality-pill normal desktop-status-chip"><span class="quality-dot"></span>${escapeHtml(quality.freshness.label)}</span>`);
@@ -107,8 +118,9 @@ function buildStatusPills(quality) {
 function applyAutomaticSheetMode(isDry, quality, periods) {
   if (!isMobileLayout() || state.sheet.userMode) return;
   const hasRain = periods.some(period => (period.amountMm || 0) >= .2 || (period.nearbyMaxMm || 0) >= .2);
-  const abnormal = quality.freshness.status !== 'normal' || quality.spatial.status === 'sensitive';
-  const mode = isDry && !abnormal && !hasRain ? 'peek' : 'half';
+  const seriousFreshness = quality.freshness.status === 'stale' || quality.freshness.status === 'expired';
+  const spatialWarning = quality.spatial.status === 'sensitive';
+  const mode = isDry && !hasRain && !seriousFreshness && !spatialWarning ? 'peek' : 'half';
   setSheetMode(mode, { persist:false, offset:false });
 }
 
@@ -139,6 +151,11 @@ function getRainStartWindow(data, periods) {
   return { start:new Date(end.getTime() - 30 * 60 * 1000).toISOString(), end:end.toISOString() };
 }
 
+function getValidUntilText(periods) {
+  const last = periods.at(-1);
+  return last?.time ? formatTime(last.time) : '—';
+}
+
 function buildSummaryText(periods) {
   const wet = periods.filter(period => period.amountMm >= .2);
   if (!wet.length) return periods.some(period => period.nearbyMaxMm >= .2)
@@ -149,14 +166,28 @@ function buildSummaryText(periods) {
   return `可能於 ${firstWindow} 期間開始有雨，較強時段約為 ${formatPeriodWindow(peak.time)}。`;
 }
 
-function renderPeriodCard(period, index = 0, showNearby = true, dryMode = false) {
+function periodWindow(period) {
+  const end = new Date(period.time).getTime();
+  return { start:end - 30 * 60 * 1000, end };
+}
+
+function periodPhase(period, index, now, nextFutureIndex) {
+  const window = periodWindow(period);
+  if (now >= window.start && now < window.end) return '進行中';
+  if (now >= window.end) return '已過';
+  if (index === nextFutureIndex) return '下一時段';
+  return '其後';
+}
+
+function renderPeriodCard(period, index = 0, showNearby = true, dryMode = false, now = Date.now(), nextFutureIndex = -1) {
   const wet = period.amountMm >= .2 ? ' wet' : '';
-  const relative = `${index * 30}–${(index + 1) * 30}分鐘`;
+  const phase = periodPhase(period, index, now, nextFutureIndex);
   const nearby = showNearby ? `<div class="period-nearby">附近最高 ${formatRain(period.nearbyMaxMm)}</div>` : '';
+  const icon = dryMode ? '' : `<div class="weather-icon">${rainIconSvg(period.level)}</div>`;
   const amount = dryMode
-    ? `<div class="period-amount dry-label">無雨</div><div class="period-nearby">${formatRain(period.amountMm)} mm</div>`
+    ? `<div class="period-amount dry-label">無雨</div>`
     : `<div class="period-amount">${formatRain(period.amountMm)} <span class="period-unit">mm</span></div>`;
-  return `<div class="period-card${wet}${dryMode ? ' dry-card' : ''}"><div class="period-relative">${escapeHtml(relative)}</div><div class="period-time">${escapeHtml(formatPeriodWindow(period.time))}</div><div class="weather-icon">${rainIconSvg(period.level)}</div>${amount}${nearby}</div>`;
+  return `<div class="period-card${wet}${dryMode ? ' dry-card' : ''}"><div class="period-relative">${escapeHtml(formatPeriodWindow(period.time))}</div><div class="period-time">${escapeHtml(phase)}</div>${icon}${amount}${nearby}</div>`;
 }
 
 function renderChartColumn(period) {
@@ -186,6 +217,14 @@ function rainIconSvg(level) {
   return `<svg viewBox="0 0 60 50" aria-hidden="true">${shapes}</svg>`;
 }
 
+function bookmarkSvg() {
+  return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6.5 3.5h11v17l-5.5-3.7-5.5 3.7z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>`;
+}
+
+function shareSvg() {
+  return `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 15V4m0 0L8 8m4-4 4 4M6 11v8h12v-8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 export function renderError(message) {
   const content = document.getElementById('forecast-content');
   document.getElementById('forecast-panel')?.classList.remove('dry-forecast');
@@ -198,9 +237,9 @@ export function renderError(message) {
   announce(`未能取得${state.selected.name}預報：${message}`);
 }
 
-function updateDataStatusDetail(data, quality, issueText, fetchedText, cacheNotice) {
+function updateDataStatusDetail(data, quality, issueText, fetchedText, validUntilText, cacheNotice) {
   const detail = document.getElementById('data-status-detail');
   if (!detail) return;
   const age = Number.isFinite(quality.freshness.sourceAgeMinutes) ? `${quality.freshness.sourceAgeMinutes} 分鐘` : '不詳';
-  detail.innerHTML = `<div class="status-detail-block"><strong>${escapeHtml(quality.freshness.label)}</strong><span>預報基準：${escapeHtml(issueText)}</span><span>本頁取得：${escapeHtml(fetchedText)}</span><span>資料時差：${escapeHtml(age)}</span><small>${escapeHtml(quality.freshness.note)}</small></div><div class="status-detail-block"><strong>${escapeHtml(quality.spatial.label)}</strong><small>${escapeHtml(quality.spatial.note)}</small></div>${cacheNotice ? `<div class="status-detail-block warning"><strong>快取資料</strong><small>${escapeHtml(cacheNotice)}</small></div>` : ''}`;
+  detail.innerHTML = `<div class="status-detail-block"><strong>${escapeHtml(quality.freshness.label)}</strong><span>預報基準：${escapeHtml(issueText)}</span><span>預報有效至：${escapeHtml(validUntilText)}</span><span>本頁取得：${escapeHtml(fetchedText)}</span><span>資料時差：${escapeHtml(age)}</span><small>${escapeHtml(quality.freshness.note)}</small></div><div class="status-detail-block"><strong>${escapeHtml(quality.spatial.label)}</strong><small>${escapeHtml(quality.spatial.note)}</small></div>${cacheNotice ? `<div class="status-detail-block warning"><strong>快取資料</strong><small>${escapeHtml(cacheNotice)}</small></div>` : ''}`;
 }
