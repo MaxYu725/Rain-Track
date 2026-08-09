@@ -1,0 +1,157 @@
+name: Patch Worker v2.4.1
+
+on:
+  push:
+    branches:
+      - fix/worker-v2.4.1-radar-stale3
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'Worker v2.4.1') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/worker-v2.4.1-radar-stale3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Patch worker.js
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('worker.js')
+          text = path.read_text()
+
+          text = text.replace('Hong Kong Point Rainfall Forecast Worker v2.4.0', 'Hong Kong Point Rainfall Forecast Worker v2.4.1', 1)
+          text = text.replace("const VERSION = '2.4.0';", "const VERSION = '2.4.1';", 1)
+          text = text.replace("Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4)", "Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.1)", 1)
+          text = text.replace(
+              "const RADAR_MAX_FRAMES = 30;",
+              "const RADAR_MAX_FRAMES = 30;\nconst RADAR_LIVE_MAX_AGE_MINUTES = 30;\nconst RADAR_LIVE_MAX_FUTURE_MINUTES = 10;",
+              1
+          )
+          text = text.replace(
+              "policy: 'KML-only; reject stale or unverifiable images',",
+              "policy: `KML-only; live frames must be within ${RADAR_LIVE_MAX_AGE_MINUTES} minutes of current time`,",
+              1
+          )
+          text = text.replace(
+              "error: frames.length ? null : 'No fresh, verifiable HKO radar frames were found',",
+              "error: frames.length ? null : 'HKO live radar source is stale or unavailable',",
+              1
+          )
+
+          old = '''function validateRadarFrames(frames, diagnostics) {
+            const referenceMs = Date.parse(diagnostics.referenceTime || '') || Date.now();
+            const maxPastMs = 36 * 60 * 60 * 1000;
+            const maxFutureMs = 60 * 60 * 1000;
+            const accepted = [];
+
+            for (const frame of frames) {
+              if (frame.source !== 'kml') {
+                diagnostics.rejected.push({ href: frame.href, reason: 'non-kml-source' });
+                continue;
+              }
+              const explicitMs = Date.parse(frame.time || '');
+              if (Number.isFinite(explicitMs)) {
+                if (explicitMs < referenceMs - maxPastMs || explicitMs > referenceMs + maxFutureMs) {
+                  diagnostics.rejected.push({ href: frame.href, rawTime: frame.time, reason: 'stale-or-future-explicit-time' });
+                  continue;
+                }
+              }
+              accepted.push(frame);
+            }
+
+            diagnostics.validation = {
+              inputCount: frames.length,
+              acceptedCount: accepted.length,
+              rejectedCount: diagnostics.rejected.length,
+              referenceTime: new Date(referenceMs).toISOString(),
+              freshnessWindowHours: 36
+            };
+            return accepted;
+          }'''
+
+          new = '''function validateRadarFrames(frames, diagnostics) {
+            const nowMs = Date.now();
+            const sourceReferenceMs = Date.parse(diagnostics.referenceTime || '');
+            const maxPastMs = RADAR_LIVE_MAX_AGE_MINUTES * 60 * 1000;
+            const maxFutureMs = RADAR_LIVE_MAX_FUTURE_MINUTES * 60 * 1000;
+            const sourceReferenceFresh = Number.isFinite(sourceReferenceMs)
+              && sourceReferenceMs >= nowMs - maxPastMs
+              && sourceReferenceMs <= nowMs + maxFutureMs;
+            const accepted = [];
+
+            for (const frame of frames) {
+              if (frame.source !== 'kml') {
+                diagnostics.rejected.push({ href: frame.href, reason: 'non-kml-source' });
+                continue;
+              }
+
+              const explicitMs = Date.parse(frame.time || '');
+              if (Number.isFinite(explicitMs)) {
+                if (explicitMs < nowMs - maxPastMs || explicitMs > nowMs + maxFutureMs) {
+                  diagnostics.rejected.push({
+                    href: frame.href,
+                    rawTime: frame.time,
+                    ageMinutes: Math.round((nowMs - explicitMs) / 60000),
+                    reason: 'stale-or-future-live-frame'
+                  });
+                  continue;
+                }
+              } else if (!sourceReferenceFresh) {
+                diagnostics.rejected.push({
+                  href: frame.href,
+                  rawTime: frame.time || null,
+                  reason: 'missing-frame-time-with-stale-source-document'
+                });
+                continue;
+              }
+
+              accepted.push(frame);
+            }
+
+            diagnostics.sourceFreshness = {
+              sourceReferenceTime: Number.isFinite(sourceReferenceMs) ? new Date(sourceReferenceMs).toISOString() : null,
+              sourceReferenceAgeMinutes: Number.isFinite(sourceReferenceMs)
+                ? Math.round((nowMs - sourceReferenceMs) / 60000)
+                : null,
+              sourceReferenceFresh,
+              liveMaxAgeMinutes: RADAR_LIVE_MAX_AGE_MINUTES,
+              liveMaxFutureMinutes: RADAR_LIVE_MAX_FUTURE_MINUTES
+            };
+            diagnostics.validation = {
+              inputCount: frames.length,
+              acceptedCount: accepted.length,
+              rejectedCount: diagnostics.rejected.length,
+              referenceTime: new Date(nowMs).toISOString(),
+              sourceReferenceTime: Number.isFinite(sourceReferenceMs) ? new Date(sourceReferenceMs).toISOString() : null,
+              freshnessWindowMinutes: RADAR_LIVE_MAX_AGE_MINUTES
+            };
+            return accepted;
+          }'''
+
+          if old not in text:
+              raise SystemExit('validateRadarFrames block not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+      - name: Validate syntax and stale guard
+        run: |
+          node --check worker.js
+          grep -q "const VERSION = '2.4.1';" worker.js
+          grep -q "RADAR_LIVE_MAX_AGE_MINUTES = 30" worker.js
+          grep -q "stale-or-future-live-frame" worker.js
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add worker.js
+          git commit -m "fix: Worker v2.4.1 reject stale live radar frames"
+          git push origin HEAD:fix/worker-v2.4.1-radar-stale3
