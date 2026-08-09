@@ -1,12 +1,15 @@
 import { fetchRadarFrames } from './api.js';
 import { APP_VERSION, RADAR_CONTRACT_VERSION } from './config.js';
 import { state } from './state.js';
+import { updateForecastMobileStatus } from './forecast.js';
 import { clamp, formatDateTime, isMobileLayout } from './utils.js';
-import { setBadge, setSheetMode, toast } from './ui.js';
+import { setBadge, setMobileStatus, setSheetMode, toast } from './ui.js';
 
 const DEFAULT_PLAYBACK_DELAY = 750;
 const RADAR_REFRESH_MS = 5.5 * 60 * 1000;
 const RECENT_PRELOAD_COUNT = 12;
+const RADAR_FRESH_NORMAL_MINUTES = 15;
+const RADAR_FRESH_MAX_MINUTES = 30;
 
 let displayToken = 0;
 let preloadToken = 0;
@@ -82,6 +85,7 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
     configureTimeline(data);
     preloadRecentFrames(data.frames);
     setBadge('radar','ok','RADAR');
+    updateRadarMobileStatus();
     scheduleRadarRefresh();
   } catch (error) {
     if (quiet && state.radar.layer && previousFrames.length) {
@@ -90,6 +94,7 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
       configureTimeline(null);
       updateTimelineLabels();
       setBadge('radar','ok','RADAR');
+      updateRadarMobileStatus({ refreshFailed:true });
       scheduleRadarRefresh();
     } else {
       removeRadarLayer();
@@ -182,7 +187,10 @@ function configureTimeline(data) {
   if (counter) counter.textContent = hasFrames ? `${state.radar.index + 1}/${state.radar.frames.length}` : '0/0';
   const latest = document.getElementById('radar-latest-button');
   if (latest) latest.disabled = !hasFrames || state.radar.index === state.radar.frames.length - 1;
+  const legend = document.getElementById('radar-legend');
+  if (legend) legend.classList.toggle('hidden', !hasFrames || !state.layers.radar || radarMode === 'test');
   if (data?.cadenceMinutes) panel?.setAttribute('data-cadence', String(data.cadenceMinutes));
+  updateRadarAgeLabel();
   updatePlayButton();
 }
 
@@ -195,6 +203,7 @@ function updateTimelineLabels(frame = state.radar.frames[state.radar.index]) {
   if (counter) counter.textContent = state.radar.frames.length ? `${state.radar.index + 1}/${state.radar.frames.length}` : '0/0';
   const latest = document.getElementById('radar-latest-button');
   if (latest) latest.disabled = !state.radar.frames.length || state.radar.index === state.radar.frames.length - 1;
+  updateRadarAgeLabel();
 }
 
 export function setRadarIndex(value) {
@@ -232,6 +241,7 @@ export function clearRadar({ restoreSheet = false } = {}) {
   removeRadarLayer();
   document.getElementById('radar-timeline')?.classList.add('hidden');
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
+  updateForecastMobileStatus();
 
   if (restoreSheet && isMobileLayout() && previousSheetMode) {
     const restore = previousSheetMode;
@@ -308,6 +318,51 @@ function updatePlayButton(forcePlaying = Boolean(playTimer)) {
   button.textContent = forcePlaying ? '❚❚' : '▶';
   button.setAttribute('aria-label', forcePlaying ? '暫停雷達動畫' : '播放雷達動畫');
   button.title = forcePlaying ? '暫停' : '播放';
+}
+
+function latestRadarAgeMinutes() {
+  const latest = state.radar.frames.at(-1);
+  const time = latest?.time ? Date.parse(latest.time) : NaN;
+  if (!Number.isFinite(time)) return null;
+  return Math.max(0, Math.round((Date.now() - time) / 60000));
+}
+
+function updateRadarAgeLabel() {
+  const label = document.getElementById('radar-age-label');
+  if (!label) return;
+  if (radarMode === 'test') { label.textContent = 'TEST'; return; }
+  const age = latestRadarAgeMinutes();
+  label.textContent = Number.isFinite(age) ? `最新 ${age === 0 ? '剛剛' : `${age} 分鐘前`}` : '最新時間不詳';
+}
+
+function updateRadarMobileStatus({ refreshFailed = false } = {}) {
+  if (!state.layers.radar) return;
+  if (radarMode === 'test') {
+    setMobileStatus('ok', '雷達 TEST 模式');
+    setBadge('radar','ok','RADAR');
+    return;
+  }
+  const age = latestRadarAgeMinutes();
+  if (!Number.isFinite(age)) {
+    setMobileStatus('loading', '雷達時間不詳');
+    setBadge('radar','loading','RADAR');
+    return;
+  }
+  if (refreshFailed) {
+    setMobileStatus('loading', `雷達暫未更新 · ${age}分鐘前`);
+    setBadge('radar','loading','RADAR');
+    return;
+  }
+  if (age <= RADAR_FRESH_NORMAL_MINUTES) {
+    setMobileStatus('ok', age === 0 ? '雷達剛更新' : `雷達 ${age}分鐘前`);
+    setBadge('radar','ok','RADAR');
+  } else if (age <= RADAR_FRESH_MAX_MINUTES) {
+    setMobileStatus('loading', `雷達更新稍有延遲 · ${age}分鐘`);
+    setBadge('radar','loading','RADAR');
+  } else {
+    setMobileStatus('error', `雷達資料過舊 · ${age}分鐘`);
+    setBadge('radar','error','RADAR');
+  }
 }
 
 function setRadarMode(value) {
@@ -411,10 +466,22 @@ function ensureRadarUi() {
       counter.id = 'radar-frame-counter';
       counter.className = 'radar-frame-counter';
       counter.textContent = '0/0';
+      const age = document.createElement('span');
+      age.id = 'radar-age-label';
+      age.className = 'radar-age-label';
+      age.textContent = '最新 —';
+      head.append(age);
       head.append(counter);
     }
 
     const control = timeline.querySelector('.timeline-control');
+    if (control && !document.getElementById('radar-legend')) {
+      const legend = document.createElement('div');
+      legend.id = 'radar-legend';
+      legend.className = 'radar-legend hidden';
+      legend.innerHTML = '<span class="radar-legend-title">雷達回波</span><span>較弱</span><span class="radar-legend-scale" aria-hidden="true"></span><span>較強</span>';
+      control.before(legend);
+    }
     const slider = document.getElementById('radar-slider');
     if (control && slider && !document.getElementById('radar-play-button')) {
       const play = document.createElement('button');
@@ -466,8 +533,8 @@ function ensureRadarStyles() {
   const style = document.createElement('style');
   style.id = 'radar-runtime-style';
   style.textContent = `
-    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-frame-counter{margin-left:auto;color:#818181;font-size:.68rem}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.rain-radar-overlay{image-rendering:auto}
-    @media(max-width:700px){.radar-timeline{bottom:calc(96px + var(--safe-bottom))}.radar-timeline-btn{height:34px}.radar-head-left{gap:5px}.radar-mode-chip{font-size:.62rem}.timeline-head{align-items:center}.timeline-control{gap:6px}}
+    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-age-label{margin-left:auto;color:#9a9a9a;font-size:.66rem;white-space:nowrap}.radar-frame-counter{color:#818181;font-size:.68rem}.radar-legend{display:flex;align-items:center;gap:6px;margin:7px 0 4px;color:#909090;font-size:.62rem}.radar-legend.hidden{display:none}.radar-legend-title{color:#bdbdbd;margin-right:2px}.radar-legend-scale{width:86px;height:5px;border-radius:2px;background:linear-gradient(90deg,#00b9df 0%,#00c96b 35%,#d6d600 60%,#f28b20 78%,#d73545 100%)}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.rain-radar-overlay{image-rendering:auto}
+    @media(max-width:700px){.radar-timeline{bottom:calc(96px + var(--safe-bottom))}.radar-timeline-btn{height:34px}.radar-head-left{gap:5px}.radar-mode-chip{font-size:.62rem}.radar-age-label{font-size:.6rem}.radar-legend{gap:5px;margin-top:6px}.radar-legend-scale{width:68px}.timeline-head{align-items:center}.timeline-control{gap:6px}}
   `;
   document.head.append(style);
 }
