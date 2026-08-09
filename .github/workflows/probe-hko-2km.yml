@@ -27,7 +27,7 @@ jobs:
           echo '--- page link ---'
           grep -Eio '.{0,120}radar_064_kml/Radar_064k\.kml.{0,120}' /tmp/page.html | head -5 || true
           echo '--- radar frame href ---'
-          href=$(grep -Eio '<href>[0-9]{14}_[^<]*_rad_064k\.png' /tmp/server.kml | sed 's#<href>##I' | head -1)
+          href=$(grep -Eio '<href>[0-9]{14}_rad_064k\.png' /tmp/server.kml | sed 's#<href>##I' | head -1)
           echo "$href"
           image="https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/$href"
           curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar2.png
@@ -48,8 +48,8 @@ jobs:
           t=open('/tmp/server.kml').read()
           blocks=re.findall(r'<GroundOverlay\b[^>]*>[\s\S]*?</GroundOverlay>',t,re.I)
           for b in blocks:
-              h=re.search(r'<href>\s*([^<]*_rad_064k\.png)\s*</href>',b,re.I)
-              if h and not h.group(1).lower().startswith('label_'):
+              h=re.search(r'<href>\s*([0-9]{14}_rad_064k\.png)\s*</href>',b,re.I)
+              if h:
                   print(h.group(1))
                   for tag in ['name','north','south','east','west']:
                       m=re.search(fr'<{tag}>\s*([^<]+)',b,re.I)
@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           KML='https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064.kml'
           curl -A 'Mozilla/5.0' -fsSL "$KML" -o /tmp/radar3.kml
-          href=$(grep -Eio '<href>[0-9]{14}_[^<]*_rad_064\.png' /tmp/radar3.kml | sed 's#<href>##I' | head -1)
+          href=$(grep -Eio '<href>[0-9]{14}_rad_064\.png' /tmp/radar3.kml | sed 's#<href>##I' | head -1)
           image="https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/$href"
           curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar3.png
           file /tmp/radar3.png
