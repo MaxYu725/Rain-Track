@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   patch:
-    if: ${{ !contains(github.event.head_commit.message, 'Worker v2.4.1') }}
+    if: ${{ !contains(github.event.head_commit.message, 'reject stale live radar frames') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
