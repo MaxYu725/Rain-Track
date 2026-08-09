@@ -1,4 +1,4 @@
-export const APP_VERSION = '1.6.1';
+export const APP_VERSION = '1.6.2';
 export const REQUIRED_WORKER_VERSION = '2.3.0';
 export const DEFAULT_API_BASE = 'https://radar.max-yu.workers.dev';
 export const LEGACY_API_BASES = Object.freeze(['https://radar.maxyu0725.workers.dev']);

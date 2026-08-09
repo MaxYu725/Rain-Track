@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.6.1
+# 香港定點雨量預報 v1.6.2
 
 ## 部署內容
 
@@ -20,7 +20,15 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.2 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## v1.6.2 Radar Rendering Fix
+
+- HKO Live 雷達成品 JPEG 先在瀏覽器裁走右側資訊欄，只使用左側正方形雷達地圖。
+- Live 雷達期間暫停 CARTO 底圖，避免兩套道路／海岸線重疊；關閉雷達或切到 TEST 模式即恢復。
+- 定點標記、附近半徑、Bottom Sheet 與時間軸維持在雷達 surface 上方。
+- Canvas 裁圖以 Blob URL 快取並在關閉時釋放；Worker 維持 v2.4.2。
+- Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
 
 ## Worker v2.4.2 Current HKO Live Radar Source
 

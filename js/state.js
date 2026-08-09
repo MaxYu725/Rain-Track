@@ -74,7 +74,7 @@ export const state = {
   map: null,
   mapLayers: {},
   sheet: { mode:localStorage.getItem('hkRainSheetMode') || 'half', dragging:false, startY:0, startHeight:0, moved:false, userMode:localStorage.getItem('hkRainSheetUserMode') === '1' },
-  radar: { frames:[], index:0, range:loadRadarRange(), opacity:loadRadarOpacity(), layer:null },
+  radar: { frames:[], index:0, range:loadRadarRange(), opacity:loadRadarOpacity(), layer:null, surfaceActive:false, renderedUrl:null },
   refreshTimer: null,
   lastSuccessfulRefreshAt: 0,
   drawerTrigger: null,
