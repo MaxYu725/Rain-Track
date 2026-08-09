@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.6.2 Radar Rendering Fix
+
+### Live 雷達影像
+- 修正 HKO 現行雷達成品 JPEG 右側資訊欄／色板被整張當作 Leaflet Overlay，令 577×400 影像被壓縮到 geographic bounds 的問題。
+- Live 影像在前端以 Canvas 自動裁出左側正方形地圖本體；現行 HKO 577×400 圖會轉為 400×400 blob overlay。
+- 裁圖結果加入有限數量快取，切幀及重播可重用；關閉雷達時釋放 blob URL。
+
+### 地圖層級
+- 新增 Leaflet `radarPane`，z-index 350；雷達位於 CARTO tiles 之上、定點／附近半徑向量之下。
+- Live 模式使用 HKO 雷達地圖本體時暫時移除 CARTO tiles，避免兩套地圖疊加造成泛藍、道路及海岸線雙影。
+- Live 模式期間停用底圖切換；關閉雷達、改用 TEST 或 Live 載入失敗後恢復原本明暗底圖。
+- TEST 模式維持透明合成雷達 Overlay，不改既有測試流程。
+
+### 驗證／PWA
+- App 更新至 v1.6.2，Service Worker cache 更新至 `point-rain-pwa-v1.6.2`。
+- Playwright 390×844 手機測試驗證 64／256 km Live 幀均由 577×400 裁成 400×400、CARTO tiles 在 Live 模式移除、radarPane 為350、TEST 模式可恢復 tiles。
+
 ## Worker v2.4.2 Current HKO Live Source
 
 ### Live 雷達來源
@@ -14,7 +31,6 @@
 - 未來時間最多容許10分鐘偏差。
 - 舊 KML 端點只保留在 probe 診斷資訊，標記為 `deprecated-not-queried`，不再作 Live fallback。
 - Radar Contract 維持 v1.0；前端 v1.6.0 無需修改。
-
 
 ## v1.6.1 Live Radar Integration Fix
 
