@@ -20,26 +20,28 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.2 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.2 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.3 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
 
-## v1.6.2 Radar Rendering Fix
+## v1.6.2 HKO GIS Radar Overlay
 
-- HKO Live 雷達成品 JPEG 先在瀏覽器裁走右側資訊欄，只使用左側正方形雷達地圖。
-- Live 雷達期間暫停 CARTO 底圖，避免兩套道路／海岸線重疊；關閉雷達或切到 TEST 模式即恢復。
-- 定點標記、附近半徑、Bottom Sheet 與時間軸維持在雷達 surface 上方。
-- Canvas 裁圖以 Blob URL 快取並在關閉時釋放；Worker 維持 v2.4.2。
-- Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
+- 實機截圖確認 HKO 完整雷達 JPEG 不適合直接作 Leaflet Overlay：成品圖包含底圖、時間及右側色板，會造成地圖重疊、泛藍及比例失真。
+- Worker v2.4.3 改用香港天文台 Regional Weather Information Portal 使用的現行 `R4_GIS` KML／PNG 雷達圖層。
+- 64 公里來源為 `R4_GIS_rad_064/R4_GIS_server_Radar_064.kml`，PNG 為 800×800；256 公里來源為 `R4_GIS_rad_256/R4_GIS_server_Radar_256.kml`，PNG 為 1900×1900。
+- 兩種 GIS PNG 均帶透明度資料，可直接疊在 CARTO／OpenStreetMap 底圖上，只顯示雷達回波，不再顯示 HKO 成品圖底圖、Logo、時間及色板。
+- 每個 GroundOverlay 使用 HKO KML 提供的 LatLonBox，64／256 公里分別使用其官方地理邊界。
+- R4 KML 的畫面名稱／檔名使用香港本地時間；Worker 優先從檔名解析 HKT，避免把 KML `<when>` 尾端 `Z` 誤當真正 UTC。
+- 保留最多20幀、約每6分鐘更新；Live 最新幀仍須通過30分鐘 freshness 驗證。
+- 前端加入專用 Leaflet `radarPane`（z-index 350），雷達位於底圖之上、定點及附近半徑向量之下；底圖切換仍可正常使用。
+- Radar Contract 維持 v1.0；TEST 模式、播放／暫停、時間軸、透明度及64／256公里切換保持相容。
+- App 版本更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
 
-## Worker v2.4.2 Current HKO Live Radar Source
+## Worker v2.4.3 Current HKO GIS Radar Source
 
-- Live 雷達主來源改用香港天文台現行雷達網頁使用的 `wxinfo/radars/temp_json/nradar_img.json` 影像索引，不再以停留在 2019 年的舊 KML 作即時來源。
-- 64 公里使用索引 `range2`（3 公里高度）；256 公里使用 `range0`，兩者目前均提供20幀、約每6分鐘一幀。
-- 影像檔名時間按香港時間解析，例如 `2d064nradar_YYYYMMDDHHmm.jpg`。
-- 最新幀必須在30分鐘內才視為 Live；最新幀新鮮時可保留最多150分鐘歷史幀作動畫，不會像 v2.4.1 一樣把整段兩小時歷史逐幀誤判為過期。
-- 雷達影像仍經 `/api/radar/image` 代理，並限制為香港天文台官方 radar image 路徑。
-- 舊 KML 僅保留為診斷資訊，不會被查詢或用作 Live fallback。
-- Radar Contract 維持 v1.0，因此 v1.6.0 前端毋須修改。
-
+- Live 主來源改為 HKO 現行 `R4_GIS` KML；不再把 `temp_json/nradar_img.json` 的完整成品 JPEG 當作地理 Overlay。
+- `/api/radar/frames` 繼續輸出同一 Radar Contract v1.0，新增 `renderMode: transparent-georeferenced-overlay` 說明。
+- `/api/radar/image` 繼續作官方 HKO 雷達 PNG 安全代理。
+- 64 公里及256公里各提供20個 GroundOverlay；圖片本身含透明 palette (`tRNS`)。
+- Worker v2.4.3 需要手動重新部署到 `https://radar.max-yu.workers.dev`；GitHub Pages 部署不會自動更新 Cloudflare Worker。
 
 ## v1.6.1 Live Radar Integration Fix
 
@@ -53,7 +55,7 @@ Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目�
 
 ## v1.6.0 Rain Radar Phase A + B
 
-- 新增 HKO 雷達幀讀取，支援 64 公里及 256 公里範圍；目前 Live 來源由 Worker v2.4.2 的現行 HKO JSON 影像索引提供。
+- 新增 HKO 雷達幀讀取，支援 64 公里及 256 公里範圍；目前 Live 來源由 Worker v2.4.3 的現行 HKO R4 GIS KML／透明 PNG 提供。
 - Worker 新增 `/api/radar/frames`、`/api/radar/image` 及 `/probe/radar`。
 - 雷達影像以 Leaflet image overlay 疊加在現有定點雨量地圖，不另開頁面。
 - 時間軸加入播放／暫停、拖曳選幀、最新幀及幀數顯示。
@@ -111,6 +113,6 @@ GET /probe/radar?range=64&mode=live
 
 ## 第三方地圖程式
 
-Leaflet 1.9.4 以固定版本及完整性雜湊載入；Service Worker會在首次成功載入後快取該資源。線上底圖仍由 OpenStreetMap／CARTO 提供。
+Leaflet 1.9.4 以固定版本及完整性雜湊載入；Service Worker會在首次成功載入後快取該資源。線上底圖仍由 OpenStreetMap／CARTO 提供；Live HKO 雷達開啟期間會暫時隱藏 CARTO，以避免兩套地圖重疊。
 
 `_headers` 提供 Cloudflare Pages 的基本安全標頭及定位權限政策。
