@@ -20,11 +20,21 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用雨量雷達，必須將 Repository 的 `worker.js` v2.4.0 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## Worker v2.4.2 Current HKO Live Radar Source
+
+- Live 雷達主來源改用香港天文台現行雷達網頁使用的 `wxinfo/radars/temp_json/nradar_img.json` 影像索引，不再以停留在 2019 年的舊 KML 作即時來源。
+- 64 公里使用索引 `range2`（3 公里高度）；256 公里使用 `range0`，兩者目前均提供20幀、約每6分鐘一幀。
+- 影像檔名時間按香港時間解析，例如 `2d064nradar_YYYYMMDDHHmm.jpg`。
+- 最新幀必須在30分鐘內才視為 Live；最新幀新鮮時可保留最多150分鐘歷史幀作動畫，不會像 v2.4.1 一樣把整段兩小時歷史逐幀誤判為過期。
+- 雷達影像仍經 `/api/radar/image` 代理，並限制為香港天文台官方 radar image 路徑。
+- 舊 KML 僅保留為診斷資訊，不會被查詢或用作 Live fallback。
+- Radar Contract 維持 v1.0，因此 v1.6.0 前端毋須修改。
 
 ## v1.6.0 Rain Radar Phase A + B
 
-- 新增 HKO 雷達 KML 幀讀取，支援 64 公里及 256 公里範圍。
+- 新增 HKO 雷達幀讀取，支援 64 公里及 256 公里範圍；目前 Live 來源由 Worker v2.4.2 的現行 HKO JSON 影像索引提供。
 - Worker 新增 `/api/radar/frames`、`/api/radar/image` 及 `/probe/radar`。
 - 雷達影像以 Leaflet image overlay 疊加在現有定點雨量地圖，不另開頁面。
 - 時間軸加入播放／暫停、拖曳選幀、最新幀及幀數顯示。
