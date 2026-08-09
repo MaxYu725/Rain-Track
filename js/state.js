@@ -39,7 +39,9 @@ function loadRadarRange() {
 }
 
 function loadRadarOpacity() {
-  const value = Number(localStorage.getItem('hkRainRadarOpacity'));
+  const stored = localStorage.getItem('hkRainRadarOpacity');
+  if (stored === null || stored === '') return .68;
+  const value = Number(stored);
   return Number.isFinite(value) && value >= 0 && value <= 1 ? value : .68;
 }
 
