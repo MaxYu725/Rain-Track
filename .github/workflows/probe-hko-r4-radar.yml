@@ -40,6 +40,20 @@ jobs:
             curl -fsSL "$image" -o "/tmp/${range}.png"
             echo "IMAGE=$image"
             file "/tmp/${range}.png"
-            identify "/tmp/${range}.png"
-            identify -format 'WIDTH=%w HEIGHT=%h CHANNELS=%[channels] TYPE=%[type]\n' "/tmp/${range}.png"
+            python3 - "/tmp/${range}.png" <<'PY'
+          import struct, sys
+          data=open(sys.argv[1],'rb').read()
+          assert data[:8]==b'\x89PNG\r\n\x1a\n'
+          pos=8; chunks=[]; width=height=color_type=bit_depth=None
+          while pos+12 <= len(data):
+              n=struct.unpack('>I',data[pos:pos+4])[0]
+              typ=data[pos+4:pos+8]
+              payload=data[pos+8:pos+8+n]
+              chunks.append(typ.decode('ascii'))
+              if typ==b'IHDR':
+                  width,height,bit_depth,color_type,_,_,_=struct.unpack('>IIBBBBB',payload)
+              pos += 12+n
+              if typ==b'IEND': break
+          print('PNG', {'width':width,'height':height,'bitDepth':bit_depth,'colorType':color_type,'hasTRNS':'tRNS' in chunks,'chunks':chunks})
+          PY
           done
