@@ -1,0 +1,106 @@
+name: Validate v1.6.2 GIS radar visual
+
+on:
+  push:
+    branches:
+      - feature/v1.6.2-radar-rendering-fix
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-visual:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check worker.js
+          node --check js/radar.js
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Start static server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/rain-track-http.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0; sleep 1; done
+          exit 1
+      - name: Capture current GIS radar overlays
+        run: |
+          cp worker.js /tmp/rain-track-worker.mjs
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const assert = require('node:assert/strict');
+          globalThis.caches = { default: { async match(){ return undefined; }, async put(){} } };
+          (async () => {
+            const worker = (await import('file:///tmp/rain-track-worker.mjs?'+Date.now())).default;
+            const browser = await chromium.launch({headless:true});
+            const context = await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:2,locale:'zh-HK',timezoneId:'Asia/Hong_Kong'});
+            const page = await context.newPage();
+            const pageErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            await page.route('https://radar.max-yu.workers.dev/**', async route => {
+              const u=new URL(route.request().url());
+              if (u.pathname==='/api/capabilities' || u.pathname.startsWith('/api/radar/')) {
+                const response=await worker.fetch(new Request(route.request().url()));
+                await route.fulfill({status:response.status,headers:Object.fromEntries(response.headers.entries()),body:Buffer.from(await response.arrayBuffer())});
+              } else await route.continue();
+            });
+            await page.addInitScript(()=>{
+              localStorage.setItem('hkRainAutoLocate','off');
+              localStorage.setItem('hkRainRadarMode','live');
+              localStorage.removeItem('hkRainRadarOpacity');
+              localStorage.removeItem('hkRainRadarRange');
+              localStorage.removeItem('hkRainApiBase');
+              localStorage.removeItem('hkRadarApiBase');
+            });
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded',timeout:30000});
+            await page.waitForFunction(()=>document.getElementById('toggle-radar')?.disabled===false,{timeout:30000});
+            await page.click('#drawer-button');
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
+            await page.check('#toggle-radar');
+            await page.waitForFunction(()=>document.getElementById('radar-frame-counter')?.textContent==='20/20',{timeout:30000});
+            await page.waitForSelector('img.live-radar-overlay',{state:'visible',timeout:30000});
+            await page.waitForFunction(()=>document.querySelectorAll('.leaflet-tile-pane img').length>0,{timeout:10000});
+            let info=await page.locator('img.live-radar-overlay').evaluate(img=>({src:img.currentSrc||img.src,opacity:Number(getComputedStyle(img).opacity),paneZ:getComputedStyle(img.parentElement).zIndex}));
+            console.log('64',info);
+            assert.ok(info.src.includes('/api/radar/image'));
+            assert.ok(info.opacity>.6&&info.opacity<.75);
+            assert.equal(info.paneZ,'350');
+            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(),false);
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
+            await page.screenshot({path:'v162-gis-64.png',fullPage:true});
+
+            await page.click('#drawer-button');
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
+            await page.selectOption('#radar-range','256');
+            await page.waitForFunction(()=>document.getElementById('radar-mode-chip')?.textContent?.includes('256'),{timeout:30000});
+            await page.waitForFunction(()=>document.getElementById('radar-frame-counter')?.textContent==='20/20',{timeout:30000});
+            await page.waitForSelector('img.live-radar-overlay',{state:'visible',timeout:30000});
+            info=await page.locator('img.live-radar-overlay').evaluate(img=>({src:img.currentSrc||img.src,opacity:Number(getComputedStyle(img).opacity),paneZ:getComputedStyle(img.parentElement).zIndex}));
+            console.log('256',info);
+            assert.ok(info.src.includes('/api/radar/image'));
+            assert.equal(info.paneZ,'350');
+            assert.ok(await page.locator('.leaflet-tile-pane img').count()>0);
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
+            await page.screenshot({path:'v162-gis-256.png',fullPage:true});
+            assert.deepEqual(pageErrors,[]);
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: v162-gis-visual
+          path: |
+            v162-gis-64.png
+            v162-gis-256.png
+          if-no-files-found: ignore
+          retention-days: 3
