@@ -14,52 +14,61 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect official 2 km radar page
+      - name: Verify official 2 km GIS KML and latest PNG
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           PAGE='https://www.hko.gov.hk/en/wxinfo/radars/radar_range1_2km.htm'
-          curl -A 'Mozilla/5.0' -fsSL "$PAGE" -o /tmp/page.html
-          echo '--- KML / 2km references in page ---'
-          grep -Eio '.{0,180}(kml|2km|R4_GIS).{0,240}' /tmp/page.html | head -100 || true
-
-      - name: Inspect 2 km root and server KML
-        shell: bash
-        run: |
-          set -uo pipefail
           ROOT='https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064k.kml'
           SERVER='https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/server_Radar_064k.kml'
-          curl -A 'Mozilla/5.0' -fsSL -D /tmp/root.headers "$ROOT" -o /tmp/root.kml
-          curl -A 'Mozilla/5.0' -fsSL -D /tmp/server.headers "$SERVER" -o /tmp/server.kml
-          echo "root bytes $(wc -c < /tmp/root.kml), server bytes $(wc -c < /tmp/server.kml)"
-          echo '--- server headers ---'
-          grep -Ei 'content-type|last-modified|date:' /tmp/server.headers || true
-          echo '--- server href/time/bounds ---'
-          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/server.kml | head -160 || true
-          echo '--- server descriptions / names ---'
-          grep -Eio '<(name|description)>[^<]+' /tmp/server.kml | head -80 || true
-
-      - name: Compare with current HKO image index
-        shell: bash
-        run: |
-          set -uo pipefail
-          JSON='https://www.hko.gov.hk/wxinfo/radars/temp_json/nradar_img.json'
-          curl -A 'Mozilla/5.0' -fsSL "$JSON" -o /tmp/index.json
+          curl -A 'Mozilla/5.0' -fsSL "$PAGE" -o /tmp/page.html
+          curl -A 'Mozilla/5.0' -fsSL "$ROOT" -o /tmp/root.kml
+          curl -A 'Mozilla/5.0' -fsSL "$SERVER" -o /tmp/server.kml
+          echo '--- page link ---'
+          grep -Eio '.{0,120}radar_064_kml/Radar_064k\.kml.{0,120}' /tmp/page.html | head -5 || true
+          echo '--- latest server frame ---'
+          href=$(grep -Eio '<href>[^<]*_rad_064k\.png' /tmp/server.kml | sed 's#<href>##I' | head -1)
+          echo "$href"
+          image="https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/$href"
+          curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar2.png
+          file /tmp/radar2.png
           python - <<'PY'
-          import json
-          data=json.load(open('/tmp/index.json'))
-          print('top keys', list(data)[:20])
-          for k,v in data.items() if isinstance(data,dict) else []:
-              s=str(v)
-              if '2km' in s.lower() or '064' in s:
-                  print(k, s[:3000])
+          import struct
+          p='/tmp/radar2.png'
+          b=open(p,'rb').read()
+          assert b[:8]==b'\x89PNG\r\n\x1a\n'
+          length=struct.unpack('>I',b[8:12])[0]
+          assert b[12:16]==b'IHDR'
+          w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',b[16:29])
+          chunks=[]; i=8
+          while i+12 <= len(b):
+              n=struct.unpack('>I',b[i:i+4])[0]
+              typ=b[i+4:i+8].decode('latin1')
+              chunks.append(typ)
+              i += 12+n
+              if typ=='IEND': break
+          print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks,'chunks':chunks[:20]})
           PY
+          echo '--- latest frame time and bounds ---'
+          grep -Eio '<(name|href|north|south|east|west)>[^<]+' /tmp/server.kml | head -24 || true
 
-      - name: Compare current 3 km GIS KML
+      - name: Compare 3 km GIS PNG
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           KML='https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064.kml'
           curl -A 'Mozilla/5.0' -fsSL "$KML" -o /tmp/radar3.kml
-          echo "3km bytes $(wc -c < /tmp/radar3.kml)"
-          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/radar3.kml | head -60 || true
+          href=$(grep -Eio '<href>[^<]*_rad_064\.png' /tmp/radar3.kml | sed 's#<href>##I' | head -1)
+          image="https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/$href"
+          curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar3.png
+          file /tmp/radar3.png
+          python - <<'PY'
+          import struct
+          for p in ['/tmp/radar3.png']:
+              b=open(p,'rb').read(); w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',b[16:29])
+              chunks=[]; i=8
+              while i+12<=len(b):
+                  n=struct.unpack('>I',b[i:i+4])[0]; typ=b[i+4:i+8].decode('latin1'); chunks.append(typ); i+=12+n
+                  if typ=='IEND': break
+              print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks})
+          PY
