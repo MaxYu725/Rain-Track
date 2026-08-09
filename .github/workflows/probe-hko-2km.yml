@@ -1,0 +1,48 @@
+name: Probe HKO 2 km radar GIS source
+
+on:
+  push:
+    branches:
+      - feature/v1.6.4-radar-height
+    paths:
+      - '.github/workflows/probe-hko-2km.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect official 2 km radar page
+        shell: bash
+        run: |
+          set -uo pipefail
+          PAGE='https://www.hko.gov.hk/en/wxinfo/radars/radar_range1_2km.htm'
+          curl -A 'Mozilla/5.0' -fsSL "$PAGE" -o /tmp/page.html
+          echo '--- KML / 2km references in page ---'
+          grep -Eio '.{0,180}(kml|2km|R4_GIS).{0,240}' /tmp/page.html | head -100 || true
+          echo '--- script sources ---'
+          grep -Eio '<script[^>]+src=["'"'][^"'"']+["'"']' /tmp/page.html | head -100 || true
+
+      - name: Probe likely GIS KML URLs
+        shell: bash
+        run: |
+          set -uo pipefail
+          urls=(
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_2km_064/R4_GIS_server_Radar_2km_064.kml'
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_2km_064/R4_GIS_server_Radar_064.kml'
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064_2km/R4_GIS_server_Radar_064_2km.kml'
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064_2km/R4_GIS_server_Radar_064.kml'
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064_2km/R4_GIS_server_Radar_2km_064.kml'
+            'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064_2km.kml'
+          )
+          for u in "${urls[@]}"; do
+            code=$(curl -A 'Mozilla/5.0' -L -sS -o /tmp/candidate -w '%{http_code}' "$u" || true)
+            bytes=$(wc -c < /tmp/candidate 2>/dev/null || echo 0)
+            type=$(file -b --mime-type /tmp/candidate 2>/dev/null || true)
+            echo "$code $bytes $type $u"
+            if [ "$code" = '200' ]; then
+              head -c 500 /tmp/candidate | tr '\n' ' '; echo
+            fi
+          done
