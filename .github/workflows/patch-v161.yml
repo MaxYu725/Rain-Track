@@ -1,0 +1,132 @@
+name: Patch v1.6.1 Live Radar integration
+
+on:
+  push:
+    branches: [feature/live-radar-frontend-validation]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, 'apply v1.6.1 live radar fixes') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/live-radar-frontend-validation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply v1.6.1 patches
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          # Version / PWA cache
+          p = Path('js/config.js')
+          s = p.read_text()
+          s = s.replace("export const APP_VERSION = '1.6.0';", "export const APP_VERSION = '1.6.1';", 1)
+          p.write_text(s)
+
+          p = Path('index.html')
+          s = p.read_text()
+          s = s.replace('香港定點雨量預報 v1.6.0', '香港定點雨量預報 v1.6.1')
+          p.write_text(s)
+
+          p = Path('service-worker.js')
+          s = p.read_text()
+          s = s.replace("const CACHE_VERSION = 'point-rain-pwa-v1.6.0';", "const CACHE_VERSION = 'point-rain-pwa-v1.6.1';", 1)
+          p.write_text(s)
+
+          # Persist radar range / opacity across launches.
+          p = Path('js/state.js')
+          s = p.read_text()
+          marker = "function loadSavedPoints() {\n"
+          helpers = """function loadRadarRange() {\n  return localStorage.getItem('hkRainRadarRange') === '256' ? 256 : 64;\n}\n\nfunction loadRadarOpacity() {\n  const value = Number(localStorage.getItem('hkRainRadarOpacity'));\n  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : .68;\n}\n\n"""
+          if 'function loadRadarRange()' not in s:
+              if marker not in s: raise SystemExit('state helper insertion marker missing')
+              s = s.replace(marker, helpers + marker, 1)
+          old = "radar: { frames:[], index:0, range:64, opacity:.68, layer:null },"
+          new = "radar: { frames:[], index:0, range:loadRadarRange(), opacity:loadRadarOpacity(), layer:null },"
+          if old in s: s = s.replace(old, new, 1)
+          elif new not in s: raise SystemExit('state radar initializer missing')
+          p.write_text(s)
+
+          # Live Radar UX fixes.
+          p = Path('js/radar.js')
+          s = p.read_text()
+          old_note = "? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。預設使用 HKO 即時 KML，亦可切換測試動畫。`"
+          new_note = "? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。預設使用 HKO 現行即時雷達影像索引，亦可切換測試動畫。`"
+          if old_note in s: s = s.replace(old_note, new_note, 1)
+          elif new_note not in s: raise SystemExit('radar status note marker missing')
+
+          old_failure = """    } else {\n      removeRadarLayer();\n      state.radar.frames = [];\n      state.radar.index = 0;\n      configureTimeline(null);\n      restoreSheetAfterRadarFailure();\n      setBadge('radar','error','RADAR');\n      if (!quiet) toast(`雷達載入失敗：${error.message}`);\n    }"""
+          new_failure = """    } else {\n      removeRadarLayer();\n      state.radar.frames = [];\n      state.radar.index = 0;\n      state.layers.radar = false;\n      const toggle = document.getElementById('toggle-radar');\n      if (toggle) toggle.checked = false;\n      configureTimeline(null);\n      restoreSheetAfterRadarFailure();\n      setBadge('radar','error','RADAR');\n      if (!quiet) toast(`雷達載入失敗：${error.message}`);\n    }"""
+          if old_failure in s: s = s.replace(old_failure, new_failure, 1)
+          elif new_failure not in s: raise SystemExit('radar failure block missing')
+
+          old_range = """export function changeRadarRange(value) {\n  state.radar.range = String(value) === '256' ? 256 : 64;\n  const modeChip"""
+          new_range = """export function changeRadarRange(value) {\n  state.radar.range = String(value) === '256' ? 256 : 64;\n  localStorage.setItem('hkRainRadarRange', String(state.radar.range));\n  const modeChip"""
+          if old_range in s: s = s.replace(old_range, new_range, 1)
+          elif new_range not in s: raise SystemExit('radar range block missing')
+
+          old_opacity = """export function setRadarOpacity(value) {\n  state.radar.opacity = clamp(Number(value) / 100, 0, 1);\n  const label"""
+          new_opacity = """export function setRadarOpacity(value) {\n  state.radar.opacity = clamp(Number(value) / 100, 0, 1);\n  localStorage.setItem('hkRainRadarOpacity', String(state.radar.opacity));\n  const label"""
+          if old_opacity in s: s = s.replace(old_opacity, new_opacity, 1)
+          elif new_opacity not in s: raise SystemExit('radar opacity block missing')
+
+          old_restore = """function restoreSheetAfterRadarFailure() {\n  if (!isMobileLayout() || !previousSheetMode) return;\n  if (state.sheet.mode === 'peek') setSheetMode(previousSheetMode, { persist:false, offset:false });\n}"""
+          new_restore = """function restoreSheetAfterRadarFailure() {\n  if (!previousSheetMode) return;\n  const restore = previousSheetMode;\n  previousSheetMode = null;\n  if (isMobileLayout() && state.sheet.mode === 'peek') setSheetMode(restore, { persist:false, offset:false });\n}"""
+          if old_restore in s: s = s.replace(old_restore, new_restore, 1)
+          elif new_restore not in s: raise SystemExit('radar sheet restore block missing')
+          p.write_text(s)
+
+          # Keep drawer close control available while scrolling long mobile settings.
+          p = Path('css/app.css')
+          s = p.read_text()
+          sticky = """\n/* v1.6.1: keep settings heading / close control reachable while the drawer scrolls. */\n.settings-drawer .drawer-heading{position:sticky;top:-20px;z-index:12;margin:-20px -20px 0;padding:20px 20px 12px;border-bottom:1px solid var(--border);background:var(--panel-solid)}\n"""
+          if 'v1.6.1: keep settings heading' not in s:
+              s = s.rstrip() + sticky
+          p.write_text(s)
+
+          # Documentation
+          p = Path('README.md')
+          s = p.read_text()
+          s = s.replace('# 香港定點雨量預報 v1.6.0', '# 香港定點雨量預報 v1.6.1', 1)
+          s = s.replace('前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用雨量雷達，必須將 Repository 的 `worker.js` v2.4.0 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。', '前端 v1.6.1 的定點預報仍兼容 Worker v2.3 或以上；Live 雨量雷達使用 Worker v2.4.2 或以上，服務位於 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。')
+          insert = """\n## v1.6.1 Live Radar Integration Fix\n\n- 實機／Chromium 手機 smoke test 已驗證 HKO Live 64 km、256 km 雷達影像均可經 Worker proxy 載入。\n- 驗證播放／暫停、時間軸、64／256 km 切換、透明度控制及關閉圖層流程。\n- 雷達設定說明由舊 KML 文案改為 HKO 現行即時雷達影像索引。\n- 雷達首次載入失敗時會自動關閉雷達狀態及開關，並恢復原本 Bottom Sheet。\n- 記住 64／256 km 範圍及雷達透明度。\n- 設定抽屜標題／關閉按鈕改為 sticky，長頁面捲動後仍可操作。\n- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.1`。\n\n"""
+          if '## v1.6.1 Live Radar Integration Fix' not in s:
+              anchor = '## v1.6.0 Rain Radar Phase A + B\n'
+              if anchor not in s: raise SystemExit('README version anchor missing')
+              s = s.replace(anchor, insert + anchor, 1)
+          p.write_text(s)
+
+          p = Path('CHANGELOG.md')
+          s = p.read_text()
+          entry = """\n## v1.6.1 Live Radar Integration Fix\n\n### Live 雷達驗證\n- 以 390×844 手機 viewport 對正式 Worker v2.4.2 執行 Live Radar smoke test。\n- 64 km／256 km 均成功取得20幀，實際 JPEG Overlay 可載入；播放、時間軸、範圍切換及透明度控制通過。\n\n### UI／穩定性\n- 更新雷達來源文案，移除已淘汰的 KML 描述。\n- 首次 Live Radar 載入失敗時自動取消雷達開關，避免 UI 顯示已啟用但地圖沒有圖層。\n- 雷達範圍及透明度加入本機保存。\n- 設定抽屜標題及關閉按鈕固定在捲動頂部，改善手機長設定頁操作。\n- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.1`。\n\n"""
+          if '## v1.6.1 Live Radar Integration Fix' not in s:
+              anchor = '## v1.6.0 Rain Radar Phase A + B\n'
+              if anchor not in s: raise SystemExit('CHANGELOG version anchor missing')
+              s = s.replace(anchor, entry + anchor, 1)
+          p.write_text(s)
+          PY
+
+      - name: Validate syntax and version
+        run: |
+          node --check js/radar.js
+          node --check js/state.js
+          node --check service-worker.js
+          grep -q "APP_VERSION = '1.6.1'" js/config.js
+          grep -q "point-rain-pwa-v1.6.1" service-worker.js
+          grep -q "HKO 現行即時雷達影像索引" js/radar.js
+          grep -q "hkRainRadarRange" js/state.js
+          grep -q "hkRainRadarOpacity" js/state.js
+      - name: Commit patches
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add js/config.js index.html service-worker.js js/state.js js/radar.js css/app.css README.md CHANGELOG.md
+          git commit -m "fix: apply v1.6.1 live radar fixes"
+          git push origin HEAD:feature/live-radar-frontend-validation
