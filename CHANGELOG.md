@@ -1,21 +1,24 @@
 # Changelog
 
-## v1.6.2 Radar Rendering Fix
+## v1.6.2 HKO GIS Radar Overlay
 
-### Live 雷達影像
-- 修正 HKO 現行雷達成品 JPEG 右側資訊欄／色板被整張當作 Leaflet Overlay，令 577×400 影像被壓縮到 geographic bounds 的問題。
-- Live 影像在前端以 Canvas 自動裁出左側正方形地圖本體；現行 HKO 577×400 圖會轉為 400×400 blob overlay。
-- 裁圖結果加入有限數量快取，切幀及重播可重用；關閉雷達時釋放 blob URL。
+### 正確雷達圖層
+- 實機截圖確認完整 HKO JPEG 會把底圖、色板、時間及 Logo 一同疊加，造成比例失真及雙重地圖。
+- 研究 HKO Regional Weather Information Portal 後改用其現行 `R4_GIS` GroundOverlay。
+- 64 km：800×800 透明 PNG，官方 bounds `22.87770 / 21.72659 / 114.79378 / 113.54956`。
+- 256 km：1900×1900 透明 PNG，官方 bounds `24.58614 / 19.98259 / 116.66013 / 111.68321`。
+- PNG palette 含 `tRNS` 透明資料，因此 CARTO 底圖可保留，只有雷達回波覆蓋在地圖上。
 
-### 地圖層級
-- 新增 Leaflet `radarPane`，z-index 350；雷達位於 CARTO tiles 之上、定點／附近半徑向量之下。
-- Live 模式使用 HKO 雷達地圖本體時暫時移除 CARTO tiles，避免兩套地圖疊加造成泛藍、道路及海岸線雙影。
-- Live 模式期間停用底圖切換；關閉雷達、改用 TEST 或 Live 載入失敗後恢復原本明暗底圖。
-- TEST 模式維持透明合成雷達 Overlay，不改既有測試流程。
+### Worker v2.4.3
+- Live `/api/radar/frames` 改由 HKO `R4_GIS_rad_064`／`R4_GIS_rad_256` KML 讀取20個 GroundOverlay。
+- 優先由檔名／畫面名稱解析香港時間，避免誤用 KML `<when>` 的 `Z` 尾碼。
+- 保留最新30分鐘 freshness、150分鐘動畫歷史及 Radar Contract v1.0。
+- 回應新增 `renderMode: transparent-georeferenced-overlay`。
 
-### 驗證／PWA
-- App 更新至 v1.6.2，Service Worker cache 更新至 `point-rain-pwa-v1.6.2`。
-- Playwright 390×844 手機測試驗證 64／256 km Live 幀均由 577×400 裁成 400×400、CARTO tiles 在 Live 模式移除、radarPane 為350、TEST 模式可恢復 tiles。
+### 前端
+- Live 及 TEST 均使用專用 Leaflet `radarPane`（z-index 350）。
+- 移除先前試驗的 Canvas 裁圖、blob cache、隱藏 CARTO 及停用底圖切換做法。
+- App 更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
 
 ## Worker v2.4.2 Current HKO Live Source
 

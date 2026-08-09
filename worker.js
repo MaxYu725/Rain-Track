@@ -506,7 +506,7 @@ function insideCoverage(lat, lon, grid) {
 }
 
 // ---------------------------------------------------------------------------
-// Current HKO radar JSON feed, image proxy and deterministic test frames
+// Current HKO R4 GIS radar KML, image proxy and deterministic test frames
 // ---------------------------------------------------------------------------
 
 async function handleRadarFrames(range, mode, probe) {
