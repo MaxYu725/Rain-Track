@@ -1,0 +1,126 @@
+name: Validate v1.6.2 radar rendering
+
+on:
+  push:
+    branches:
+      - feature/v1.6.2-radar-rendering-fix
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-radar-rendering:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check syntax
+        run: |
+          node --check js/radar.js
+          node --check js/config.js
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+      - name: Start static server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/rain-track-http.log 2>&1 &
+          for i in {1..30}; do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Run Live/Test radar rendering smoke test
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          const assert = require('node:assert/strict');
+          (async () => {
+            const browser = await chromium.launch({ headless:true });
+            const context = await browser.newContext({
+              viewport:{width:390,height:844},
+              deviceScaleFactor:2,
+              locale:'zh-HK',
+              timezoneId:'Asia/Hong_Kong'
+            });
+            const page = await context.newPage();
+            const pageErrors = [];
+            page.on('pageerror', error => pageErrors.push(String(error)));
+            await page.addInitScript(() => {
+              localStorage.setItem('hkRainAutoLocate','off');
+              localStorage.setItem('hkRainRadarMode','live');
+              localStorage.removeItem('hkRainRadarOpacity');
+              localStorage.removeItem('hkRainRadarRange');
+              localStorage.removeItem('hkRainApiBase');
+              localStorage.removeItem('hkRadarApiBase');
+            });
+            await page.goto('http://127.0.0.1:4173/', { waitUntil:'domcontentloaded', timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('toggle-radar')?.disabled === false, { timeout:30000 });
+            await page.click('#drawer-button');
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
+            await page.check('#toggle-radar');
+            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
+            await page.waitForSelector('img.live-radar-map', { state:'visible', timeout:30000 });
+            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length === 0, { timeout:5000 });
+
+            let live = await page.locator('img.live-radar-map').evaluate(img => ({
+              src:img.currentSrc || img.src,
+              naturalWidth:img.naturalWidth,
+              naturalHeight:img.naturalHeight,
+              opacity:Number(getComputedStyle(img).opacity),
+              paneZ:getComputedStyle(img.parentElement).zIndex
+            }));
+            console.log('64 KM LIVE:', live);
+            assert.ok(live.src.startsWith('blob:'), 'Live HKO frame should be a cropped blob URL');
+            assert.equal(live.naturalWidth, 400);
+            assert.equal(live.naturalHeight, 400);
+            assert.ok(live.opacity > .6 && live.opacity < .75);
+            assert.equal(live.paneZ, '350');
+            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), true);
+            await page.screenshot({ path:'v162-live-64.png', fullPage:true });
+
+            await page.selectOption('#radar-range','256');
+            await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent?.includes('256'), { timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
+            await page.waitForSelector('img.live-radar-map', { state:'visible', timeout:30000 });
+            live = await page.locator('img.live-radar-map').evaluate(img => ({
+              src:img.currentSrc || img.src,
+              naturalWidth:img.naturalWidth,
+              naturalHeight:img.naturalHeight
+            }));
+            console.log('256 KM LIVE:', live);
+            assert.ok(live.src.startsWith('blob:'));
+            assert.equal(live.naturalWidth, 400);
+            assert.equal(live.naturalHeight, 400);
+            assert.equal(await page.locator('.leaflet-tile-pane img').count(), 0);
+            await page.screenshot({ path:'v162-live-256.png', fullPage:true });
+
+            await page.selectOption('#radar-data-mode','test');
+            await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent === 'TEST', { timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '12/12', { timeout:30000 });
+            await page.waitForSelector('img.test-radar-overlay', { state:'visible', timeout:30000 });
+            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length > 0, { timeout:10000 });
+            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), false);
+            const testInfo = await page.locator('img.test-radar-overlay').evaluate(img => ({ src:img.currentSrc || img.src }));
+            assert.ok(testInfo.src.includes('/api/radar/test-image'));
+
+            await page.uncheck('#toggle-radar');
+            await page.waitForFunction(() => document.querySelectorAll('img.rain-radar-overlay').length === 0, { timeout:5000 });
+            assert.ok(await page.locator('#radar-timeline').evaluate(el => el.classList.contains('hidden')));
+            assert.deepEqual(pageErrors, []);
+            await browser.close();
+          })().catch(error => { console.error(error); process.exit(1); });
+          NODE
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v162-radar-rendering
+          path: |
+            v162-live-64.png
+            v162-live-256.png
+          if-no-files-found: ignore
+          retention-days: 3
