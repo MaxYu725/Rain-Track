@@ -7,8 +7,6 @@ import { setBadge, setSheetMode, toast } from './ui.js';
 const DEFAULT_PLAYBACK_DELAY = 750;
 const RADAR_REFRESH_MS = 5.5 * 60 * 1000;
 const RECENT_PRELOAD_COUNT = 12;
-const LIVE_CROP_CACHE_LIMIT = 18;
-const LIVE_CROP_ASPECT_THRESHOLD = 1.08;
 
 let displayToken = 0;
 let preloadToken = 0;
@@ -18,7 +16,6 @@ let previousSheetMode = null;
 let controlsReady = false;
 let radarMode = localStorage.getItem('hkRainRadarMode') === 'test' ? 'test' : 'live';
 let playbackDelay = normalizePlaybackDelay(localStorage.getItem('hkRainRadarSpeed'));
-const liveCropCache = new Map();
 
 export function updateRadarCapability(capabilities = {}, contract = null) {
   state.worker.capabilities.radarFrames = Boolean(capabilities.radarFrames);
@@ -30,7 +27,7 @@ export function updateRadarCapability(capabilities = {}, contract = null) {
   const note = document.getElementById('radar-status-note');
   if (note) {
     note.textContent = state.worker.capabilities.radarFrames
-      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。Live 模式會使用 HKO 雷達地圖本體並暫時隱藏 CARTO 底圖，避免兩套地圖重疊。`
+      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。Live 模式使用 HKO GIS 透明雷達回波，保留現有地圖及定點標記。`
       : `Foundation 已定義雷達 API 契約 v${RADAR_CONTRACT_VERSION}；目前 Worker 尚未啟用雷達資料。`;
   }
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
@@ -96,7 +93,6 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
       scheduleRadarRefresh();
     } else {
       removeRadarLayer();
-      syncRadarSurfaceMode(false);
       state.radar.frames = [];
       state.radar.index = 0;
       state.layers.radar = false;
@@ -133,22 +129,19 @@ async function showRadarFrame() {
   const frame = state.radar.frames[state.radar.index];
   if (!frame || !window.L || !state.map) return;
   const token = ++displayToken;
-  const sourceUrl = resolveImageUrl(frame.imageUrl);
+  const url = resolveImageUrl(frame.imageUrl);
   setTimelineLoading(true);
-
-  const prepared = radarMode === 'live'
-    ? await prepareLiveRadarImage(sourceUrl)
-    : await prepareStandardRadarImage(sourceUrl);
+  const loaded = await preloadImage(url);
   if (token !== displayToken) return;
+  if (!loaded) throw new Error('雷達影像載入失敗');
 
-  syncRadarSurfaceMode(radarMode === 'live');
   ensureRadarPane();
   const bounds = [[frame.bounds.south,frame.bounds.west],[frame.bounds.north,frame.bounds.east]];
-  const next = window.L.imageOverlay(prepared.url, bounds, {
+  const next = window.L.imageOverlay(url, bounds, {
     opacity:state.radar.opacity,
     interactive:false,
     pane:'radarPane',
-    className:`rain-radar-overlay ${radarMode === 'live' ? 'live-radar-map' : 'test-radar-overlay'}`
+    className:`rain-radar-overlay ${radarMode === 'live' ? 'live-radar-overlay' : 'test-radar-overlay'}`
   }).addTo(state.map);
 
   if (state.radar.layer) state.map.removeLayer(state.radar.layer);
@@ -158,109 +151,12 @@ async function showRadarFrame() {
   preloadAdjacentFrames();
 }
 
-async function prepareStandardRadarImage(url) {
-  const image = await loadImage(url);
-  return { url, width:image.naturalWidth, height:image.naturalHeight, cropped:false };
-}
-
-async function prepareLiveRadarImage(url) {
-  const cached = liveCropCache.get(url);
-  if (cached) {
-    liveCropCache.delete(url);
-    liveCropCache.set(url, cached);
-    return cached;
-  }
-
-  const image = await loadImage(url);
-  const sourceWidth = image.naturalWidth;
-  const sourceHeight = image.naturalHeight;
-  if (!sourceWidth || !sourceHeight) throw new Error('雷達影像尺寸無效');
-
-  if (sourceWidth / sourceHeight < LIVE_CROP_ASPECT_THRESHOLD) {
-    return { url, width:sourceWidth, height:sourceHeight, cropped:false };
-  }
-
-  const cropSize = Math.min(sourceWidth, sourceHeight);
-  const canvas = document.createElement('canvas');
-  canvas.width = cropSize;
-  canvas.height = cropSize;
-  const context = canvas.getContext('2d', { alpha:false });
-  if (!context) throw new Error('裝置未能建立雷達裁圖畫布');
-  context.drawImage(image, 0, 0, cropSize, cropSize, 0, 0, cropSize, cropSize);
-
-  const blob = await canvasToBlob(canvas, 'image/png');
-  const objectUrl = URL.createObjectURL(blob);
-  const entry = {
-    url:objectUrl,
-    width:cropSize,
-    height:cropSize,
-    cropped:true,
-    sourceWidth,
-    sourceHeight
-  };
-  liveCropCache.set(url, entry);
-  trimLiveCropCache();
-  return entry;
-}
-
-function canvasToBlob(canvas, type) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('雷達裁圖失敗')), type);
-  });
-}
-
-function trimLiveCropCache() {
-  while (liveCropCache.size > LIVE_CROP_CACHE_LIMIT) {
-    const oldestKey = liveCropCache.keys().next().value;
-    const oldest = liveCropCache.get(oldestKey);
-    if (oldest?.url?.startsWith('blob:')) URL.revokeObjectURL(oldest.url);
-    liveCropCache.delete(oldestKey);
-  }
-}
-
-function clearLiveCropCache() {
-  for (const entry of liveCropCache.values()) {
-    if (entry?.url?.startsWith('blob:')) URL.revokeObjectURL(entry.url);
-  }
-  liveCropCache.clear();
-}
-
 function ensureRadarPane() {
   if (!state.map) return;
   let pane = state.map.getPane('radarPane');
   if (!pane) pane = state.map.createPane('radarPane');
   pane.style.zIndex = '350';
   pane.style.pointerEvents = 'none';
-}
-
-function syncRadarSurfaceMode(live) {
-  if (!state.map) return;
-  const { darkTiles, lightTiles } = state.mapLayers;
-  const map = state.map;
-  if (live) {
-    if (darkTiles && map.hasLayer(darkTiles)) map.removeLayer(darkTiles);
-    if (lightTiles && map.hasLayer(lightTiles)) map.removeLayer(lightTiles);
-    setBasemapControlsDisabled(true);
-    document.getElementById('rain-map')?.classList.add('live-radar-surface');
-    return;
-  }
-
-  const preferred = state.activeTiles === 'light' ? lightTiles : darkTiles;
-  if (preferred && !map.hasLayer(preferred)) preferred.addTo(map);
-  preferred?.bringToBack();
-  setBasemapControlsDisabled(false);
-  document.getElementById('rain-map')?.classList.remove('live-radar-surface');
-}
-
-function setBasemapControlsDisabled(disabled) {
-  for (const id of ['basemap-button','drawer-basemap-button']) {
-    const button = document.getElementById(id);
-    if (!button) continue;
-    button.disabled = Boolean(disabled);
-    button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
-    if (disabled) button.title = 'Live 雷達顯示期間使用 HKO 雷達地圖';
-    else if (id === 'basemap-button') button.title = '切換明暗地圖';
-  }
 }
 
 function configureTimeline(data) {
@@ -281,7 +177,7 @@ function configureTimeline(data) {
     modeChip.classList.toggle('test', radarMode === 'test');
   }
   const source = document.getElementById('radar-source-label');
-  if (source) source.textContent = radarMode === 'test' ? '模擬測試幀' : 'HKO 雷達地圖';
+  if (source) source.textContent = radarMode === 'test' ? '模擬測試幀' : 'HKO 即時雷達';
   const counter = document.getElementById('radar-frame-counter');
   if (counter) counter.textContent = hasFrames ? `${state.radar.index + 1}/${state.radar.frames.length}` : '0/0';
   const latest = document.getElementById('radar-latest-button');
@@ -334,8 +230,6 @@ export function clearRadar({ restoreSheet = false } = {}) {
   state.radar.frames = [];
   state.radar.index = 0;
   removeRadarLayer();
-  syncRadarSurfaceMode(false);
-  clearLiveCropCache();
   document.getElementById('radar-timeline')?.classList.add('hidden');
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
 
@@ -423,10 +317,7 @@ function setRadarMode(value) {
   const select = document.getElementById('radar-data-mode');
   if (select) select.value = radarMode;
   if (state.layers.radar) loadRadarFrames({ preserveTime:false });
-  else {
-    syncRadarSurfaceMode(false);
-    configureTimeline(null);
-  }
+  else configureTimeline(null);
 }
 
 function setPlaybackSpeed(value) {
@@ -514,7 +405,7 @@ function ensureRadarUi() {
     if (head && !document.getElementById('radar-mode-chip')) {
       const left = document.createElement('span');
       left.className = 'radar-head-left';
-      left.innerHTML = '<span id="radar-source-label">HKO 雷達地圖</span><span id="radar-mode-chip" class="radar-mode-chip">64 km</span>';
+      left.innerHTML = '<span id="radar-source-label">HKO 即時雷達</span><span id="radar-mode-chip" class="radar-mode-chip">64 km</span>';
       head.firstElementChild?.replaceWith(left);
       const counter = document.createElement('span');
       counter.id = 'radar-frame-counter';
@@ -575,7 +466,7 @@ function ensureRadarStyles() {
   const style = document.createElement('style');
   style.id = 'radar-runtime-style';
   style.textContent = `
-    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-frame-counter{margin-left:auto;color:#818181;font-size:.68rem}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.rain-radar-overlay{image-rendering:auto}.live-radar-surface{background:#000!important}.live-radar-map{mix-blend-mode:normal}
+    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-frame-counter{margin-left:auto;color:#818181;font-size:.68rem}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.rain-radar-overlay{image-rendering:auto}
     @media(max-width:700px){.radar-timeline{bottom:calc(96px + var(--safe-bottom))}.radar-timeline-btn{height:34px}.radar-head-left{gap:5px}.radar-mode-chip{font-size:.62rem}.timeline-head{align-items:center}.timeline-control{gap:6px}}
   `;
   document.head.append(style);
