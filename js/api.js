@@ -41,7 +41,8 @@ export function fetchPointForecast(point, radiusKm, options = {}) {
 
 export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
 export function fetchHealth(options = {}) { return api('/health', options); }
-export function fetchRadarFrames(range, mode = 'live', options = {}) {
+export function fetchRadarFrames(range, mode = 'live', height = 3, options = {}) {
   const normalizedMode = mode === 'test' ? 'test' : 'live';
-  return api(`/api/radar/frames?range=${encodeURIComponent(range)}&mode=${normalizedMode}`, options);
+  const normalizedHeight = Number(height) === 2 ? 2 : 3;
+  return api(`/api/radar/frames?range=${encodeURIComponent(range)}&height=${normalizedHeight}&mode=${normalizedMode}`, options);
 }

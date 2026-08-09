@@ -38,6 +38,10 @@ function loadRadarRange() {
   return localStorage.getItem('hkRainRadarRange') === '256' ? 256 : 64;
 }
 
+function loadRadarHeight(range = loadRadarRange()) {
+  return range === 64 && localStorage.getItem('hkRainRadarHeight') === '2' ? 2 : 3;
+}
+
 function loadRadarOpacity() {
   const stored = localStorage.getItem('hkRainRadarOpacity');
   if (stored === null || stored === '') return .68;
@@ -74,7 +78,7 @@ export const state = {
   map: null,
   mapLayers: {},
   sheet: { mode:localStorage.getItem('hkRainSheetMode') || 'half', dragging:false, startY:0, startHeight:0, moved:false, userMode:localStorage.getItem('hkRainSheetUserMode') === '1' },
-  radar: { frames:[], index:0, range:loadRadarRange(), opacity:loadRadarOpacity(), layer:null },
+  radar: { frames:[], index:0, range:loadRadarRange(), height:loadRadarHeight(), opacity:loadRadarOpacity(), layer:null },
   refreshTimer: null,
   lastSuccessfulRefreshAt: 0,
   drawerTrigger: null,

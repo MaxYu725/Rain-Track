@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.6.3
+# 香港定點雨量預報 v1.6.4
 
 ## 部署內容
 
@@ -20,7 +20,17 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.2 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.3 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.4 的定點預報仍兼容 Worker v2.3 或以上；要啟用 64 km 的 2 / 3 km 雷達高度切換，需部署 Repository 的最新 `worker.js` v2.4.4 到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## v1.6.4 Radar Height Products
+
+- 64 km Live 雷達新增 2 km／3 km 高度選擇；256 km 維持 3 km。
+- 2 km 使用 HKO 官方 `radar_064_kml/Radar_064k.kml` 及其 current NetworkLink，實際雷達幀為 800×800 透明 palette PNG。
+- 2 km GroundOverlay 使用官方 KML bounds `22.87890 / 21.72777 / 114.79378 / 113.54956`，與 3 km 產品分開處理。
+- Worker v2.4.4 在 Radar Contract v1.0 加入 additive `heightKm`、`heightsKmByRange` 與 `defaultHeightKm`；舊前端仍可繼續使用預設 3 km。
+- 前端只有在 Worker 宣告高度能力時才顯示「雷達高度」，因此可先部署 Pages、後部署 Worker。
+- 切到 256 km 時自動使用 3 km；返回 64 km 時恢復使用者上次的 64 km 高度偏好。
+- App / PWA cache 更新至 v1.6.4；Worker 更新至 v2.4.4。
 
 ## v1.6.3 Radar UX Refinement
 
