@@ -1,5 +1,20 @@
 # Changelog
 
+## Worker v2.4.2 Current HKO Live Source
+
+### Live 雷達來源
+- Live 雷達主來源由舊 KML 改為香港天文台現行雷達頁使用的 `wxinfo/radars/temp_json/nradar_img.json`。
+- 64 公里使用 `range2`／`rad_064_png`（3 公里高度）；256 公里使用 `range0`／`rad_256_png`。
+- 解析 HKO JSON 內的 `picture[...]="...jpg"` 路徑及檔名香港時間，並經既有 `/api/radar/image` 安全代理載入。
+- 實測現行 feed 為20幀、每6分鐘一幀，64及256公里最新影像均可直接取得。
+
+### 新鮮度及安全
+- 最新 Live frame 必須在30分鐘內，否則整個 Live feed 回報 stale/unavailable。
+- 最新幀新鮮時，保留最多150分鐘歷史幀供動畫使用；修正 v2.4.1 對每個歷史 frame 使用30分鐘門檻而會截短動畫的限制。
+- 未來時間最多容許10分鐘偏差。
+- 舊 KML 端點只保留在 probe 診斷資訊，標記為 `deprecated-not-queried`，不再作 Live fallback。
+- Radar Contract 維持 v1.0；前端 v1.6.0 無需修改。
+
 ## v1.6.0 Rain Radar Phase A + B
 
 ### 雷達資料
