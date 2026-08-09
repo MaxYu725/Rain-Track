@@ -9,7 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="定點雨量">
   <meta name="description" content="香港未來兩小時定點雨量預報及附近雨勢比較。">
-  <title>香港定點雨量預報 v1.5.2</title>
+  <title>香港定點雨量預報 v1.6.0</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
@@ -123,7 +123,7 @@
           </section>
 
           <section>
-            <h3 class="panel-title">雨量雷達（Foundation）</h3>
+            <h3 class="panel-title">雨量雷達</h3>
             <label class="toggle-row"><input id="toggle-radar" type="checkbox" disabled>雷達影像圖層</label>
             <div class="setting-row"><label for="radar-range">覆蓋範圍</label><select id="radar-range"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
             <div class="setting-row range-setting"><label for="radar-opacity">透明度</label><input id="radar-opacity" type="range" min="0" max="100" value="68"><span id="radar-opacity-value">68%</span></div>
@@ -145,7 +145,7 @@
             <button id="save-api-button" class="wide-btn" type="button">儲存並重新載入</button>
             <div id="worker-status" class="panel-note spaced-note">正在檢查 Worker 版本…</div>
             <div id="diagnostics-status" class="diagnostics-status">正在整理版本及API資訊…</div>
-            <div class="panel-note spaced-note">v1.5 只使用 <code>/api/rain/point</code>，不再下載完整網格作前端後備。雷達契約已定義，但資料功能仍保持關閉。</div>
+            <div class="panel-note spaced-note">定點預報使用 <code>/api/rain/point</code>；雷達功能由 Worker 能力自動啟用，支援即時 HKO 及測試動畫模式。</div>
           </section>
 
           <section>
