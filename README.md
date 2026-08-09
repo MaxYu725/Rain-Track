@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.6.1
+# 香港定點雨量預報 v1.6.2
 
 ## 部署內容
 
@@ -20,7 +20,18 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.2 的定點預報仍兼容 Worker v2.3 或以上；要啟用即時雨量雷達，建議將 Repository 的最新 `worker.js` v2.4.2 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## v1.6.2 Radar Rendering Fix
+
+- 修正 HKO Live 雷達 JPEG 右側資訊欄／色板被一併當成地圖 Overlay，造成雷達圖橫向壓縮的問題。
+- Live 幀在瀏覽器端以 Canvas 自動裁出左側正方形雷達地圖本體；現行 577×400 HKO 圖會裁成 400×400，再按既有 64／256 km bounds 顯示。
+- 新增專用 Leaflet `radarPane`（z-index 350），讓雷達位於底圖之上、定點及附近半徑向量之下。
+- Live 模式顯示 HKO 雷達地圖時暫時移除 CARTO tiles，避免 HKO 內建地圖與 CARTO 疊加造成整片泛藍、道路及海岸線雙影。
+- Live 雷達期間停用底圖切換；關閉雷達、切到 TEST 模式或 Live 載入失敗時自動恢復原本明暗底圖。
+- 裁圖以 blob URL 快取並限制數量；關閉雷達時釋放，減少動畫重播時重複 Canvas 處理及記憶體累積。
+- TEST 模式維持透明合成 Overlay，用於晴天功能測試。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.2`。
 
 ## Worker v2.4.2 Current HKO Live Radar Source
 
@@ -30,8 +41,7 @@ Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目�
 - 最新幀必須在30分鐘內才視為 Live；最新幀新鮮時可保留最多150分鐘歷史幀作動畫，不會像 v2.4.1 一樣把整段兩小時歷史逐幀誤判為過期。
 - 雷達影像仍經 `/api/radar/image` 代理，並限制為香港天文台官方 radar image 路徑。
 - 舊 KML 僅保留為診斷資訊，不會被查詢或用作 Live fallback。
-- Radar Contract 維持 v1.0，因此 v1.6.0 前端毋須修改。
-
+- Radar Contract 維持 v1.0，因此 v1.6.x 前端毋須修改 Worker API 契約。
 
 ## v1.6.1 Live Radar Integration Fix
 
@@ -103,6 +113,6 @@ GET /probe/radar?range=64&mode=live
 
 ## 第三方地圖程式
 
-Leaflet 1.9.4 以固定版本及完整性雜湊載入；Service Worker會在首次成功載入後快取該資源。線上底圖仍由 OpenStreetMap／CARTO 提供。
+Leaflet 1.9.4 以固定版本及完整性雜湊載入；Service Worker會在首次成功載入後快取該資源。線上底圖仍由 OpenStreetMap／CARTO 提供；Live HKO 雷達開啟期間會暫時隱藏 CARTO，以避免兩套地圖重疊。
 
 `_headers` 提供 Cloudflare Pages 的基本安全標頭及定位權限政策。
