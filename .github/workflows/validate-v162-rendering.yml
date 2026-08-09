@@ -80,8 +80,12 @@ jobs:
             assert.ok(live.opacity > .6 && live.opacity < .75);
             assert.equal(live.paneZ, '350');
             assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), true);
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
             await page.screenshot({ path:'v162-live-64.png', fullPage:true });
 
+            await page.click('#drawer-button');
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
             await page.selectOption('#radar-range','256');
             await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent?.includes('256'), { timeout:30000 });
             await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
@@ -96,8 +100,12 @@ jobs:
             assert.equal(live.naturalWidth, 400);
             assert.equal(live.naturalHeight, 400);
             assert.equal(await page.locator('.leaflet-tile-pane img').count(), 0);
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
             await page.screenshot({ path:'v162-live-256.png', fullPage:true });
 
+            await page.click('#drawer-button');
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
             await page.selectOption('#radar-data-mode','test');
             await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent === 'TEST', { timeout:30000 });
             await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '12/12', { timeout:30000 });
