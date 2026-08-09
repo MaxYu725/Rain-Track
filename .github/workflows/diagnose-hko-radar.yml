@@ -12,48 +12,31 @@ jobs:
   diagnose:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect current HKO radar pages
+      - name: Inspect current HKO radar JSON
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/hko
-          pages=(
-            "https://www.hko.gov.hk/en/wxinfo/radars/radar_range1.htm?pv_mode=playback"
-            "https://www.hko.gov.hk/en/wxinfo/radars/radar.htm?pv_mode=playback"
-            "https://www.hko.gov.hk/en/wxinfo/awsgis/regional_weather_gis.html"
-            "https://www.hko.gov.hk/en/wxinfo/ts/index_wind.htm"
-          )
-          i=0
-          for page in "${pages[@]}"; do
-            i=$((i+1))
-            echo "===== PAGE $i: $page ====="
-            curl -fsSL --compressed -A 'Mozilla/5.0' "$page" -o "/tmp/hko/page$i.html"
-            echo "-- script src --"
-            grep -Eo '<script[^>]+src=["'"'][^"'"']+' "/tmp/hko/page$i.html" | sed -E 's/.*src=["'"']//g' || true
-            echo "-- radar/image/ajax hints --"
-            grep -Eio '.{0,120}(radar|\.png|\.gif|\.jpg|\.jpeg|\.webp|ajax|json|wms|tile|image)[^<]{0,180}' "/tmp/hko/page$i.html" | head -n 120 || true
-          done
-
-          echo "===== DOWNLOAD SAME-HOST JS FROM RADAR PAGE ====="
+          base='https://www.hko.gov.hk/wxinfo/radars/temp_json/nradar_img.json'
+          echo '===== CURRENT JSON ====='
+          curl -fsSL --compressed -A 'Mozilla/5.0' "$base?$(date +%s)" -o /tmp/nradar_img.json
+          python -m json.tool /tmp/nradar_img.json
+          echo '===== IMAGE HEAD CHECKS ====='
           python - <<'PY'
-          import re, urllib.parse, urllib.request, pathlib
-          base='https://www.hko.gov.hk/en/wxinfo/radars/radar_range1.htm?pv_mode=playback'
-          html=pathlib.Path('/tmp/hko/page1.html').read_text(errors='ignore')
-          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)', html, re.I)
-          for idx, src in enumerate(srcs):
-              url=urllib.parse.urljoin(base, src)
-              if urllib.parse.urlparse(url).hostname not in {'www.hko.gov.hk','www.weather.gov.hk'}:
-                  continue
-              print('JS', url)
-              try:
-                  req=urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
-                  text=urllib.request.urlopen(req, timeout=15).read().decode('utf-8','ignore')
-              except Exception as e:
-                  print('ERR', e); continue
-              hits=[]
-              for line in text.splitlines():
-                  if re.search(r'radar|\.png|\.gif|\.jpg|ajax|json|image', line, re.I):
-                      hits.append(line[:900])
-              for line in hits[:160]:
-                  print(line)
+          import json, urllib.parse, urllib.request
+          data=json.load(open('/tmp/nradar_img.json'))
+          root='https://www.hko.gov.hk/wxinfo/radars/'
+          for key in ('range0','range1','range2'):
+              block=data.get('radar',{}).get(key,{})
+              imgs=block.get('image',[])
+              print('\n',key,'count=',len(imgs),'meta=',{k:v for k,v in block.items() if k!='image'})
+              for item in imgs[-3:]:
+                  value=item if isinstance(item,str) else str(item)
+                  url=urllib.parse.urljoin(root,value)
+                  print('IMAGE',url)
+                  try:
+                      req=urllib.request.Request(url, method='HEAD', headers={'User-Agent':'Mozilla/5.0'})
+                      with urllib.request.urlopen(req, timeout=15) as r:
+                          print('  status',r.status,'type',r.headers.get('content-type'),'last-modified',r.headers.get('last-modified'),'length',r.headers.get('content-length'))
+                  except Exception as e:
+                      print('  HEAD ERR',e)
           PY
