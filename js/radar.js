@@ -30,10 +30,11 @@ export function updateRadarCapability(capabilities = {}, contract = null) {
   const note = document.getElementById('radar-status-note');
   if (note) {
     note.textContent = state.worker.capabilities.radarFrames
-      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。Live 模式使用 HKO GIS 透明雷達回波，保留現有地圖及定點標記。`
+      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。Live 模式使用 HKO GIS 透明雷達回波${supportsRadarHeightSelection() ? '，64 km 可選 2 / 3 km 高度' : ''}。`
       : `Foundation 已定義雷達 API 契約 v${RADAR_CONTRACT_VERSION}；目前 Worker 尚未啟用雷達資料。`;
   }
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
+  syncRadarHeightUi();
 }
 
 export async function toggleRadar(enabled) {
@@ -69,9 +70,11 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
   setRadarBusy(true);
 
   try {
-    const data = await fetchRadarFrames(state.radar.range, radarMode);
+    const data = await fetchRadarFrames(state.radar.range, radarMode, state.radar.height);
     validateRadarResponse(data);
+    if (Number(data.heightKm) === 2 || Number(data.heightKm) === 3) state.radar.height = Number(data.heightKm);
     state.radar.frames = data.frames;
+    syncRadarHeightUi();
 
     if (preserveTime && previousTime && !wasLatest) {
       const matched = data.frames.findIndex(frame => frame.time === previousTime);
@@ -178,7 +181,7 @@ function configureTimeline(data) {
 
   const modeChip = document.getElementById('radar-mode-chip');
   if (modeChip) {
-    modeChip.textContent = radarMode === 'test' ? 'TEST' : `${state.radar.range} km`;
+    modeChip.textContent = radarModeChipText();
     modeChip.classList.toggle('test', radarMode === 'test');
   }
   const source = document.getElementById('radar-source-label');
@@ -218,8 +221,26 @@ export function setRadarIndex(value) {
 export function changeRadarRange(value) {
   state.radar.range = String(value) === '256' ? 256 : 64;
   localStorage.setItem('hkRainRadarRange', String(state.radar.range));
-  const modeChip = document.getElementById('radar-mode-chip');
-  if (modeChip && radarMode !== 'test') modeChip.textContent = `${state.radar.range} km`;
+  if (state.radar.range === 64) {
+    state.radar.height = localStorage.getItem('hkRainRadarHeight') === '2' ? 2 : 3;
+  } else {
+    state.radar.height = 3;
+  }
+  syncRadarHeightUi();
+  if (state.layers.radar) loadRadarFrames({ preserveTime:false });
+}
+
+export function changeRadarHeight(value) {
+  const requested = String(value) === '2' ? 2 : 3;
+  const available = availableRadarHeights(state.radar.range);
+  if (!available.includes(requested) || radarMode === 'test') {
+    state.radar.height = available.includes(3) ? 3 : (available[0] || 3);
+    syncRadarHeightUi();
+    return;
+  }
+  state.radar.height = requested;
+  if (state.radar.range === 64) localStorage.setItem('hkRainRadarHeight', String(requested));
+  syncRadarHeightUi();
   if (state.layers.radar) loadRadarFrames({ preserveTime:false });
 }
 
@@ -365,12 +386,59 @@ function updateRadarMobileStatus({ refreshFailed = false } = {}) {
   }
 }
 
+function availableRadarHeights(range = state.radar.range) {
+  const map = state.worker.radarContract?.heightsKmByRange;
+  const raw = map?.[String(range)] ?? map?.[range];
+  if (!Array.isArray(raw)) return [3];
+  const values = [...new Set(raw.map(Number).filter(value => value === 2 || value === 3))];
+  return values.length ? values : [3];
+}
+
+function supportsRadarHeightSelection() {
+  return availableRadarHeights(64).includes(2);
+}
+
+function radarModeChipText() {
+  if (radarMode === 'test') return 'TEST';
+  return supportsRadarHeightSelection()
+    ? `${state.radar.range} km · ${state.radar.height} km高`
+    : `${state.radar.range} km`;
+}
+
+function syncRadarHeightUi() {
+  const row = document.getElementById('radar-height-row');
+  const select = document.getElementById('radar-height');
+  const supported = supportsRadarHeightSelection();
+  row?.classList.toggle('hidden', !supported);
+  if (!select) return;
+
+  if (!supported) {
+    state.radar.height = 3;
+    select.value = '3';
+    select.disabled = true;
+  } else {
+    const available = availableRadarHeights(state.radar.range);
+    if (!available.includes(state.radar.height)) {
+      const preferred = state.radar.range === 64 && localStorage.getItem('hkRainRadarHeight') === '2' ? 2 : 3;
+      state.radar.height = available.includes(preferred) ? preferred : (available.includes(3) ? 3 : available[0]);
+    }
+    select.value = String(state.radar.height);
+    select.disabled = radarMode === 'test' || available.length < 2;
+    const option2 = select.querySelector('option[value="2"]');
+    if (option2) option2.disabled = !available.includes(2);
+  }
+
+  const modeChip = document.getElementById('radar-mode-chip');
+  if (modeChip) modeChip.textContent = radarModeChipText();
+}
+
 function setRadarMode(value) {
   radarMode = value === 'test' ? 'test' : 'live';
   localStorage.setItem('hkRainRadarMode', radarMode);
   stopPlayback();
   const select = document.getElementById('radar-data-mode');
   if (select) select.value = radarMode;
+  syncRadarHeightUi();
   if (state.layers.radar) loadRadarFrames({ preserveTime:false });
   else configureTimeline(null);
 }

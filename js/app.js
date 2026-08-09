@@ -12,7 +12,7 @@ import {
   updateDiagnostics, updateLayerControls, updateStorageStatus
 } from './ui.js';
 import { applyPwaUpdate, initPwa, installPwa } from './pwa.js';
-import { changeRadarRange, setRadarIndex, setRadarOpacity, toggleRadar, updateRadarCapability } from './radar.js';
+import { changeRadarHeight, changeRadarRange, setRadarIndex, setRadarOpacity, toggleRadar, updateRadarCapability } from './radar.js';
 
 let initialized = false;
 
@@ -46,6 +46,7 @@ function hydrateControls() {
   const radius = document.getElementById('radius-select'); if (radius) radius.value = String(state.radiusKm);
   const autoLocate = document.getElementById('auto-locate-toggle'); if (autoLocate) autoLocate.checked = state.autoLocate;
   const radarRange = document.getElementById('radar-range'); if (radarRange) radarRange.value = String(state.radar.range);
+  const radarHeight = document.getElementById('radar-height'); if (radarHeight) radarHeight.value = String(state.radar.height);
   const radarOpacity = document.getElementById('radar-opacity'); if (radarOpacity) radarOpacity.value = String(Math.round(state.radar.opacity * 100));
   const opacityValue = document.getElementById('radar-opacity-value'); if (opacityValue) opacityValue.textContent = `${Math.round(state.radar.opacity * 100)}%`;
   updateDiagnostics({ appVersion:APP_VERSION });
@@ -74,6 +75,7 @@ function bindEvents() {
   document.getElementById('radius-select')?.addEventListener('change', event => { changeRadius(event.target.value); state.forecastCache.clear(); loadPointForecast({ force:true }); });
   document.getElementById('toggle-radar')?.addEventListener('change', event => { state.layers.radar = event.target.checked; toggleRadar(event.target.checked); });
   document.getElementById('radar-range')?.addEventListener('change', event => changeRadarRange(event.target.value));
+  document.getElementById('radar-height')?.addEventListener('change', event => changeRadarHeight(event.target.value));
   document.getElementById('radar-opacity')?.addEventListener('input', event => setRadarOpacity(event.target.value));
   document.getElementById('radar-slider')?.addEventListener('input', event => setRadarIndex(event.target.value));
   document.getElementById('drawer-center-hk-button')?.addEventListener('click', () => { centerHongKong(); toggleDrawer(false); });

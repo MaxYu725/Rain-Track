@@ -9,7 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="定點雨量">
   <meta name="description" content="香港未來兩小時定點雨量預報及附近雨勢比較。">
-  <title>香港定點雨量預報 v1.6.3</title>
+  <title>香港定點雨量預報 v1.6.4</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
@@ -126,6 +126,7 @@
             <h3 class="panel-title">雨量雷達</h3>
             <label class="toggle-row"><input id="toggle-radar" type="checkbox" disabled>雷達影像圖層</label>
             <div class="setting-row"><label for="radar-range">覆蓋範圍</label><select id="radar-range"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
+            <div id="radar-height-row" class="setting-row hidden"><label for="radar-height">雷達高度</label><select id="radar-height" disabled><option value="3">3 公里</option><option value="2">2 公里（只限64 km）</option></select></div>
             <div class="setting-row range-setting"><label for="radar-opacity">透明度</label><input id="radar-opacity" type="range" min="0" max="100" value="68"><span id="radar-opacity-value">68%</span></div>
             <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
           </section>

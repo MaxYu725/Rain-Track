@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.4.3
+ * Hong Kong Point Rainfall Forecast Worker v2.4.4
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -8,13 +8,13 @@
  *   GET /api/rain/nowcast
  *   GET /probe/rain
  *   GET /api/capabilities
- *   GET /api/radar/frames?range=64|256&mode=live|test
+ *   GET /api/radar/frames?range=64|256&height=2|3&mode=live|test
  *   GET /api/radar/image?id=<base64url>
  *   GET /api/radar/test-image?range=64|256&frame=0..11
- *   GET /probe/radar?range=64|256&mode=live|test
+ *   GET /probe/radar?range=64|256&height=2|3&mode=live|test
  */
 
-const VERSION = '2.4.3';
+const VERSION = '2.4.4';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
 const RADAR_CACHE_TTL_SECONDS = 60;
@@ -38,19 +38,28 @@ const RADAR = Object.freeze({
   }
 });
 
+const RADAR_2KM_64 = Object.freeze({
+  kmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064k.kml',
+  product: '64 km range, 2 km height, GIS overlay',
+  fallbackBounds: { north: 22.87890, south: 21.72777, east: 114.79378, west: 113.54956 }
+});
+
 const RADAR_CONTRACT = Object.freeze({
   version: '1.0',
   enabled: true,
-  endpoint: '/api/radar/frames?range=64|256&mode=live|test',
+  endpoint: '/api/radar/frames?range=64|256&height=2|3&mode=live|test',
   imageEndpoint: '/api/radar/image?id=...',
   testImageEndpoint: '/api/radar/test-image?range=64|256&frame=0..11',
   rangesKm: [64, 256],
+  heightsKmByRange: { 64: [2, 3], 256: [3] },
+  defaultHeightKm: 3,
   modes: ['live', 'test'],
   cadenceMinutes: RADAR_CADENCE_MINUTES,
   maxFrames: RADAR_MAX_FRAMES,
   response: {
     contractVersion: '1.0',
     rangeKm: '64|256',
+    heightKm: '2|3',
     mode: 'live|test',
     issueTime: 'ISO-8601|null',
     frames: [{ id: 'string', time: 'ISO-8601', imageUrl: 'string', bounds: { north: 'number', south: 'number', east: 'number', west: 'number' } }]
@@ -86,10 +95,10 @@ export default {
             '/api/rain/nowcast',
             '/probe/rain',
             '/api/capabilities',
-            '/api/radar/frames?range=64&mode=live',
+            '/api/radar/frames?range=64&height=3&mode=live',
             '/api/radar/image?id=...',
             '/api/radar/test-image?range=64&frame=0',
-            '/probe/radar?range=64&mode=live'
+            '/probe/radar?range=64&height=3&mode=live'
           ],
           capabilities: {
             pointForecast: true,
@@ -114,10 +123,14 @@ export default {
       if (url.pathname === '/probe/rain') return await handleNowcast(true);
 
       if (url.pathname === '/api/radar/frames') {
-        return await handleRadarFrames(normalizeRange(url.searchParams.get('range')), normalizeRadarMode(url.searchParams.get('mode')), false);
+        const range = normalizeRange(url.searchParams.get('range'));
+        const height = normalizeRadarHeight(url.searchParams.get('height'), range);
+        return await handleRadarFrames(range, height, normalizeRadarMode(url.searchParams.get('mode')), false);
       }
       if (url.pathname === '/probe/radar') {
-        return await handleRadarFrames(normalizeRange(url.searchParams.get('range')), normalizeRadarMode(url.searchParams.get('mode')), true);
+        const range = normalizeRange(url.searchParams.get('range'));
+        const height = normalizeRadarHeight(url.searchParams.get('height'), range);
+        return await handleRadarFrames(range, height, normalizeRadarMode(url.searchParams.get('mode')), true);
       }
       if (url.pathname === '/api/radar/image') return await handleRadarImage(url.searchParams.get('id'));
       if (url.pathname === '/api/radar/test-image') return handleRadarTestImage(url);
@@ -144,6 +157,14 @@ function normalizeRange(value) {
   return String(value) === '256' ? 256 : 64;
 }
 
+function normalizeRadarHeight(value, range) {
+  return range === 64 && String(value) === '2' ? 2 : 3;
+}
+
+function radarSource(range, height = 3) {
+  return range === 64 && height === 2 ? RADAR_2KM_64 : RADAR[range];
+}
+
 function normalizeRadarMode(value) {
   return String(value).toLowerCase() === 'test' ? 'test' : 'live';
 }
@@ -157,7 +178,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.2)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.4)',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -509,20 +530,22 @@ function insideCoverage(lat, lon, grid) {
 // Current HKO R4 GIS radar KML, image proxy and deterministic test frames
 // ---------------------------------------------------------------------------
 
-async function handleRadarFrames(range, mode, probe) {
-  if (mode === 'test') return handleTestRadarFrames(range, probe);
+async function handleRadarFrames(range, height, mode, probe) {
+  if (mode === 'test') return handleTestRadarFrames(range, height, probe);
 
-  const source = RADAR[range];
+  const source = radarSource(range, height);
   const diagnostics = {
     attempts: [], documents: [], errors: [], rejected: [],
     policy: `Current HKO R4 GIS KML; latest frame <= ${RADAR_LIVE_MAX_AGE_MINUTES} min old; history <= ${RADAR_LIVE_HISTORY_MINUTES} min`,
     mode: 'live',
+    rangeKm: range,
+    heightKm: height,
     product: source.product,
     transparentOverlay: true
   };
   let frames = [];
   try {
-    frames = await collectKmlFrames(source.kmlRoot, range, diagnostics);
+    frames = await collectKmlFrames(source.kmlRoot, source, diagnostics);
   } catch (error) {
     diagnostics.errors.push(safeError(error));
   }
@@ -534,6 +557,7 @@ async function handleRadarFrames(range, mode, probe) {
     version: VERSION,
     contractVersion: RADAR_CONTRACT.version,
     rangeKm: range,
+    heightKm: height,
     mode: 'live',
     source: 'Hong Kong Observatory current GIS radar KML',
     root: source.kmlRoot,
@@ -634,8 +658,8 @@ function validateCurrentRadarFrames(frames, diagnostics) {
   return accepted;
 }
 
-function handleTestRadarFrames(range, probe) {
-  const bounds = RADAR[range].fallbackBounds;
+function handleTestRadarFrames(range, height, probe) {
+  const bounds = radarSource(range, height).fallbackBounds;
   const count = 12;
   const cadenceMs = RADAR_CADENCE_MINUTES * 60 * 1000;
   const latestMs = Math.floor(Date.now() / cadenceMs) * cadenceMs;
@@ -657,6 +681,7 @@ function handleTestRadarFrames(range, probe) {
     version: VERSION,
     contractVersion: RADAR_CONTRACT.version,
     rangeKm: range,
+    heightKm: height,
     mode: 'test',
     source: 'Synthetic radar test sequence',
     generatedAt: new Date().toISOString(),
@@ -709,7 +734,7 @@ function handleRadarTestImage(url) {
   });
 }
 
-async function collectKmlFrames(rootUrl, range, diagnostics) {
+async function collectKmlFrames(rootUrl, source, diagnostics) {
   const visited = new Set();
   const frames = [];
 
@@ -732,7 +757,7 @@ async function collectKmlFrames(rootUrl, range, diagnostics) {
       if (!hrefRaw) continue;
       const href = resolveUrl(decodeXml(hrefRaw), url);
       if (!isAllowedRadarImage(href)) continue;
-      const bounds = parseBounds(block) || RADAR[range].fallbackBounds;
+      const bounds = parseBounds(block) || source.fallbackBounds;
       const name = decodeXml(tagText(block, 'name') || '');
       const kmlTime = parseKmlTime(block);
       const textTime = parseTimeFromText(`${name} ${href}`);

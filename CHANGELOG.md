@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.4 Radar Height Products
+
+- 新增 HKO 64 km／2 km 高度透明 GIS 雷達產品，保留既有 64 km／3 km 及 256 km／3 km。
+- Worker 升級至 v2.4.4；`/api/radar/frames` 新增 `height=2|3`，回應新增 `heightKm`，Radar Contract v1.0 以 additive 欄位宣告各範圍可用高度。
+- 前端新增 capability-gated 高度選擇；舊 Worker 不支援時保持預設 3 km 並隱藏高度控制。
+- 256 km 固定 3 km；切回 64 km 可恢復上次選擇的 2 / 3 km 高度。
+- App / PWA cache 更新至 v1.6.4。
+
 ## v1.6.3 Radar UX Refinement
 
 - 分離雷達與定點預報的手機 freshness 顯示，避免把預報延遲誤解為雷達延遲。
