@@ -1,0 +1,39 @@
+name: Apply v1.6.3 radar UX patch
+
+on:
+  push:
+    branches:
+      - feature/v1.6.3-radar-ux
+    paths:
+      - '.github/workflows/apply-v163-radar-ux.yml'
+      - '.github/scripts/patch_v163.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1.6.3-radar-ux
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python .github/scripts/patch_v163.py
+      - name: JavaScript syntax checks
+        run: |
+          node --check js/radar.js
+          node --check js/forecast.js
+          node --check js/config.js
+          node --check service-worker.js
+      - name: Commit patched files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md README.md SHA256SUMS.txt index.html js/config.js js/forecast.js js/radar.js service-worker.js
+          git commit -m 'v1.6.3 Radar UX Refinement'
+          git push origin HEAD:feature/v1.6.3-radar-ux
