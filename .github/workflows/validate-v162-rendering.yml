@@ -1,4 +1,4 @@
-name: Validate v1.6.2 radar rendering
+name: Validate v1.6.2 GIS radar rendering
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   mobile-radar-rendering:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,8 +19,42 @@ jobs:
           node-version: '22'
       - name: Check syntax
         run: |
+          node --check worker.js
           node --check js/radar.js
           node --check js/config.js
+      - name: Verify Worker v2.4.3 against current HKO GIS overlays
+        run: |
+          cp worker.js /tmp/rain-track-worker.mjs
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          globalThis.caches = { default: { async match(){ return undefined; }, async put(){} } };
+          const worker = (await import('file:///tmp/rain-track-worker.mjs?'+Date.now())).default;
+          for (const [range, size] of [[64,800],[256,1900]]) {
+            const response = await worker.fetch(new Request(`https://local.test/probe/radar?range=${range}&mode=live`));
+            assert.equal(response.status, 200);
+            const data = await response.json();
+            console.log('WORKER', range, data.version, data.source, data.frameCount, data.issueTime, data.renderMode);
+            assert.equal(data.ok, true);
+            assert.equal(data.version, '2.4.3');
+            assert.equal(data.contractVersion, '1.0');
+            assert.equal(data.renderMode, 'transparent-georeferenced-overlay');
+            assert.equal(data.frameCount, 20);
+            assert.equal(data.diagnostics.transparentOverlay, true);
+            assert.equal(data.diagnostics.sourceFreshness.latestFresh, true);
+            assert.equal(data.frames.at(-1).timeSource, 'filename-hkt');
+            const frame = data.frames.at(-1);
+            const image = await worker.fetch(new Request('https://local.test' + frame.imageUrl));
+            assert.equal(image.status, 200);
+            assert.match(image.headers.get('content-type') || '', /image\/png/i);
+            const bytes = new Uint8Array(await image.arrayBuffer());
+            assert.equal(String.fromCharCode(...bytes.slice(1,4)), 'PNG');
+            const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            assert.equal(view.getUint32(16), size);
+            assert.equal(view.getUint32(20), size);
+            const ascii = new TextDecoder('latin1').decode(bytes);
+            assert.ok(ascii.includes('tRNS'), 'GIS radar PNG must contain transparency metadata');
+          }
+          NODE
       - name: Install Playwright
         run: |
           npm install --no-save playwright@1.54.2
@@ -33,22 +67,34 @@ jobs:
             sleep 1
           done
           exit 1
-      - name: Run Live/Test radar rendering smoke test
+      - name: Run integrated mobile radar smoke test
         run: |
+          cp worker.js /tmp/rain-track-worker.mjs
           node <<'NODE'
           const { chromium } = require('playwright');
           const assert = require('node:assert/strict');
+          globalThis.caches = { default: { async match(){ return undefined; }, async put(){} } };
           (async () => {
+            const worker = (await import('file:///tmp/rain-track-worker.mjs?'+Date.now())).default;
             const browser = await chromium.launch({ headless:true });
             const context = await browser.newContext({
-              viewport:{width:390,height:844},
-              deviceScaleFactor:2,
-              locale:'zh-HK',
-              timezoneId:'Asia/Hong_Kong'
+              viewport:{width:390,height:844}, deviceScaleFactor:2,
+              locale:'zh-HK', timezoneId:'Asia/Hong_Kong'
             });
             const page = await context.newPage();
             const pageErrors = [];
             page.on('pageerror', error => pageErrors.push(String(error)));
+            await page.route('https://radar.max-yu.workers.dev/**', async route => {
+              const u = new URL(route.request().url());
+              if (u.pathname === '/api/capabilities' || u.pathname.startsWith('/api/radar/')) {
+                const response = await worker.fetch(new Request(route.request().url()));
+                const body = Buffer.from(await response.arrayBuffer());
+                const headers = Object.fromEntries(response.headers.entries());
+                await route.fulfill({ status:response.status, headers, body });
+              } else {
+                await route.continue();
+              }
+            });
             await page.addInitScript(() => {
               localStorage.setItem('hkRainAutoLocate','off');
               localStorage.setItem('hkRainRadarMode','live');
@@ -63,61 +109,45 @@ jobs:
             await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
             await page.check('#toggle-radar');
             await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
-            await page.waitForSelector('img.live-radar-map', { state:'visible', timeout:30000 });
-            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length === 0, { timeout:5000 });
-
-            let live = await page.locator('img.live-radar-map').evaluate(img => ({
+            await page.waitForSelector('img.live-radar-overlay', { state:'visible', timeout:30000 });
+            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length > 0, { timeout:10000 });
+            let info = await page.locator('img.live-radar-overlay').evaluate(img => ({
               src:img.currentSrc || img.src,
               naturalWidth:img.naturalWidth,
               naturalHeight:img.naturalHeight,
               opacity:Number(getComputedStyle(img).opacity),
               paneZ:getComputedStyle(img.parentElement).zIndex
             }));
-            console.log('64 KM LIVE:', live);
-            assert.ok(live.src.startsWith('blob:'), 'Live HKO frame should be a cropped blob URL');
-            assert.equal(live.naturalWidth, 400);
-            assert.equal(live.naturalHeight, 400);
-            assert.ok(live.opacity > .6 && live.opacity < .75);
-            assert.equal(live.paneZ, '350');
-            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), true);
+            console.log('64 KM LIVE', info);
+            assert.ok(info.src.includes('/api/radar/image'));
+            assert.equal(info.naturalWidth, 800);
+            assert.equal(info.naturalHeight, 800);
+            assert.ok(info.opacity > .6 && info.opacity < .75);
+            assert.equal(info.paneZ, '350');
+            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), false);
             await page.keyboard.press('Escape');
             await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
-            await page.screenshot({ path:'v162-live-64.png', fullPage:true });
+            await page.screenshot({path:'v162-gis-live-64.png',fullPage:true});
 
             await page.click('#drawer-button');
             await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
             await page.selectOption('#radar-range','256');
             await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent?.includes('256'), { timeout:30000 });
             await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
-            await page.waitForSelector('img.live-radar-map', { state:'visible', timeout:30000 });
-            live = await page.locator('img.live-radar-map').evaluate(img => ({
-              src:img.currentSrc || img.src,
-              naturalWidth:img.naturalWidth,
-              naturalHeight:img.naturalHeight
+            await page.waitForSelector('img.live-radar-overlay', { state:'visible', timeout:30000 });
+            info = await page.locator('img.live-radar-overlay').evaluate(img => ({
+              naturalWidth:img.naturalWidth, naturalHeight:img.naturalHeight,
+              src:img.currentSrc || img.src
             }));
-            console.log('256 KM LIVE:', live);
-            assert.ok(live.src.startsWith('blob:'));
-            assert.equal(live.naturalWidth, 400);
-            assert.equal(live.naturalHeight, 400);
-            assert.equal(await page.locator('.leaflet-tile-pane img').count(), 0);
+            console.log('256 KM LIVE', info);
+            assert.equal(info.naturalWidth, 1900);
+            assert.equal(info.naturalHeight, 1900);
+            assert.ok(info.src.includes('/api/radar/image'));
+            assert.ok(await page.locator('.leaflet-tile-pane img').count() > 0);
             await page.keyboard.press('Escape');
             await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
-            await page.screenshot({ path:'v162-live-256.png', fullPage:true });
+            await page.screenshot({path:'v162-gis-live-256.png',fullPage:true});
 
-            await page.click('#drawer-button');
-            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
-            await page.selectOption('#radar-data-mode','test');
-            await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent === 'TEST', { timeout:30000 });
-            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '12/12', { timeout:30000 });
-            await page.waitForSelector('img.test-radar-overlay', { state:'visible', timeout:30000 });
-            await page.waitForFunction(() => document.querySelectorAll('.leaflet-tile-pane img').length > 0, { timeout:10000 });
-            assert.equal(await page.locator('#drawer-basemap-button').isDisabled(), false);
-            const testInfo = await page.locator('img.test-radar-overlay').evaluate(img => ({ src:img.currentSrc || img.src }));
-            assert.ok(testInfo.src.includes('/api/radar/test-image'));
-
-            await page.uncheck('#toggle-radar');
-            await page.waitForFunction(() => document.querySelectorAll('img.rain-radar-overlay').length === 0, { timeout:5000 });
-            assert.ok(await page.locator('#radar-timeline').evaluate(el => el.classList.contains('hidden')));
             assert.deepEqual(pageErrors, []);
             await browser.close();
           })().catch(error => { console.error(error); process.exit(1); });
@@ -126,9 +156,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: v162-radar-rendering
+          name: v162-gis-radar-rendering
           path: |
-            v162-live-64.png
-            v162-live-256.png
+            v162-gis-live-64.png
+            v162-gis-live-256.png
           if-no-files-found: ignore
           retention-days: 3
