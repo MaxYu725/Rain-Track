@@ -9,12 +9,13 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="定點雨量">
   <meta name="description" content="香港未來兩小時定點雨量預報及附近雨勢比較。">
-  <title>香港定點雨量預報 v1.6.4</title>
+  <title>香港定點雨量預報 v1.6.5</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="192x192" href="./icons/icon-192.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <link rel="stylesheet" href="./css/app.css">
+  <link rel="stylesheet" href="./css/settings-v165.css">
 </head>
 <body>
   <div id="app-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -88,72 +89,76 @@
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
         </button>
 
-        <aside id="settings-drawer" class="settings-drawer" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawer-title" tabindex="-1">
+        <aside id="settings-drawer" class="settings-drawer settings-drawer-v165" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="drawer-title" tabindex="-1">
           <div class="drawer-heading"><h2 id="drawer-title">設定</h2><button id="drawer-close" class="panel-close" type="button" aria-label="關閉設定">×</button></div>
 
-          <section><h3 class="panel-title">資料狀態</h3><div id="data-status-detail" class="panel-note">正在讀取預報資料…</div></section>
-
-          <section>
-            <h3 class="panel-title">定位</h3>
-            <label class="toggle-row"><input id="auto-locate-toggle" type="checkbox">啟動時自動定位</label>
-            <button id="drawer-locate-button" class="wide-btn" type="button">◎ 立即使用目前位置</button>
-            <div id="location-status" class="panel-note spaced-note">等待定位</div>
+          <section class="settings-section settings-section-primary">
+            <div class="settings-section-heading"><div><h3 class="panel-title">快速控制</h3><p>雷達常用設定集中在這裡。</p></div></div>
+            <label class="toggle-row settings-toggle-emphasis"><input id="toggle-radar" type="checkbox" disabled><span>雷達影像圖層</span></label>
+            <div class="setting-row"><label for="radar-range">覆蓋範圍</label><select id="radar-range"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
+            <div id="radar-height-row" class="setting-row hidden"><label for="radar-height">雷達高度</label><select id="radar-height" disabled><option value="3">3 公里</option><option value="2">2 公里（只限64 km）</option></select></div>
+            <div class="setting-row range-setting"><label for="radar-opacity">透明度</label><input id="radar-opacity" type="range" min="0" max="100" value="68"><span id="radar-opacity-value">68%</span></div>
+            <div id="radar-status-note" class="panel-note settings-compact-note">正在檢查 Worker 雷達能力…</div>
           </section>
 
-          <section>
-            <h3 class="panel-title">搜尋地區</h3>
-            <label class="visually-hidden" for="place-search-input">搜尋香港地區或已儲存位置</label>
-            <input id="place-search-input" class="search-input" type="search" autocomplete="off" placeholder="搜尋地區或已儲存位置">
-            <div id="place-search-results" class="search-results hidden"></div>
-          </section>
-
-          <section>
-            <h3 class="panel-title">預報位置</h3>
-            <div id="saved-list" class="saved-list"></div>
-            <button id="save-current-button" class="wide-btn" type="button">＋ 儲存目前位置</button>
-            <button id="share-current-button" class="wide-btn" type="button">分享目前位置</button>
-          </section>
-
-          <section>
-            <h3 class="panel-title">顯示圖層</h3>
+          <section class="settings-section">
+            <h3 class="panel-title">地圖顯示</h3>
             <label class="toggle-row"><input id="toggle-marker" type="checkbox" checked>定點標記及附近地名</label>
             <label class="toggle-row"><input id="toggle-radius" type="checkbox" checked>附近雨勢比較範圍</label>
             <label class="toggle-row"><input id="toggle-coverage" type="checkbox">官方預報網格範圍</label>
             <div class="setting-row"><label for="radius-select">附近半徑</label><select id="radius-select"><option value="1">1 公里</option><option value="2">2 公里</option><option value="3">3 公里</option><option value="5">5 公里</option></select></div>
           </section>
 
-          <section>
-            <h3 class="panel-title">雨量雷達</h3>
-            <label class="toggle-row"><input id="toggle-radar" type="checkbox" disabled>雷達影像圖層</label>
-            <div class="setting-row"><label for="radar-range">覆蓋範圍</label><select id="radar-range"><option value="64">64 公里</option><option value="256">256 公里</option></select></div>
-            <div id="radar-height-row" class="setting-row hidden"><label for="radar-height">雷達高度</label><select id="radar-height" disabled><option value="3">3 公里</option><option value="2">2 公里（只限64 km）</option></select></div>
-            <div class="setting-row range-setting"><label for="radar-opacity">透明度</label><input id="radar-opacity" type="range" min="0" max="100" value="68"><span id="radar-opacity-value">68%</span></div>
-            <div id="radar-status-note" class="panel-note">正在檢查 Worker 雷達能力…</div>
+          <section class="settings-section">
+            <h3 class="panel-title">位置</h3>
+            <label class="toggle-row"><input id="auto-locate-toggle" type="checkbox">啟動時自動定位</label>
+            <button id="drawer-locate-button" class="wide-btn settings-primary-action" type="button">◎ 立即使用目前位置</button>
+            <div id="location-status" class="panel-note spaced-note settings-inline-status">等待定位</div>
+            <label class="visually-hidden" for="place-search-input">搜尋香港地區或已儲存位置</label>
+            <input id="place-search-input" class="search-input settings-search" type="search" autocomplete="off" placeholder="搜尋地區或已儲存位置">
+            <div id="place-search-results" class="search-results hidden"></div>
+            <div id="saved-list" class="saved-list settings-saved-list"></div>
+            <div class="settings-action-grid">
+              <button id="save-current-button" class="wide-btn" type="button">＋ 儲存</button>
+              <button id="share-current-button" class="wide-btn" type="button">分享</button>
+            </div>
           </section>
 
-          <section>
-            <h3 class="panel-title">地圖及應用程式</h3>
-            <button id="drawer-center-hk-button" class="wide-btn" type="button">⌂ 返回香港全景</button>
-            <button id="drawer-basemap-button" class="wide-btn" type="button">◐ 切換明暗地圖</button>
+          <section class="settings-section">
+            <h3 class="panel-title">地圖與應用程式</h3>
+            <div class="settings-action-grid settings-action-grid-three">
+              <button id="drawer-center-hk-button" class="wide-btn" type="button">⌂ 香港全景</button>
+              <button id="drawer-basemap-button" class="wide-btn" type="button">◐ 明暗地圖</button>
+              <button id="drawer-fullscreen-button" class="wide-btn" type="button">全螢幕</button>
+            </div>
             <button id="install-app-button" class="wide-btn hidden" type="button">安裝到裝置</button>
-            <button id="drawer-fullscreen-button" class="wide-btn" type="button">全螢幕顯示</button>
-            <div id="pwa-status" class="pwa-status">正在檢查 PWA 狀態…</div>
+            <div id="pwa-status" class="pwa-status settings-compact-note">正在檢查 PWA 狀態…</div>
           </section>
 
-          <section>
-            <h3 class="panel-title">資料服務</h3>
-            <div class="setting-row vertical-setting"><label for="api-base-input">Worker URL</label><input id="api-base-input" inputmode="url" placeholder="https://...workers.dev"></div>
-            <button id="save-api-button" class="wide-btn" type="button">儲存並重新載入</button>
-            <div id="worker-status" class="panel-note spaced-note">正在檢查 Worker 版本…</div>
-            <div id="diagnostics-status" class="diagnostics-status">正在整理版本及API資訊…</div>
-            <div class="panel-note spaced-note">定點預報使用 <code>/api/rain/point</code>；雷達功能由 Worker 能力自動啟用，支援即時 HKO 及測試動畫模式。</div>
-          </section>
+          <details class="settings-advanced">
+            <summary><span>資料狀態與進階設定</span><small>診斷、Worker、快取</small></summary>
+            <div class="settings-advanced-body">
+              <section>
+                <h3 class="panel-title">資料狀態</h3>
+                <div id="data-status-detail" class="panel-note">正在讀取預報資料…</div>
+              </section>
 
-          <section>
-            <h3 class="panel-title">個人資料及快取</h3>
-            <div id="storage-status" class="panel-note">正在計算…</div>
-            <button id="reset-app-button" class="wide-btn danger-btn" type="button">清除個人資料並重設</button>
-          </section>
+              <section>
+                <h3 class="panel-title">資料服務</h3>
+                <div class="setting-row vertical-setting"><label for="api-base-input">Worker URL</label><input id="api-base-input" inputmode="url" placeholder="https://...workers.dev"></div>
+                <button id="save-api-button" class="wide-btn" type="button">儲存並重新載入</button>
+                <div id="worker-status" class="panel-note spaced-note">正在檢查 Worker 版本…</div>
+                <div id="diagnostics-status" class="diagnostics-status">正在整理版本及API資訊…</div>
+                <div class="panel-note spaced-note">定點預報使用 <code>/api/rain/point</code>；雷達功能由 Worker 能力自動啟用。</div>
+              </section>
+
+              <section>
+                <h3 class="panel-title">個人資料及快取</h3>
+                <div id="storage-status" class="panel-note">正在計算…</div>
+                <button id="reset-app-button" class="wide-btn danger-btn" type="button">清除個人資料並重設</button>
+              </section>
+            </div>
+          </details>
         </aside>
         <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
       </div>
