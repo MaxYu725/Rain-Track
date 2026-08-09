@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.6.0 Rain Radar Phase A + B
+
+### 雷達資料
+- Worker 升級至 v2.4.0，啟用 HKO 雨量雷達能力及 Radar Contract v1.0。
+- 新增 64 公里／256 公里 HKO KML 雷達幀讀取、KML NetworkLink 遞迴解析、影像代理及幀邊界處理。
+- 只接受 HKO 雷達 KML 可驗證影像；顯式過舊／未來時間會被拒絕，缺失時間才按6分鐘節奏補齊。
+- 新增 `/probe/radar` 診斷接口。
+
+### 雷達 UI／動畫
+- 雷達影像直接疊加在現有 Leaflet 地圖，保留定點位置及預報 Bottom Sheet。
+- 新增播放／暫停、雷達時間軸、最新幀、幀數、64／256公里、透明度及三段動畫速度。
+- 預載最近12幀及目前幀前後影像；新幀載入成功後才替換舊 Overlay，降低閃爍。
+- 即時雷達在前景期間定時檢查新幀；背景更新失敗時保留最後成功畫面。
+- 手機啟用雷達自動把 Bottom Sheet 收到 peek；關閉後恢復原本高度；初次載入失敗時亦恢復面板。
+
+### 晴天測試
+- 新增 `mode=test`，由 Worker 產生12幀透明合成雷達 SVG，無降雨時仍可驗證播放、時間軸、透明度及64／256公里流程。
+- 測試動畫有清楚 TEST 標示，不會被誤認為實況雷達。
+
+### PWA／品質
+- App版本更新至 v1.6.0，Service Worker快取更新至 `point-rain-pwa-v1.6.0`。
+- 新增 GitHub Actions `Validate radar build`，使用 Node 22 檢查 Worker及雷達相關 JavaScript 語法。
+
 ## v1.5.3 Location Stability & Time UX
 
 ### 定位穩定性
@@ -70,4 +93,4 @@
 ### 雷達準備
 - `js/radar.js`獨立處理雷達契約及未來圖層。
 - 雷達 API契約版本定為 v1.0。
-- Worker仍回報 `radarFrames: false`，本版不抓取雷達資料。
+- Worker在v1.5階段仍回報 `radarFrames: false`。

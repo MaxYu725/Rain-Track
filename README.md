@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.5.3
+# 香港定點雨量預報 v1.6.0
 
 ## 部署內容
 
@@ -20,7 +20,31 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-將 `worker.js` 貼到 Cloudflare Worker 並部署。前端 v1.5.3 要求 Worker v2.3 或以上，不再使用舊 `/api/rain/nowcast` 前端插值後備。
+前端 v1.6.0 的定點預報仍兼容 Worker v2.3 或以上；要啟用雨量雷達，必須將 Repository 的 `worker.js` v2.4.0 部署到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## v1.6.0 Rain Radar Phase A + B
+
+- 新增 HKO 雷達 KML 幀讀取，支援 64 公里及 256 公里範圍。
+- Worker 新增 `/api/radar/frames`、`/api/radar/image` 及 `/probe/radar`。
+- 雷達影像以 Leaflet image overlay 疊加在現有定點雨量地圖，不另開頁面。
+- 時間軸加入播放／暫停、拖曳選幀、最新幀及幀數顯示。
+- 預載最近及相鄰影像，切換時先載入新幀再替換舊圖層，減少閃爍。
+- 即時模式約每 5.5 分鐘檢查新幀；背景更新失敗時保留最後可用雷達畫面。
+- 設定支援 64／256 公里、透明度及慢／標準／快動畫速度。
+- 手機開啟雷達時自動將定點預報 Bottom Sheet 收至 peek；關閉雷達後恢復先前高度。
+- 新增 `mode=test` 測試動畫及 Worker 合成測試圖，晴天亦可驗證圖層、時間軸及動畫流程。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.0`。
+
+### 雷達 API
+
+```text
+GET /api/radar/frames?range=64&mode=live
+GET /api/radar/frames?range=256&mode=live
+GET /api/radar/frames?range=64&mode=test
+GET /api/radar/image?id=...
+GET /api/radar/test-image?range=64&frame=0
+GET /probe/radar?range=64&mode=live
+```
 
 ## v1.5.3 Location Stability & Time UX
 
@@ -54,7 +78,7 @@ Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目�
 - 改善文字尺寸、對比、鍵盤焦點、讀屏公告及設定抽屜焦點管理。
 - 加入香港地區搜尋、官方網格範圍、分享私隱選項及應用程式內對話框。
 - PWA更新改為由使用者確認後才套用，避免運作途中混用新舊檔案。
-- 雷達 API 契約版本定為 v1.0，但 Worker仍回報 `radarFrames: false`。
+- 雷達 API 契約版本定為 v1.0。
 
 ## 第三方地圖程式
 

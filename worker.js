@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.3.1
+ * Hong Kong Point Rainfall Forecast Worker v2.4.0
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -8,19 +8,45 @@
  *   GET /api/rain/nowcast
  *   GET /probe/rain
  *   GET /api/capabilities
+ *   GET /api/radar/frames?range=64|256&mode=live|test
+ *   GET /api/radar/image?id=<base64url>
+ *   GET /api/radar/test-image?range=64|256&frame=0..11
+ *   GET /probe/radar?range=64|256&mode=live|test
  */
 
-const VERSION = '2.3.1';
+const VERSION = '2.4.0';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
+const RADAR_CACHE_TTL_SECONDS = 180;
+const RADAR_IMAGE_CACHE_TTL_SECONDS = 86400;
+const RADAR_CADENCE_MINUTES = 6;
+const RADAR_MAX_FRAMES = 30;
+
+const RADAR = Object.freeze({
+  64: {
+    root: 'https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064.kml',
+    fallbackBounds: { north: 22.89, south: 21.72, east: 114.82, west: 113.53 }
+  },
+  256: {
+    root: 'https://www.hko.gov.hk/wxinfo/radars/radar_256_kml/Radar_256.kml',
+    fallbackBounds: { north: 24.61, south: 19.99, east: 116.67, west: 111.68 }
+  }
+});
+
 const RADAR_CONTRACT = Object.freeze({
   version: '1.0',
-  enabled: false,
-  endpoint: '/api/radar/frames?range=64|256',
+  enabled: true,
+  endpoint: '/api/radar/frames?range=64|256&mode=live|test',
+  imageEndpoint: '/api/radar/image?id=...',
+  testImageEndpoint: '/api/radar/test-image?range=64|256&frame=0..11',
   rangesKm: [64, 256],
+  modes: ['live', 'test'],
+  cadenceMinutes: RADAR_CADENCE_MINUTES,
+  maxFrames: RADAR_MAX_FRAMES,
   response: {
     contractVersion: '1.0',
     rangeKm: '64|256',
+    mode: 'live|test',
     issueTime: 'ISO-8601|null',
     frames: [{ id: 'string', time: 'ISO-8601', imageUrl: 'string', bounds: { north: 'number', south: 'number', east: 'number', west: 'number' } }]
   }
@@ -54,12 +80,16 @@ export default {
             '/api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2',
             '/api/rain/nowcast',
             '/probe/rain',
-            '/api/capabilities'
+            '/api/capabilities',
+            '/api/radar/frames?range=64&mode=live',
+            '/api/radar/image?id=...',
+            '/api/radar/test-image?range=64&frame=0',
+            '/probe/radar?range=64&mode=live'
           ],
           capabilities: {
             pointForecast: true,
             nowcastGrid: true,
-            radarFrames: false,
+            radarFrames: true,
             radar: RADAR_CONTRACT
           },
           radarContract: RADAR_CONTRACT,
@@ -70,12 +100,22 @@ export default {
       if (url.pathname === '/api/capabilities') return json({
         ok: true,
         version: VERSION,
-        capabilities: { pointForecast: true, nowcastGrid: true, radarFrames: false, radar: RADAR_CONTRACT },
+        capabilities: { pointForecast: true, nowcastGrid: true, radarFrames: true, radar: RADAR_CONTRACT },
         radarContract: RADAR_CONTRACT
       }, 200, { 'Cache-Control': 'public, max-age=300' });
+
       if (url.pathname === '/api/rain/point') return await handlePointForecast(url);
       if (url.pathname === '/api/rain/nowcast') return await handleNowcast(false);
       if (url.pathname === '/probe/rain') return await handleNowcast(true);
+
+      if (url.pathname === '/api/radar/frames') {
+        return await handleRadarFrames(normalizeRange(url.searchParams.get('range')), normalizeRadarMode(url.searchParams.get('mode')), false);
+      }
+      if (url.pathname === '/probe/radar') {
+        return await handleRadarFrames(normalizeRange(url.searchParams.get('range')), normalizeRadarMode(url.searchParams.get('mode')), true);
+      }
+      if (url.pathname === '/api/radar/image') return await handleRadarImage(url.searchParams.get('id'));
+      if (url.pathname === '/api/radar/test-image') return handleRadarTestImage(url);
 
       return json({ ok: false, error: 'Not found', version: VERSION }, 404);
     } catch (error) {
@@ -95,6 +135,14 @@ function safeError(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function normalizeRange(value) {
+  return String(value) === '256' ? 256 : 64;
+}
+
+function normalizeRadarMode(value) {
+  return String(value).toLowerCase() === 'test' ? 'test' : 'live';
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
@@ -104,7 +152,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.3)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4)',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -451,6 +499,380 @@ function insideCoverage(lat, lon, grid) {
     && lat >= grid.minLat && lat <= grid.maxLat
     && lon >= grid.minLon && lon <= grid.maxLon;
 }
+
+// ---------------------------------------------------------------------------
+// Radar KML, image proxy and deterministic test frames
+// ---------------------------------------------------------------------------
+
+async function handleRadarFrames(range, mode, probe) {
+  if (mode === 'test') return handleTestRadarFrames(range, probe);
+
+  const source = RADAR[range];
+  const diagnostics = {
+    attempts: [], documents: [], errors: [], rejected: [],
+    policy: 'KML-only; reject stale or unverifiable images',
+    mode: 'live'
+  };
+  let frames = [];
+  try {
+    frames = await collectKmlFrames(source.root, range, diagnostics);
+  } catch (error) {
+    diagnostics.errors.push(safeError(error));
+  }
+
+  frames = validateRadarFrames(dedupeFrames(frames), diagnostics);
+  frames = normalizeRadarFrameTimes(frames, diagnostics).slice(-RADAR_MAX_FRAMES);
+  const issueTime = frames.at(-1)?.time || null;
+  const payload = {
+    ok: frames.length > 0,
+    version: VERSION,
+    contractVersion: RADAR_CONTRACT.version,
+    rangeKm: range,
+    mode: 'live',
+    source: 'Hong Kong Observatory radar KML',
+    root: source.root,
+    generatedAt: new Date().toISOString(),
+    issueTime,
+    cadenceMinutes: RADAR_CADENCE_MINUTES,
+    frameCount: frames.length,
+    error: frames.length ? null : 'No fresh, verifiable HKO radar frames were found',
+    frames: frames.map((frame, index) => ({
+      id: encodeUrl(frame.href),
+      index,
+      time: frame.time,
+      name: frame.name || `Radar ${index + 1}`,
+      bounds: frame.bounds || source.fallbackBounds,
+      source: frame.source,
+      timeSource: frame.timeSource || null,
+      rawTime: probe ? (frame.rawTime || null) : undefined,
+      imageUrl: `/api/radar/image?id=${encodeURIComponent(encodeUrl(frame.href))}`
+    }))
+  };
+
+  if (probe) {
+    payload.diagnostics = diagnostics;
+    payload.frames = payload.frames.slice(-10);
+    return json(payload, 200, { 'Cache-Control': 'no-store' });
+  }
+
+  return json(payload, frames.length ? 200 : 502, { 'Cache-Control': `public, max-age=${RADAR_CACHE_TTL_SECONDS}` });
+}
+
+function handleTestRadarFrames(range, probe) {
+  const bounds = RADAR[range].fallbackBounds;
+  const count = 12;
+  const cadenceMs = RADAR_CADENCE_MINUTES * 60 * 1000;
+  const latestMs = Math.floor(Date.now() / cadenceMs) * cadenceMs;
+  const frames = Array.from({ length: count }, (_, index) => {
+    const time = new Date(latestMs - (count - 1 - index) * cadenceMs).toISOString();
+    return {
+      id: `test-${range}-${index}`,
+      index,
+      time,
+      name: `TEST ${String(index + 1).padStart(2, '0')}`,
+      bounds,
+      source: 'synthetic-test',
+      timeSource: 'generated',
+      imageUrl: `/api/radar/test-image?range=${range}&frame=${index}&t=${encodeURIComponent(time)}`
+    };
+  });
+  const payload = {
+    ok: true,
+    version: VERSION,
+    contractVersion: RADAR_CONTRACT.version,
+    rangeKm: range,
+    mode: 'test',
+    source: 'Synthetic radar test sequence',
+    generatedAt: new Date().toISOString(),
+    issueTime: frames.at(-1).time,
+    cadenceMinutes: RADAR_CADENCE_MINUTES,
+    frameCount: frames.length,
+    frames
+  };
+  if (probe) payload.diagnostics = { mode: 'test', note: 'Synthetic deterministic frames for UI/animation testing during dry weather.' };
+  return json(payload, 200, { 'Cache-Control': 'no-store' });
+}
+
+function handleRadarTestImage(url) {
+  const range = normalizeRange(url.searchParams.get('range'));
+  const frame = clamp(Math.round(numberOrNull(url.searchParams.get('frame')) ?? 0), 0, 30);
+  const size = range === 256 ? 1024 : 800;
+  const progress = frame / 11;
+  const shift = Math.round(progress * size * 0.34);
+  const scale = range === 256 ? 1.12 : 1;
+  const x1 = Math.round(size * 0.18 + shift);
+  const y1 = Math.round(size * 0.46 - Math.sin(progress * Math.PI * 1.4) * size * 0.08);
+  const x2 = Math.round(size * 0.05 + shift * 0.78);
+  const y2 = Math.round(size * 0.68 + Math.cos(progress * Math.PI) * size * 0.05);
+  const x3 = Math.round(size * 0.32 + shift * 0.55);
+  const y3 = Math.round(size * 0.28 + Math.sin(progress * Math.PI * 2) * size * 0.04);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    <rect width="100%" height="100%" fill="none"/>
+    <g opacity="0.78" filter="url(#soft)">
+      <ellipse cx="${x1}" cy="${y1}" rx="${Math.round(115 * scale)}" ry="${Math.round(82 * scale)}" fill="#0aa7ff" opacity=".48"/>
+      <ellipse cx="${x1 + 22}" cy="${y1 - 8}" rx="${Math.round(82 * scale)}" ry="${Math.round(58 * scale)}" fill="#35d35a" opacity=".62"/>
+      <ellipse cx="${x1 + 42}" cy="${y1 - 12}" rx="${Math.round(50 * scale)}" ry="${Math.round(36 * scale)}" fill="#ffd83d" opacity=".74"/>
+      <ellipse cx="${x1 + 57}" cy="${y1 - 18}" rx="${Math.round(27 * scale)}" ry="${Math.round(22 * scale)}" fill="#ff6d32" opacity=".85"/>
+      <ellipse cx="${x2}" cy="${y2}" rx="${Math.round(92 * scale)}" ry="${Math.round(52 * scale)}" fill="#0aa7ff" opacity=".38"/>
+      <ellipse cx="${x2 + 30}" cy="${y2 - 4}" rx="${Math.round(55 * scale)}" ry="${Math.round(34 * scale)}" fill="#35d35a" opacity=".52"/>
+      <ellipse cx="${x3}" cy="${y3}" rx="${Math.round(66 * scale)}" ry="${Math.round(40 * scale)}" fill="#0aa7ff" opacity=".34"/>
+    </g>
+    <text x="${Math.round(size * 0.035)}" y="${Math.round(size * 0.065)}" fill="#ffffff" opacity=".42" font-size="${Math.round(size * 0.028)}" font-family="Arial,sans-serif">TEST RADAR · ${range} km · frame ${frame + 1}</text>
+    <defs><filter id="soft"><feGaussianBlur stdDeviation="7"/></filter></defs>
+  </svg>`;
+
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=3600',
+      'X-Content-Type-Options': 'nosniff'
+    }
+  });
+}
+
+async function collectKmlFrames(rootUrl, range, diagnostics) {
+  const visited = new Set();
+  const frames = [];
+
+  async function visit(url, depth) {
+    if (depth > 3 || visited.has(url) || visited.size > 20) return;
+    visited.add(url);
+    const response = await fetchCached(url, RADAR_CACHE_TTL_SECONDS, 'application/vnd.google-earth.kml+xml,application/xml,text/xml,*/*');
+    const text = await response.text();
+    const lastModified = response.headers.get('last-modified');
+    const dateHeader = response.headers.get('date');
+    diagnostics.attempts.push({ url, status: response.status, bytes: text.length, lastModified, date: dateHeader });
+    if (depth === 0) diagnostics.referenceTime = parseHttpDate(lastModified) || parseHttpDate(dateHeader) || new Date().toISOString();
+
+    const overlays = extractBlocks(text, 'GroundOverlay');
+    const links = extractBlocks(text, 'NetworkLink');
+    diagnostics.documents.push({ url, depth, overlays: overlays.length, networkLinks: links.length });
+
+    for (const block of overlays) {
+      const hrefRaw = tagText(block, 'href');
+      if (!hrefRaw) continue;
+      const href = resolveUrl(decodeXml(hrefRaw), url);
+      if (!isAllowedRadarImage(href)) continue;
+      const bounds = parseBounds(block) || RADAR[range].fallbackBounds;
+      const name = decodeXml(tagText(block, 'name') || '');
+      const kmlTime = parseKmlTime(block);
+      const textTime = parseTimeFromText(`${name} ${href}`);
+      const time = kmlTime || textTime;
+      frames.push({ href, bounds, name, time, rawTime: time, timeSource: kmlTime ? 'kml' : (textTime ? 'text' : null), source: 'kml' });
+    }
+
+    for (const block of links) {
+      const hrefRaw = tagText(block, 'href');
+      if (!hrefRaw) continue;
+      const href = resolveUrl(decodeXml(hrefRaw), url);
+      if (isAllowedHkoUrl(href) && /\.km[lz](?:$|\?)/i.test(href)) await visit(href, depth + 1);
+    }
+  }
+
+  await visit(rootUrl, 0);
+  return frames;
+}
+
+async function handleRadarImage(id) {
+  if (!id) return json({ ok: false, error: 'Missing id' }, 400);
+  let imageUrl;
+  try { imageUrl = decodeUrl(id); } catch { return json({ ok: false, error: 'Invalid id' }, 400); }
+  if (!isAllowedRadarImage(imageUrl)) return json({ ok: false, error: 'Image URL not allowed' }, 403);
+
+  const response = await fetchCached(imageUrl, RADAR_IMAGE_CACHE_TTL_SECONDS, 'image/avif,image/webp,image/png,image/jpeg,image/gif,*/*');
+  const headers = new Headers(response.headers);
+  headers.set('Access-Control-Allow-Origin', '*');
+  headers.set('Cache-Control', `public, max-age=${RADAR_IMAGE_CACHE_TTL_SECONDS}, immutable`);
+  headers.set('X-Content-Type-Options', 'nosniff');
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function extractBlocks(xml, tag) {
+  const pattern = new RegExp(`<(?:(?:[\\w-]+):)?${tag}\\b[^>]*>[\\s\\S]*?<\\/(?:(?:[\\w-]+):)?${tag}>`, 'gi');
+  return xml.match(pattern) || [];
+}
+
+function tagText(xml, tag) {
+  const pattern = new RegExp(`<(?:(?:[\\w-]+):)?${tag}\\b[^>]*>([\\s\\S]*?)<\\/(?:(?:[\\w-]+):)?${tag}>`, 'i');
+  const match = xml.match(pattern);
+  return match ? match[1].replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/, '').trim() : null;
+}
+
+function parseBounds(block) {
+  const north = numberOrNull(tagText(block, 'north'));
+  const south = numberOrNull(tagText(block, 'south'));
+  const east = numberOrNull(tagText(block, 'east'));
+  const west = numberOrNull(tagText(block, 'west'));
+  if ([north, south, east, west].every(value => value !== null)) return { north, south, east, west };
+
+  const coordinates = tagText(block, 'coordinates');
+  if (coordinates) {
+    const pairs = coordinates.trim().split(/\s+/).map(pair => pair.split(',').map(Number)).filter(pair => pair.length >= 2 && pair.every(Number.isFinite));
+    if (pairs.length >= 4) {
+      return {
+        north: Math.max(...pairs.map(pair => pair[1])),
+        south: Math.min(...pairs.map(pair => pair[1])),
+        east: Math.max(...pairs.map(pair => pair[0])),
+        west: Math.min(...pairs.map(pair => pair[0]))
+      };
+    }
+  }
+  return null;
+}
+
+function parseKmlTime(block) {
+  const when = tagText(block, 'when');
+  const end = tagText(block, 'end');
+  const begin = tagText(block, 'begin');
+  for (const value of [when, end, begin]) {
+    if (!value) continue;
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date.toISOString();
+  }
+  return null;
+}
+
+function parseTimeFromText(text) {
+  const value = String(text || '');
+  const match = value.match(/(20\d{2})[-_]?([01]\d)[-_]?([0-3]\d)[-_T]?([0-2]\d)[-_:]?([0-5]\d)(?:[-_:]?([0-5]\d))?/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second = '00'] = match;
+  const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}+08:00`);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function parseHttpDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function validateRadarFrames(frames, diagnostics) {
+  const referenceMs = Date.parse(diagnostics.referenceTime || '') || Date.now();
+  const maxPastMs = 36 * 60 * 60 * 1000;
+  const maxFutureMs = 60 * 60 * 1000;
+  const accepted = [];
+
+  for (const frame of frames) {
+    if (frame.source !== 'kml') {
+      diagnostics.rejected.push({ href: frame.href, reason: 'non-kml-source' });
+      continue;
+    }
+    const explicitMs = Date.parse(frame.time || '');
+    if (Number.isFinite(explicitMs)) {
+      if (explicitMs < referenceMs - maxPastMs || explicitMs > referenceMs + maxFutureMs) {
+        diagnostics.rejected.push({ href: frame.href, rawTime: frame.time, reason: 'stale-or-future-explicit-time' });
+        continue;
+      }
+    }
+    accepted.push(frame);
+  }
+
+  diagnostics.validation = {
+    inputCount: frames.length,
+    acceptedCount: accepted.length,
+    rejectedCount: diagnostics.rejected.length,
+    referenceTime: new Date(referenceMs).toISOString(),
+    freshnessWindowHours: 36
+  };
+  return accepted;
+}
+
+function normalizeRadarFrameTimes(frames, diagnostics) {
+  if (!frames.length) return frames;
+  const referenceMs = Date.parse(diagnostics.referenceTime || '') || Date.now();
+  const ordered = [...frames].sort((a, b) => {
+    const at = Date.parse(a.time || '');
+    const bt = Date.parse(b.time || '');
+    if (Number.isFinite(at) && Number.isFinite(bt) && at !== bt) return at - bt;
+    return a.href.localeCompare(b.href, undefined, { numeric: true });
+  });
+
+  const missing = ordered.filter(frame => !Number.isFinite(Date.parse(frame.time || '')));
+  if (!missing.length) {
+    diagnostics.timeRepair = { applied: false, reason: 'all-kml-times-valid' };
+    return ordered;
+  }
+
+  const cadenceMs = RADAR_CADENCE_MINUTES * 60 * 1000;
+  const latestMs = Math.floor(referenceMs / cadenceMs) * cadenceMs;
+  ordered.forEach((frame, index) => {
+    if (!Number.isFinite(Date.parse(frame.time || ''))) {
+      frame.rawTime = frame.rawTime || null;
+      frame.time = new Date(latestMs - (ordered.length - 1 - index) * cadenceMs).toISOString();
+      frame.timeSource = 'missing-time-from-kml-document';
+    }
+  });
+  diagnostics.timeRepair = {
+    applied: true,
+    reason: 'missing-times-only',
+    repairedCount: missing.length,
+    frameCount: ordered.length,
+    referenceTime: new Date(referenceMs).toISOString(),
+    cadenceMinutes: RADAR_CADENCE_MINUTES
+  };
+  return ordered;
+}
+
+function dedupeFrames(frames) {
+  const map = new Map();
+  for (const frame of frames) map.set(frame.href, frame);
+  return [...map.values()].sort((a, b) => {
+    const at = a.time ? Date.parse(a.time) : 0;
+    const bt = b.time ? Date.parse(b.time) : 0;
+    return at - bt || a.href.localeCompare(b.href);
+  });
+}
+
+function resolveUrl(value, base) {
+  return new URL(value.trim(), base).toString();
+}
+
+function isAllowedHkoUrl(value) {
+  try {
+    const url = new URL(value);
+    return ['www.weather.gov.hk', 'www.hko.gov.hk', 'data.weather.gov.hk'].includes(url.hostname);
+  } catch { return false; }
+}
+
+function isAllowedRadarImage(value) {
+  try {
+    const url = new URL(value);
+    return isAllowedHkoUrl(value)
+      && /\/wxinfo\/radars\//i.test(url.pathname)
+      && /\.(?:png|gif|jpe?g|webp)$/i.test(url.pathname);
+  } catch { return false; }
+}
+
+function decodeXml(value) {
+  return String(value)
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function encodeUrl(value) {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeUrl(value) {
+  const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+// ---------------------------------------------------------------------------
+// Nowcast CSV parsing and shared helpers
+// ---------------------------------------------------------------------------
 
 function parseNowcastCSV(text) {
   const rows = parseCSV(text.replace(/^\uFEFF/, ''))
