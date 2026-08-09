@@ -23,19 +23,37 @@ jobs:
           echo '--- KML / 2km references in page ---'
           grep -Eio '.{0,180}(kml|2km|R4_GIS).{0,240}' /tmp/page.html | head -100 || true
 
-      - name: Inspect official KML target from page
+      - name: Inspect 2 km root and server KML
         shell: bash
         run: |
           set -uo pipefail
-          KML='https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064k.kml'
-          code=$(curl -A 'Mozilla/5.0' -L -sS -D /tmp/headers -o /tmp/radar2.kml -w '%{http_code}' "$KML" || true)
-          echo "HTTP $code bytes $(wc -c < /tmp/radar2.kml)"
-          cat /tmp/headers | grep -Ei 'content-type|last-modified|date:' || true
-          echo '--- KML body ---'
-          head -c 12000 /tmp/radar2.kml
-          echo
-          echo '--- href/time/bounds summary ---'
-          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/radar2.kml | head -120 || true
+          ROOT='https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064k.kml'
+          SERVER='https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/server_Radar_064k.kml'
+          curl -A 'Mozilla/5.0' -fsSL -D /tmp/root.headers "$ROOT" -o /tmp/root.kml
+          curl -A 'Mozilla/5.0' -fsSL -D /tmp/server.headers "$SERVER" -o /tmp/server.kml
+          echo "root bytes $(wc -c < /tmp/root.kml), server bytes $(wc -c < /tmp/server.kml)"
+          echo '--- server headers ---'
+          grep -Ei 'content-type|last-modified|date:' /tmp/server.headers || true
+          echo '--- server href/time/bounds ---'
+          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/server.kml | head -160 || true
+          echo '--- server descriptions / names ---'
+          grep -Eio '<(name|description)>[^<]+' /tmp/server.kml | head -80 || true
+
+      - name: Compare with current HKO image index
+        shell: bash
+        run: |
+          set -uo pipefail
+          JSON='https://www.hko.gov.hk/wxinfo/radars/temp_json/nradar_img.json'
+          curl -A 'Mozilla/5.0' -fsSL "$JSON" -o /tmp/index.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/index.json'))
+          print('top keys', list(data)[:20])
+          for k,v in data.items() if isinstance(data,dict) else []:
+              s=str(v)
+              if '2km' in s.lower() or '064' in s:
+                  print(k, s[:3000])
+          PY
 
       - name: Compare current 3 km GIS KML
         shell: bash
@@ -44,4 +62,4 @@ jobs:
           KML='https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064.kml'
           curl -A 'Mozilla/5.0' -fsSL "$KML" -o /tmp/radar3.kml
           echo "3km bytes $(wc -c < /tmp/radar3.kml)"
-          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/radar3.kml | head -40 || true
+          grep -Eio '<(href|when|north|south|east|west)>[^<]+' /tmp/radar3.kml | head -60 || true
