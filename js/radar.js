@@ -1,5 +1,5 @@
 import { fetchRadarFrames } from './api.js';
-import { RADAR_CONTRACT_VERSION } from './config.js';
+import { APP_VERSION, RADAR_CONTRACT_VERSION } from './config.js';
 import { state } from './state.js';
 import { clamp, formatDateTime, isMobileLayout } from './utils.js';
 import { setBadge, setSheetMode, toast } from './ui.js';
@@ -48,10 +48,7 @@ export async function toggleRadar(enabled) {
   }
 
   state.layers.radar = true;
-  if (isMobileLayout()) {
-    previousSheetMode ||= state.sheet.mode;
-    setSheetMode('peek', { persist:false, offset:false });
-  }
+  collapseSheetForRadar();
   await loadRadarFrames({ preserveTime:false });
 }
 
@@ -60,9 +57,11 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
   stopPlayback();
   clearTimeout(refreshTimer);
 
-  const previousFrame = state.radar.frames[state.radar.index] || null;
+  const previousFrames = state.radar.frames;
+  const previousIndex = state.radar.index;
+  const previousFrame = previousFrames[previousIndex] || null;
   const previousTime = previousFrame?.time || null;
-  const wasLatest = state.radar.frames.length > 0 && state.radar.index === state.radar.frames.length - 1;
+  const wasLatest = previousFrames.length > 0 && previousIndex === previousFrames.length - 1;
   if (!quiet) setBadge('radar','loading','RADAR');
   setRadarBusy(true);
 
@@ -79,18 +78,31 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
     }
 
     await showRadarFrame();
+    collapseSheetForRadar();
     configureTimeline(data);
     preloadRecentFrames(data.frames);
     setBadge('radar','ok','RADAR');
     scheduleRadarRefresh();
   } catch (error) {
-    removeRadarLayer();
-    state.radar.frames = [];
-    configureTimeline(null);
-    setBadge('radar','error','RADAR');
-    if (!quiet) toast(`雷達載入失敗：${error.message}`);
+    if (quiet && state.radar.layer && previousFrames.length) {
+      state.radar.frames = previousFrames;
+      state.radar.index = clamp(previousIndex, 0, previousFrames.length - 1);
+      configureTimeline(null);
+      updateTimelineLabels();
+      setBadge('radar','ok','RADAR');
+      scheduleRadarRefresh();
+    } else {
+      removeRadarLayer();
+      state.radar.frames = [];
+      state.radar.index = 0;
+      configureTimeline(null);
+      restoreSheetAfterRadarFailure();
+      setBadge('radar','error','RADAR');
+      if (!quiet) toast(`雷達載入失敗：${error.message}`);
+    }
   } finally {
     setRadarBusy(false);
+    setTimelineLoading(false);
   }
 }
 
@@ -211,6 +223,17 @@ export function clearRadar({ restoreSheet = false } = {}) {
     previousSheetMode = null;
     setSheetMode(restore, { persist:false, offset:false });
   }
+}
+
+function collapseSheetForRadar() {
+  if (!isMobileLayout()) return;
+  previousSheetMode ||= state.sheet.mode;
+  if (state.sheet.mode !== 'peek') setSheetMode('peek', { persist:false, offset:false });
+}
+
+function restoreSheetAfterRadarFailure() {
+  if (!isMobileLayout() || !previousSheetMode) return;
+  if (state.sheet.mode === 'peek') setSheetMode(previousSheetMode, { persist:false, offset:false });
 }
 
 function removeRadarLayer() {
@@ -352,6 +375,7 @@ function ensureRadarUi() {
   if (controlsReady) return;
   controlsReady = true;
   ensureRadarStyles();
+  document.title = `香港定點雨量預報 v${APP_VERSION}`;
 
   const timeline = document.getElementById('radar-timeline');
   if (timeline) {
@@ -392,6 +416,10 @@ function ensureRadarUi() {
 
   const note = document.getElementById('radar-status-note');
   const section = note?.closest('section');
+  if (section) {
+    const heading = section.querySelector('.panel-title');
+    if (heading) heading.textContent = '雨量雷達';
+  }
   if (section && !document.getElementById('radar-data-mode')) {
     const modeRow = document.createElement('div');
     modeRow.className = 'setting-row';
