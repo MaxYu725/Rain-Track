@@ -15,6 +15,20 @@
 - 舊 KML 端點只保留在 probe 診斷資訊，標記為 `deprecated-not-queried`，不再作 Live fallback。
 - Radar Contract 維持 v1.0；前端 v1.6.0 無需修改。
 
+
+## v1.6.1 Live Radar Integration Fix
+
+### Live 雷達驗證
+- 以 390×844 手機 viewport 對正式 Worker v2.4.2 執行 Live Radar smoke test。
+- 64 km／256 km 均成功取得20幀，實際 JPEG Overlay 可載入；播放、時間軸、範圍切換及透明度控制通過。
+
+### UI／穩定性
+- 更新雷達來源文案，移除已淘汰的 KML 描述。
+- 首次 Live Radar 載入失敗時自動取消雷達開關，避免 UI 顯示已啟用但地圖沒有圖層。
+- 雷達範圍及透明度加入本機保存。
+- 設定抽屜標題及關閉按鈕固定在捲動頂部，改善手機長設定頁操作。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.1`。
+
 ## v1.6.0 Rain Radar Phase A + B
 
 ### 雷達資料

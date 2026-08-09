@@ -34,6 +34,15 @@ function loadInitialPoint() {
   return { ...DEFAULT_POINT, source:'default' };
 }
 
+function loadRadarRange() {
+  return localStorage.getItem('hkRainRadarRange') === '256' ? 256 : 64;
+}
+
+function loadRadarOpacity() {
+  const value = Number(localStorage.getItem('hkRainRadarOpacity'));
+  return Number.isFinite(value) && value >= 0 && value <= 1 ? value : .68;
+}
+
 function loadSavedPoints() {
   const current = loadJSON('hkRainSavedPoints', null);
   if (Array.isArray(current)) return current;
@@ -63,7 +72,7 @@ export const state = {
   map: null,
   mapLayers: {},
   sheet: { mode:localStorage.getItem('hkRainSheetMode') || 'half', dragging:false, startY:0, startHeight:0, moved:false, userMode:localStorage.getItem('hkRainSheetUserMode') === '1' },
-  radar: { frames:[], index:0, range:64, opacity:.68, layer:null },
+  radar: { frames:[], index:0, range:loadRadarRange(), opacity:loadRadarOpacity(), layer:null },
   refreshTimer: null,
   lastSuccessfulRefreshAt: 0,
   drawerTrigger: null,

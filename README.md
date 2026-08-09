@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.6.0
+# 香港定點雨量預報 v1.6.1
 
 ## 部署內容
 
@@ -31,6 +31,17 @@ Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目�
 - 雷達影像仍經 `/api/radar/image` 代理，並限制為香港天文台官方 radar image 路徑。
 - 舊 KML 僅保留為診斷資訊，不會被查詢或用作 Live fallback。
 - Radar Contract 維持 v1.0，因此 v1.6.0 前端毋須修改。
+
+
+## v1.6.1 Live Radar Integration Fix
+
+- 實機／Chromium 手機 smoke test 已驗證 HKO Live 64 km、256 km 雷達影像均可經 Worker proxy 載入。
+- 驗證播放／暫停、時間軸、64／256 km 切換、透明度控制及關閉圖層流程。
+- 雷達設定說明由舊 KML 文案改為 HKO 現行即時雷達影像索引。
+- 雷達首次載入失敗時會自動關閉雷達狀態及開關，並恢復原本 Bottom Sheet。
+- 記住 64／256 km 範圍及雷達透明度。
+- 設定抽屜標題／關閉按鈕改為 sticky，長頁面捲動後仍可操作。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.1`。
 
 ## v1.6.0 Rain Radar Phase A + B
 
