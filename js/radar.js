@@ -27,7 +27,7 @@ export function updateRadarCapability(capabilities = {}, contract = null) {
   const note = document.getElementById('radar-status-note');
   if (note) {
     note.textContent = state.worker.capabilities.radarFrames
-      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。預設使用 HKO 即時 KML，亦可切換測試動畫。`
+      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。預設使用 HKO 現行即時雷達影像索引，亦可切換測試動畫。`
       : `Foundation 已定義雷達 API 契約 v${RADAR_CONTRACT_VERSION}；目前 Worker 尚未啟用雷達資料。`;
   }
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
@@ -95,6 +95,9 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
       removeRadarLayer();
       state.radar.frames = [];
       state.radar.index = 0;
+      state.layers.radar = false;
+      const toggle = document.getElementById('toggle-radar');
+      if (toggle) toggle.checked = false;
       configureTimeline(null);
       restoreSheetAfterRadarFailure();
       setBadge('radar','error','RADAR');
@@ -195,6 +198,7 @@ export function setRadarIndex(value) {
 
 export function changeRadarRange(value) {
   state.radar.range = String(value) === '256' ? 256 : 64;
+  localStorage.setItem('hkRainRadarRange', String(state.radar.range));
   const modeChip = document.getElementById('radar-mode-chip');
   if (modeChip && radarMode !== 'test') modeChip.textContent = `${state.radar.range} km`;
   if (state.layers.radar) loadRadarFrames({ preserveTime:false });
@@ -202,6 +206,7 @@ export function changeRadarRange(value) {
 
 export function setRadarOpacity(value) {
   state.radar.opacity = clamp(Number(value) / 100, 0, 1);
+  localStorage.setItem('hkRainRadarOpacity', String(state.radar.opacity));
   const label = document.getElementById('radar-opacity-value');
   if (label) label.textContent = `${Math.round(state.radar.opacity * 100)}%`;
   state.radar.layer?.setOpacity(state.radar.opacity);
@@ -232,8 +237,10 @@ function collapseSheetForRadar() {
 }
 
 function restoreSheetAfterRadarFailure() {
-  if (!isMobileLayout() || !previousSheetMode) return;
-  if (state.sheet.mode === 'peek') setSheetMode(previousSheetMode, { persist:false, offset:false });
+  if (!previousSheetMode) return;
+  const restore = previousSheetMode;
+  previousSheetMode = null;
+  if (isMobileLayout() && state.sheet.mode === 'peek') setSheetMode(restore, { persist:false, offset:false });
 }
 
 function removeRadarLayer() {
