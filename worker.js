@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.4.2
+ * Hong Kong Point Rainfall Forecast Worker v2.4.3
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -14,7 +14,7 @@
  *   GET /probe/radar?range=64|256&mode=live|test
  */
 
-const VERSION = '2.4.2';
+const VERSION = '2.4.3';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
 const RADAR_CACHE_TTL_SECONDS = 60;
@@ -24,23 +24,17 @@ const RADAR_MAX_FRAMES = 30;
 const RADAR_LIVE_MAX_AGE_MINUTES = 30;
 const RADAR_LIVE_MAX_FUTURE_MINUTES = 10;
 const RADAR_LIVE_HISTORY_MINUTES = 150;
-const HKO_RADAR_INDEX = 'https://www.hko.gov.hk/wxinfo/radars/temp_json/nradar_img.json';
-const HKO_RADAR_IMAGE_ROOT = 'https://www.hko.gov.hk/wxinfo/radars/';
 
 const RADAR = Object.freeze({
   64: {
-    feedKey: 'range2',
-    pathPrefix: 'rad_064_png/',
-    product: '64 km range, 3 km height',
-    legacyKmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064.kml',
-    fallbackBounds: { north: 22.89, south: 21.72, east: 114.82, west: 113.53 }
+    kmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064.kml',
+    product: '64 km range, 3 km height, GIS overlay',
+    fallbackBounds: { north: 22.87770, south: 21.72659, east: 114.79378, west: 113.54956 }
   },
   256: {
-    feedKey: 'range0',
-    pathPrefix: 'rad_256_png/',
-    product: '256 km range, 3 km height',
-    legacyKmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/radar_256_kml/Radar_256.kml',
-    fallbackBounds: { north: 24.61, south: 19.99, east: 116.67, west: 111.68 }
+    kmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_256/R4_GIS_server_Radar_256.kml',
+    product: '256 km range, 3 km height, GIS overlay',
+    fallbackBounds: { north: 24.58614, south: 19.98259, east: 116.66013, west: 111.68321 }
   }
 });
 
@@ -512,7 +506,7 @@ function insideCoverage(lat, lon, grid) {
 }
 
 // ---------------------------------------------------------------------------
-// Current HKO radar JSON feed, image proxy and deterministic test frames
+// Current HKO R4 GIS radar KML, image proxy and deterministic test frames
 // ---------------------------------------------------------------------------
 
 async function handleRadarFrames(range, mode, probe) {
@@ -520,16 +514,15 @@ async function handleRadarFrames(range, mode, probe) {
 
   const source = RADAR[range];
   const diagnostics = {
-    attempts: [], errors: [], rejected: [],
-    policy: `Current HKO radar JSON; latest frame <= ${RADAR_LIVE_MAX_AGE_MINUTES} min old; history <= ${RADAR_LIVE_HISTORY_MINUTES} min`,
+    attempts: [], documents: [], errors: [], rejected: [],
+    policy: `Current HKO R4 GIS KML; latest frame <= ${RADAR_LIVE_MAX_AGE_MINUTES} min old; history <= ${RADAR_LIVE_HISTORY_MINUTES} min`,
     mode: 'live',
-    feedKey: source.feedKey,
     product: source.product,
-    legacyKml: { root: source.legacyKmlRoot, status: 'deprecated-not-queried' }
+    transparentOverlay: true
   };
   let frames = [];
   try {
-    frames = await collectCurrentRadarFrames(source, range, diagnostics);
+    frames = await collectKmlFrames(source.kmlRoot, range, diagnostics);
   } catch (error) {
     diagnostics.errors.push(safeError(error));
   }
@@ -542,21 +535,22 @@ async function handleRadarFrames(range, mode, probe) {
     contractVersion: RADAR_CONTRACT.version,
     rangeKm: range,
     mode: 'live',
-    source: 'Hong Kong Observatory current radar image index',
-    root: HKO_RADAR_INDEX,
+    source: 'Hong Kong Observatory current GIS radar KML',
+    root: source.kmlRoot,
     product: source.product,
+    renderMode: 'transparent-georeferenced-overlay',
     generatedAt: new Date().toISOString(),
     issueTime,
     cadenceMinutes: RADAR_CADENCE_MINUTES,
     frameCount: frames.length,
-    error: frames.length ? null : 'HKO live radar source is stale or unavailable',
+    error: frames.length ? null : 'HKO live GIS radar source is stale or unavailable',
     frames: frames.map((frame, index) => ({
       id: encodeUrl(frame.href),
       index,
       time: frame.time,
       name: frame.name || `Radar ${index + 1}`,
       bounds: frame.bounds || source.fallbackBounds,
-      source: frame.source,
+      source: 'hko-current-gis-kml',
       timeSource: frame.timeSource || null,
       rawTime: probe ? (frame.rawTime || null) : undefined,
       imageUrl: `/api/radar/image?id=${encodeURIComponent(encodeUrl(frame.href))}`
@@ -569,77 +563,6 @@ async function handleRadarFrames(range, mode, probe) {
   }
 
   return json(payload, frames.length ? 200 : 502, { 'Cache-Control': `public, max-age=${RADAR_CACHE_TTL_SECONDS}` });
-}
-
-async function collectCurrentRadarFrames(source, range, diagnostics) {
-  const response = await fetchCached(HKO_RADAR_INDEX, RADAR_CACHE_TTL_SECONDS, 'application/json,text/plain,*/*');
-  const text = await response.text();
-  diagnostics.attempts.push({
-    url: HKO_RADAR_INDEX,
-    status: response.status,
-    bytes: text.length,
-    lastModified: response.headers.get('last-modified'),
-    date: response.headers.get('date')
-  });
-
-  let data;
-  try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error('HKO radar index returned invalid JSON');
-  }
-
-  const items = data?.radar?.[source.feedKey]?.image;
-  if (!Array.isArray(items) || !items.length) {
-    throw new Error(`HKO radar index has no ${source.feedKey} image list`);
-  }
-
-  diagnostics.index = {
-    feedKey: source.feedKey,
-    inputCount: items.length,
-    pathPrefix: source.pathPrefix
-  };
-
-  const frames = [];
-  for (const item of items) {
-    const relativePath = extractCurrentRadarPath(item);
-    if (!relativePath) {
-      diagnostics.rejected.push({ raw: String(item).slice(0, 180), reason: 'unparseable-index-entry' });
-      continue;
-    }
-    if (!relativePath.startsWith(source.pathPrefix)) {
-      diagnostics.rejected.push({ raw: relativePath, reason: 'unexpected-product-path' });
-      continue;
-    }
-
-    const href = resolveUrl(relativePath, HKO_RADAR_IMAGE_ROOT);
-    if (!isAllowedRadarImage(href)) {
-      diagnostics.rejected.push({ raw: relativePath, reason: 'image-url-not-allowed' });
-      continue;
-    }
-
-    const time = parseTimeFromText(relativePath);
-    if (!time) {
-      diagnostics.rejected.push({ raw: relativePath, reason: 'missing-time-in-filename' });
-      continue;
-    }
-
-    frames.push({
-      href,
-      bounds: source.fallbackBounds,
-      name: `${range} km radar`,
-      time,
-      rawTime: relativePath,
-      timeSource: 'filename-hkt',
-      source: 'hko-current-json'
-    });
-  }
-  return frames;
-}
-
-function extractCurrentRadarPath(value) {
-  const match = String(value || '').match(/["']([^"']+\.(?:png|gif|jpe?g|webp))["']/i);
-  return match ? match[1].trim() : null;
 }
 
 function validateCurrentRadarFrames(frames, diagnostics) {
@@ -813,8 +736,10 @@ async function collectKmlFrames(rootUrl, range, diagnostics) {
       const name = decodeXml(tagText(block, 'name') || '');
       const kmlTime = parseKmlTime(block);
       const textTime = parseTimeFromText(`${name} ${href}`);
-      const time = kmlTime || textTime;
-      frames.push({ href, bounds, name, time, rawTime: time, timeSource: kmlTime ? 'kml' : (textTime ? 'text' : null), source: 'kml' });
+      // R4 GIS KML labels its timestamps as HKT while the <when> value ends in Z.
+      // The filename/name carries the unambiguous Hong Kong local radar time.
+      const time = textTime || kmlTime;
+      frames.push({ href, bounds, name, time, rawTime: time, timeSource: textTime ? 'filename-hkt' : (kmlTime ? 'kml' : null), source: 'kml' });
     }
 
     for (const block of links) {

@@ -1,14 +1,12 @@
 import { fetchRadarFrames } from './api.js';
 import { APP_VERSION, RADAR_CONTRACT_VERSION } from './config.js';
 import { state } from './state.js';
-import { setRadarSurfaceActive } from './map.js';
 import { clamp, formatDateTime, isMobileLayout } from './utils.js';
 import { setBadge, setSheetMode, toast } from './ui.js';
 
 const DEFAULT_PLAYBACK_DELAY = 750;
 const RADAR_REFRESH_MS = 5.5 * 60 * 1000;
 const RECENT_PRELOAD_COUNT = 12;
-const LIVE_CROP_CACHE_LIMIT = 36;
 
 let displayToken = 0;
 let preloadToken = 0;
@@ -16,7 +14,6 @@ let playTimer = null;
 let refreshTimer = null;
 let previousSheetMode = null;
 let controlsReady = false;
-const liveCropCache = new Map();
 let radarMode = localStorage.getItem('hkRainRadarMode') === 'test' ? 'test' : 'live';
 let playbackDelay = normalizePlaybackDelay(localStorage.getItem('hkRainRadarSpeed'));
 
@@ -30,7 +27,7 @@ export function updateRadarCapability(capabilities = {}, contract = null) {
   const note = document.getElementById('radar-status-note');
   if (note) {
     note.textContent = state.worker.capabilities.radarFrames
-      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。預設使用 HKO 現行即時雷達影像索引，亦可切換測試動畫。`
+      ? `Worker 已提供雷達幀；契約版本 ${state.worker.radarContract?.version || '不詳'}。Live 模式使用 HKO GIS 透明雷達回波，保留現有地圖及定點標記。`
       : `Foundation 已定義雷達 API 契約 v${RADAR_CONTRACT_VERSION}；目前 Worker 尚未啟用雷達資料。`;
   }
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
@@ -96,8 +93,6 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
       scheduleRadarRefresh();
     } else {
       removeRadarLayer();
-      setRadarSurfaceActive(false);
-      clearLiveCropCache();
       state.radar.frames = [];
       state.radar.index = 0;
       state.layers.radar = false;
@@ -134,26 +129,34 @@ async function showRadarFrame() {
   const frame = state.radar.frames[state.radar.index];
   if (!frame || !window.L || !state.map) return;
   const token = ++displayToken;
-  const rawUrl = resolveImageUrl(frame.imageUrl);
+  const url = resolveImageUrl(frame.imageUrl);
   setTimelineLoading(true);
-  const prepared = radarMode === 'live'
-    ? await prepareLiveRadarSurface(rawUrl)
-    : { url:rawUrl, loaded:await preloadImage(rawUrl), cropped:false };
+  const loaded = await preloadImage(url);
   if (token !== displayToken) return;
-  if (!prepared.loaded) throw new Error('雷達影像載入失敗');
-  setRadarSurfaceActive(radarMode === 'live');
+  if (!loaded) throw new Error('雷達影像載入失敗');
+
+  ensureRadarPane();
   const bounds = [[frame.bounds.south,frame.bounds.west],[frame.bounds.north,frame.bounds.east]];
-  const next = window.L.imageOverlay(prepared.url, bounds, {
+  const next = window.L.imageOverlay(url, bounds, {
     opacity:state.radar.opacity,
     interactive:false,
-    className:radarMode === 'live' ? 'rain-radar-overlay radar-live-surface' : 'rain-radar-overlay radar-test-overlay'
+    pane:'radarPane',
+    className:`rain-radar-overlay ${radarMode === 'live' ? 'live-radar-overlay' : 'test-radar-overlay'}`
   }).addTo(state.map);
+
   if (state.radar.layer) state.map.removeLayer(state.radar.layer);
   state.radar.layer = next;
-  state.radar.renderedUrl = prepared.url;
   updateTimelineLabels(frame);
   setTimelineLoading(false);
   preloadAdjacentFrames();
+}
+
+function ensureRadarPane() {
+  if (!state.map) return;
+  let pane = state.map.getPane('radarPane');
+  if (!pane) pane = state.map.createPane('radarPane');
+  pane.style.zIndex = '350';
+  pane.style.pointerEvents = 'none';
 }
 
 function configureTimeline(data) {
@@ -227,8 +230,6 @@ export function clearRadar({ restoreSheet = false } = {}) {
   state.radar.frames = [];
   state.radar.index = 0;
   removeRadarLayer();
-  setRadarSurfaceActive(false);
-  clearLiveCropCache();
   document.getElementById('radar-timeline')?.classList.add('hidden');
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
 
@@ -359,11 +360,7 @@ function preloadRecentFrames(frames) {
 function preloadAdjacentFrames() {
   const indexes = [state.radar.index - 2, state.radar.index - 1, state.radar.index + 1, state.radar.index + 2]
     .filter(index => index >= 0 && index < state.radar.frames.length);
-  indexes.forEach(index => {
-    const url = resolveImageUrl(state.radar.frames[index].imageUrl);
-    const task = radarMode === 'live' ? prepareLiveRadarSurface(url) : preloadImage(url);
-    Promise.resolve(task).catch(() => false);
-  });
+  indexes.forEach(index => preloadImage(resolveImageUrl(state.radar.frames[index].imageUrl)).catch(() => false));
 }
 
 function resolveImageUrl(imageUrl) {
@@ -372,35 +369,7 @@ function resolveImageUrl(imageUrl) {
     : state.apiBase + (imageUrl.startsWith('/') ? '' : '/') + imageUrl;
 }
 
-async function prepareLiveRadarSurface(url) {
-  const cached = liveCropCache.get(url);
-  if (cached) {
-    liveCropCache.delete(url);
-    liveCropCache.set(url, cached);
-    return { url:cached, loaded:true, cropped:true };
-  }
-  const image = await loadImageElement(url);
-  const width = image.naturalWidth;
-  const height = image.naturalHeight;
-  if (!width || !height) throw new Error('雷達影像尺寸無效');
-  const needsCrop = width > Math.round(height * 1.08);
-  if (!needsCrop) return { url, loaded:true, cropped:false };
-  const cropWidth = Math.min(width, height);
-  const canvas = document.createElement('canvas');
-  canvas.width = cropWidth;
-  canvas.height = height;
-  const context = canvas.getContext('2d', { alpha:false });
-  if (!context) throw new Error('瀏覽器無法建立雷達裁圖畫布');
-  context.drawImage(image, 0, 0, cropWidth, height, 0, 0, cropWidth, height);
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) throw new Error('雷達地圖裁圖失敗');
-  const objectUrl = URL.createObjectURL(blob);
-  liveCropCache.set(url, objectUrl);
-  trimLiveCropCache();
-  return { url:objectUrl, loaded:true, cropped:true };
-}
-
-function loadImageElement(url) {
+function loadImage(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.crossOrigin = 'anonymous';
@@ -410,26 +379,8 @@ function loadImageElement(url) {
   });
 }
 
-async function preloadImage(url) {
-  try { await loadImageElement(url); return true; } catch { return false; }
-}
-
-function trimLiveCropCache() {
-  while (liveCropCache.size > LIVE_CROP_CACHE_LIMIT) {
-    const oldestKey = liveCropCache.keys().next().value;
-    const objectUrl = liveCropCache.get(oldestKey);
-    if (objectUrl === state.radar.renderedUrl) break;
-    liveCropCache.delete(oldestKey);
-    if (objectUrl?.startsWith('blob:')) URL.revokeObjectURL(objectUrl);
-  }
-}
-
-function clearLiveCropCache() {
-  for (const objectUrl of liveCropCache.values()) {
-    if (objectUrl?.startsWith('blob:')) URL.revokeObjectURL(objectUrl);
-  }
-  liveCropCache.clear();
-  state.radar.renderedUrl = null;
+function preloadImage(url) {
+  return loadImage(url).then(() => true).catch(() => false);
 }
 
 function setRadarBusy(busy) {
