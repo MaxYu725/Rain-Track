@@ -1,0 +1,37 @@
+name: Probe HKO R4 GIS radar
+
+on:
+  push:
+    branches:
+      - feature/v1.6.2-radar-rendering-fix
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch 64 and 256 km GIS KML
+        run: |
+          set -euxo pipefail
+          for range in 064 256; do
+            base="https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_${range}"
+            kml="$base/R4_GIS_server_Radar_${range}.kml"
+            curl -fsSL "$kml?t=$(date +%s)" -o "/tmp/${range}.kml"
+            echo "===== $range KML ====="
+            cat "/tmp/${range}.kml"
+            href=$(python3 - "$range" <<'PY'
+          import re, sys
+          text=open('/tmp/'+sys.argv[1]+'.kml').read()
+          m=re.search(r'<href>\s*(.*?)\s*</href>', text, re.S|re.I)
+          print(m.group(1).strip() if m else '')
+          PY
+            )
+            echo "HREF=$href"
+            image="$base/$href"
+            curl -fsSL "$image" -o "/tmp/${range}.img"
+            echo "IMAGE=$image"
+            file "/tmp/${range}.img"
+            identify "/tmp/${range}.img" || true
+          done
