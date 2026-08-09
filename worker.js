@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.4.0
+ * Hong Kong Point Rainfall Forecast Worker v2.4.1
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -14,13 +14,15 @@
  *   GET /probe/radar?range=64|256&mode=live|test
  */
 
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
 const RADAR_CACHE_TTL_SECONDS = 180;
 const RADAR_IMAGE_CACHE_TTL_SECONDS = 86400;
 const RADAR_CADENCE_MINUTES = 6;
 const RADAR_MAX_FRAMES = 30;
+const RADAR_LIVE_MAX_AGE_MINUTES = 30;
+const RADAR_LIVE_MAX_FUTURE_MINUTES = 10;
 
 const RADAR = Object.freeze({
   64: {
@@ -152,7 +154,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.1)',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -510,7 +512,7 @@ async function handleRadarFrames(range, mode, probe) {
   const source = RADAR[range];
   const diagnostics = {
     attempts: [], documents: [], errors: [], rejected: [],
-    policy: 'KML-only; reject stale or unverifiable images',
+    policy: `KML-only; live frames must be within ${RADAR_LIVE_MAX_AGE_MINUTES} minutes of current time`,
     mode: 'live'
   };
   let frames = [];
@@ -535,7 +537,7 @@ async function handleRadarFrames(range, mode, probe) {
     issueTime,
     cadenceMinutes: RADAR_CADENCE_MINUTES,
     frameCount: frames.length,
-    error: frames.length ? null : 'No fresh, verifiable HKO radar frames were found',
+    error: frames.length ? null : 'HKO live radar source is stale or unavailable',
     frames: frames.map((frame, index) => ({
       id: encodeUrl(frame.href),
       index,
@@ -751,9 +753,13 @@ function parseHttpDate(value) {
 }
 
 function validateRadarFrames(frames, diagnostics) {
-  const referenceMs = Date.parse(diagnostics.referenceTime || '') || Date.now();
-  const maxPastMs = 36 * 60 * 60 * 1000;
-  const maxFutureMs = 60 * 60 * 1000;
+  const nowMs = Date.now();
+  const sourceReferenceMs = Date.parse(diagnostics.referenceTime || '');
+  const maxPastMs = RADAR_LIVE_MAX_AGE_MINUTES * 60 * 1000;
+  const maxFutureMs = RADAR_LIVE_MAX_FUTURE_MINUTES * 60 * 1000;
+  const sourceReferenceFresh = Number.isFinite(sourceReferenceMs)
+    && sourceReferenceMs >= nowMs - maxPastMs
+    && sourceReferenceMs <= nowMs + maxFutureMs;
   const accepted = [];
 
   for (const frame of frames) {
@@ -761,22 +767,46 @@ function validateRadarFrames(frames, diagnostics) {
       diagnostics.rejected.push({ href: frame.href, reason: 'non-kml-source' });
       continue;
     }
+
     const explicitMs = Date.parse(frame.time || '');
     if (Number.isFinite(explicitMs)) {
-      if (explicitMs < referenceMs - maxPastMs || explicitMs > referenceMs + maxFutureMs) {
-        diagnostics.rejected.push({ href: frame.href, rawTime: frame.time, reason: 'stale-or-future-explicit-time' });
+      if (explicitMs < nowMs - maxPastMs || explicitMs > nowMs + maxFutureMs) {
+        diagnostics.rejected.push({
+          href: frame.href,
+          rawTime: frame.time,
+          ageMinutes: Math.round((nowMs - explicitMs) / 60000),
+          reason: 'stale-or-future-live-frame'
+        });
         continue;
       }
+    } else if (!sourceReferenceFresh) {
+      diagnostics.rejected.push({
+        href: frame.href,
+        rawTime: frame.time || null,
+        reason: 'missing-frame-time-with-stale-source-document'
+      });
+      continue;
     }
+
     accepted.push(frame);
   }
 
+  diagnostics.sourceFreshness = {
+    sourceReferenceTime: Number.isFinite(sourceReferenceMs) ? new Date(sourceReferenceMs).toISOString() : null,
+    sourceReferenceAgeMinutes: Number.isFinite(sourceReferenceMs)
+      ? Math.round((nowMs - sourceReferenceMs) / 60000)
+      : null,
+    sourceReferenceFresh,
+    liveMaxAgeMinutes: RADAR_LIVE_MAX_AGE_MINUTES,
+    liveMaxFutureMinutes: RADAR_LIVE_MAX_FUTURE_MINUTES
+  };
   diagnostics.validation = {
     inputCount: frames.length,
     acceptedCount: accepted.length,
     rejectedCount: diagnostics.rejected.length,
-    referenceTime: new Date(referenceMs).toISOString(),
-    freshnessWindowHours: 36
+    referenceTime: new Date(nowMs).toISOString(),
+    sourceReferenceTime: Number.isFinite(sourceReferenceMs) ? new Date(sourceReferenceMs).toISOString() : null,
+    freshnessWindowMinutes: RADAR_LIVE_MAX_AGE_MINUTES
   };
   return accepted;
 }
