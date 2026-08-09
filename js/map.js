@@ -107,13 +107,35 @@ export function changeRadius(radiusKm) {
 
 export function centerHongKong() { state.map?.setView([22.35,114.15], 11); }
 
+export function setRadarSurfaceActive(active) {
+  if (!state.map) return;
+  state.radar.surfaceActive = Boolean(active);
+  const activeTiles = state.activeTiles === 'light' ? state.mapLayers.lightTiles : state.mapLayers.darkTiles;
+  const inactiveTiles = state.activeTiles === 'light' ? state.mapLayers.darkTiles : state.mapLayers.lightTiles;
+  if (state.radar.surfaceActive) {
+    if (state.map.hasLayer(activeTiles)) state.map.removeLayer(activeTiles);
+    if (state.map.hasLayer(inactiveTiles)) state.map.removeLayer(inactiveTiles);
+    state.map.getContainer()?.classList.add('radar-surface-active');
+    return;
+  }
+  if (state.map.hasLayer(inactiveTiles)) state.map.removeLayer(inactiveTiles);
+  if (!state.map.hasLayer(activeTiles)) activeTiles.addTo(state.map);
+  activeTiles.bringToBack();
+  state.map.getContainer()?.classList.remove('radar-surface-active');
+}
+
 export function toggleBasemap() {
   if (!state.map) return;
   const useLight = state.activeTiles !== 'light';
   const next = useLight ? state.mapLayers.lightTiles : state.mapLayers.darkTiles;
   const previous = useLight ? state.mapLayers.darkTiles : state.mapLayers.lightTiles;
   if (state.map.hasLayer(previous)) state.map.removeLayer(previous);
-  next.addTo(state.map); next.bringToBack();
+  if (state.radar.surfaceActive) {
+    if (state.map.hasLayer(next)) state.map.removeLayer(next);
+  } else {
+    if (!state.map.hasLayer(next)) next.addTo(state.map);
+    next.bringToBack();
+  }
   state.activeTiles = useLight ? 'light' : 'dark';
   localStorage.setItem('hkRainBasemap', state.activeTiles);
 }

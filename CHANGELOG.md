@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.2 Radar Rendering Fix
+
+- 修正 HKO 577×400 成品 JPEG 全幅壓入 bounds 造成雷達地圖橫向變形。
+- Live 幀裁成左側 400×400 地圖區域，再交給 Leaflet `imageOverlay`。
+- Live 模式暫停 CARTO 底圖，避免 HKO 內建地圖與 CARTO 形成雙影；TEST 模式仍為透明 Overlay。
+- 關閉、Live 載入失敗或切 TEST 時恢復底圖；裁圖 Blob 設快取及釋放。
+- App 升級至 v1.6.2；Worker 維持 v2.4.2。
+
 ## Worker v2.4.2 Current HKO Live Source
 
 ### Live 雷達來源
