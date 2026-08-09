@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.3 Radar UX Refinement
+
+- 分離雷達與定點預報的手機 freshness 顯示，避免把預報延遲誤解為雷達延遲。
+- 雷達狀態以最新幀時間計算，加入正常、稍有延遲、過舊及背景刷新失敗狀態。
+- 關閉雷達後恢復定點預報狀態。
+- 雷達時間軸加入最新幀年齡及精簡回波強弱示意圖例。
+- App / PWA cache 更新至 v1.6.3；Worker 維持 v2.4.3。
+
 ## v1.6.2 HKO GIS Radar Overlay
 
 ### 正確雷達圖層

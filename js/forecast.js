@@ -88,16 +88,24 @@ export function renderForecast({ cacheNotice = '' } = {}) {
   document.getElementById('save-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:save-point')));
   document.getElementById('share-point-button')?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('rain:share-point')));
 
-  const mobileState = quality.freshness.status === 'expired' || quality.freshness.status === 'stale'
-    ? 'error'
-    : quality.freshness.status === 'delayed' || quality.spatial.status === 'sensitive' ? 'loading' : 'ok';
-  const mobileLabel = quality.freshness.status !== 'normal' ? quality.freshness.label : quality.spatial.status === 'sensitive' ? quality.spatial.label : quality.freshness.label;
-  setMobileStatus(mobileState, mobileLabel);
+  if (!state.layers.radar) updateForecastMobileStatus(data);
   setBadge('point','ok','POINT');
   setBadge('hko', quality.freshness.status === 'expired' || quality.freshness.status === 'stale' ? 'error' : quality.freshness.status === 'delayed' ? 'loading' : 'ok', 'HKO');
   updateDataStatusDetail(data, quality, issueText, fetchedText, validUntilText, cacheNotice);
   applyAutomaticSheetMode(isDry, quality, periods);
   announce(`${state.selected.name}預報已更新。${summaryText}`);
+}
+
+export function updateForecastMobileStatus(data = state.forecast) {
+  if (!data) return;
+  const quality = normalizeQuality(data);
+  const mobileState = quality.freshness.status === 'expired' || quality.freshness.status === 'stale'
+    ? 'error'
+    : quality.freshness.status === 'delayed' || quality.spatial.status === 'sensitive' ? 'loading' : 'ok';
+  const mobileLabel = quality.freshness.status !== 'normal'
+    ? `預報${quality.freshness.label}`
+    : quality.spatial.status === 'sensitive' ? quality.spatial.label : '預報資料更新正常';
+  setMobileStatus(mobileState, mobileLabel);
 }
 
 function buildStatusPills(quality) {
