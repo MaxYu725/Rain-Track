@@ -1,0 +1,52 @@
+name: Finalize v1.6.2 GIS radar docs
+
+on:
+  push:
+    branches:
+      - feature/v1.6.2-radar-rendering-fix
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    if: ${{ !contains(github.event.head_commit.message, 'finalize v1.6.2 GIS radar docs') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1.6.2-radar-rendering-fix
+      - name: Update documentation and comments
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          readme = Path('README.md')
+          text = readme.read_text()
+          text = text.replace('`worker.js` v2.4.2', '`worker.js` v2.4.3')
+          start = text.index('## v1.6.2 Radar Rendering Fix')
+          end = text.index('\n## v1.6.1 Live Radar Integration Fix', start)
+          replacement = '''## v1.6.2 HKO GIS Radar Overlay\n\n- 實機截圖確認 HKO 完整雷達 JPEG 不適合直接作 Leaflet Overlay：成品圖包含底圖、時間及右側色板，會造成地圖重疊、泛藍及比例失真。\n- Worker v2.4.3 改用香港天文台 Regional Weather Information Portal 使用的現行 `R4_GIS` KML／PNG 雷達圖層。\n- 64 公里來源為 `R4_GIS_rad_064/R4_GIS_server_Radar_064.kml`，PNG 為 800×800；256 公里來源為 `R4_GIS_rad_256/R4_GIS_server_Radar_256.kml`，PNG 為 1900×1900。\n- 兩種 GIS PNG 均帶透明度資料，可直接疊在 CARTO／OpenStreetMap 底圖上，只顯示雷達回波，不再顯示 HKO 成品圖底圖、Logo、時間及色板。\n- 每個 GroundOverlay 使用 HKO KML 提供的 LatLonBox，64／256 公里分別使用其官方地理邊界。\n- R4 KML 的畫面名稱／檔名使用香港本地時間；Worker 優先從檔名解析 HKT，避免把 KML `<when>` 尾端 `Z` 誤當真正 UTC。\n- 保留最多20幀、約每6分鐘更新；Live 最新幀仍須通過30分鐘 freshness 驗證。\n- 前端加入專用 Leaflet `radarPane`（z-index 350），雷達位於底圖之上、定點及附近半徑向量之下；底圖切換仍可正常使用。\n- Radar Contract 維持 v1.0；TEST 模式、播放／暫停、時間軸、透明度及64／256公里切換保持相容。\n- App 版本更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。\n\n## Worker v2.4.3 Current HKO GIS Radar Source\n\n- Live 主來源改為 HKO 現行 `R4_GIS` KML；不再把 `temp_json/nradar_img.json` 的完整成品 JPEG 當作地理 Overlay。\n- `/api/radar/frames` 繼續輸出同一 Radar Contract v1.0，新增 `renderMode: transparent-georeferenced-overlay` 說明。\n- `/api/radar/image` 繼續作官方 HKO 雷達 PNG 安全代理。\n- 64 公里及256公里各提供20個 GroundOverlay；圖片本身含透明 palette (`tRNS`)。\n- Worker v2.4.3 需要手動重新部署到 `https://radar.max-yu.workers.dev`；GitHub Pages 部署不會自動更新 Cloudflare Worker。\n'''
+          text = text[:start] + replacement + text[end:]
+          text = text.replace('目前 Live 來源由 Worker v2.4.2 的現行 HKO JSON 影像索引提供。', '目前 Live 來源由 Worker v2.4.3 的現行 HKO R4 GIS KML／透明 PNG 提供。')
+          readme.write_text(text)
+
+          changelog = Path('CHANGELOG.md')
+          text = changelog.read_text()
+          start = text.index('## v1.6.2 Radar Rendering Fix')
+          end = text.index('\n## Worker v2.4.2 Current HKO Live Source', start)
+          replacement = '''## v1.6.2 HKO GIS Radar Overlay\n\n### 正確雷達圖層\n- 實機截圖確認完整 HKO JPEG 會把底圖、色板、時間及 Logo 一同疊加，造成比例失真及雙重地圖。\n- 研究 HKO Regional Weather Information Portal 後改用其現行 `R4_GIS` GroundOverlay。\n- 64 km：800×800 透明 PNG，官方 bounds `22.87770 / 21.72659 / 114.79378 / 113.54956`。\n- 256 km：1900×1900 透明 PNG，官方 bounds `24.58614 / 19.98259 / 116.66013 / 111.68321`。\n- PNG palette 含 `tRNS` 透明資料，因此 CARTO 底圖可保留，只有雷達回波覆蓋在地圖上。\n\n### Worker v2.4.3\n- Live `/api/radar/frames` 改由 HKO `R4_GIS_rad_064`／`R4_GIS_rad_256` KML 讀取20個 GroundOverlay。\n- 優先由檔名／畫面名稱解析香港時間，避免誤用 KML `<when>` 的 `Z` 尾碼。\n- 保留最新30分鐘 freshness、150分鐘動畫歷史及 Radar Contract v1.0。\n- 回應新增 `renderMode: transparent-georeferenced-overlay`。\n\n### 前端\n- Live 及 TEST 均使用專用 Leaflet `radarPane`（z-index 350）。\n- 移除先前試驗的 Canvas 裁圖、blob cache、隱藏 CARTO 及停用底圖切換做法。\n- App 更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。\n'''
+          text = text[:start] + replacement + text[end:]
+          changelog.write_text(text)
+
+          worker = Path('worker.js')
+          text = worker.read_text().replace('// Current HKO radar JSON feed, image proxy and deterministic test frames', '// Current HKO R4 GIS radar KML, image proxy and deterministic test frames')
+          worker.write_text(text)
+          PY
+      - name: Commit docs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md CHANGELOG.md worker.js
+          git commit -m "docs: finalize v1.6.2 GIS radar docs"
+          git push origin HEAD:feature/v1.6.2-radar-rendering-fix
