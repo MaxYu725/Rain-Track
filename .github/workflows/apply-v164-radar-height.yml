@@ -1,0 +1,49 @@
+name: Apply v1.6.4 radar height patch
+
+on:
+  push:
+    branches:
+      - feature/v1.6.4-radar-height
+    paths:
+      - '.github/workflows/apply-v164-radar-height.yml'
+      - '.github/scripts/apply_v164.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/v1.6.4-radar-height
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply patch
+        run: python .github/scripts/apply_v164.py
+      - name: JavaScript syntax checks
+        run: |
+          node --check worker.js
+          node --check js/api.js
+          node --check js/app.js
+          node --check js/config.js
+          node --check js/radar.js
+          node --check js/state.js
+          node --check service-worker.js
+      - name: Feature assertions
+        run: |
+          grep -q "const VERSION = '2.4.4'" worker.js
+          grep -q 'Radar_064k.kml' worker.js
+          grep -q 'heightsKmByRange' worker.js
+          grep -q 'id="radar-height-row"' index.html
+          grep -q 'point-rain-pwa-v1.6.4' service-worker.js
+      - name: Commit patched files
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md README.md SHA256SUMS.txt index.html js/api.js js/app.js js/config.js js/radar.js js/state.js service-worker.js worker.js
+          git commit -m 'v1.6.4 Radar Height Products'
+          git push origin HEAD:feature/v1.6.4-radar-height
