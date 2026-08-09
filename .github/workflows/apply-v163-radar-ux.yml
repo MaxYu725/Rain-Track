@@ -23,7 +23,9 @@ jobs:
         with:
           node-version: '22'
       - name: Apply patch
-        run: python .github/scripts/patch_v163.py
+        run: |
+          sed -i 's/## v1.6.2 Radar Rendering Fix/## v1.6.2 HKO GIS Radar Overlay/' .github/scripts/patch_v163.py
+          python .github/scripts/patch_v163.py
       - name: JavaScript syntax checks
         run: |
           node --check js/radar.js
