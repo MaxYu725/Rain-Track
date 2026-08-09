@@ -19,19 +19,27 @@ jobs:
             base="https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_${range}"
             kml="$base/R4_GIS_server_Radar_${range}.kml"
             curl -fsSL "$kml?t=$(date +%s)" -o "/tmp/${range}.kml"
-            echo "===== $range KML ====="
-            cat "/tmp/${range}.kml"
-            href=$(python3 - "$range" <<'PY'
+            python3 - "$range" <<'PY'
           import re, sys
-          text=open('/tmp/'+sys.argv[1]+'.kml').read()
-          m=re.search(r'<href>\s*(.*?)\s*</href>', text, re.S|re.I)
-          print(m.group(1).strip() if m else '')
+          r=sys.argv[1]
+          text=open('/tmp/'+r+'.kml').read()
+          blocks=re.findall(r'<GroundOverlay\b[^>]*>(.*?)</GroundOverlay>', text, re.S|re.I)
+          print('GROUND_OVERLAYS', len(blocks))
+          if not blocks: raise SystemExit('no GroundOverlay')
+          block=blocks[-1]
+          href=re.search(r'<href>\s*(.*?)\s*</href>', block, re.S|re.I).group(1).strip()
+          bounds={k:float(re.search(fr'<{k}>\s*([^<]+)', block, re.I).group(1)) for k in ('north','south','east','west')}
+          when=re.search(r'<when>\s*(.*?)\s*</when>', block, re.S|re.I)
+          print('LATEST_HREF', href)
+          print('LATEST_WHEN', when.group(1).strip() if when else '')
+          print('BOUNDS', bounds)
+          open('/tmp/'+r+'.href','w').write(href)
           PY
-            )
-            echo "HREF=$href"
+            href=$(cat "/tmp/${range}.href")
             image="$base/$href"
-            curl -fsSL "$image" -o "/tmp/${range}.img"
+            curl -fsSL "$image" -o "/tmp/${range}.png"
             echo "IMAGE=$image"
-            file "/tmp/${range}.img"
-            identify "/tmp/${range}.img" || true
+            file "/tmp/${range}.png"
+            identify "/tmp/${range}.png"
+            identify -format 'WIDTH=%w HEIGHT=%h CHANNELS=%[channels] TYPE=%[type]\n' "/tmp/${range}.png"
           done
