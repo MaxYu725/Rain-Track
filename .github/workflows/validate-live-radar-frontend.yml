@@ -2,11 +2,9 @@ name: Validate live radar frontend
 
 on:
   push:
-    branches:
-      - feature/live-radar-frontend-validation
+    branches: [feature/live-radar-frontend-validation]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: read
@@ -27,115 +25,76 @@ jobs:
       - name: Start static server
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/rain-track-http.log 2>&1 &
-          echo $! > /tmp/rain-track-http.pid
           for i in {1..30}; do
             curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0
             sleep 1
           done
-          cat /tmp/rain-track-http.log
           exit 1
       - name: Run mobile Live Radar smoke test
         run: |
           node <<'NODE'
           const { chromium } = require('playwright');
           const assert = require('node:assert/strict');
-
           (async () => {
-            const browser = await chromium.launch({ headless: true });
-            const context = await browser.newContext({
-              viewport: { width: 390, height: 844 },
-              deviceScaleFactor: 2,
-              locale: 'zh-HK',
-              timezoneId: 'Asia/Hong_Kong'
-            });
+            const browser = await chromium.launch({ headless:true });
+            const context = await browser.newContext({ viewport:{width:390,height:844}, deviceScaleFactor:2, locale:'zh-HK', timezoneId:'Asia/Hong_Kong' });
             const page = await context.newPage();
             const pageErrors = [];
             page.on('pageerror', error => pageErrors.push(String(error)));
-            page.on('console', msg => {
-              if (msg.type() === 'error') console.log('BROWSER ERROR:', msg.text());
-            });
             await page.addInitScript(() => {
-              localStorage.setItem('hkRainAutoLocate', 'off');
-              localStorage.setItem('hkRainRadarMode', 'live');
-              localStorage.setItem('hkRainRadarSpeed', '500');
+              localStorage.setItem('hkRainAutoLocate','off');
+              localStorage.setItem('hkRainRadarMode','live');
+              localStorage.setItem('hkRainRadarSpeed','500');
               localStorage.removeItem('hkRainApiBase');
               localStorage.removeItem('hkRadarApiBase');
             });
-
-            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded', timeout: 30000 });
-            await page.waitForFunction(() => {
-              const toggle = document.getElementById('toggle-radar');
-              return toggle && toggle.disabled === false;
-            }, { timeout: 30000 });
+            await page.goto('http://127.0.0.1:4173/', { waitUntil:'domcontentloaded', timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('toggle-radar')?.disabled === false, { timeout:30000 });
 
             await page.click('#drawer-button');
-            await page.waitForSelector('#settings-drawer[aria-hidden="false"]', { timeout: 5000 });
-            const note = await page.locator('#radar-status-note').innerText();
-            console.log('RADAR NOTE:', note);
-
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
+            console.log('RADAR NOTE:', await page.locator('#radar-status-note').innerText());
             await page.check('#toggle-radar');
-            await page.waitForSelector('#radar-timeline:not(.hidden)', { timeout: 30000 });
-            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout: 30000 });
-            await page.waitForSelector('img.rain-radar-overlay', { state: 'visible', timeout: 30000 });
-
-            let info = await page.locator('img.rain-radar-overlay').evaluate(img => ({
-              src: img.currentSrc || img.src,
-              naturalWidth: img.naturalWidth,
-              naturalHeight: img.naturalHeight,
-              opacity: Number(getComputedStyle(img).opacity)
-            }));
+            await page.waitForSelector('#radar-timeline:not(.hidden)', { timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
+            await page.waitForSelector('img.rain-radar-overlay', { state:'visible', timeout:30000 });
+            let info = await page.locator('img.rain-radar-overlay').evaluate(img => ({ src:img.currentSrc||img.src, naturalWidth:img.naturalWidth, naturalHeight:img.naturalHeight, opacity:Number(getComputedStyle(img).opacity) }));
             console.log('64 KM OVERLAY:', info);
-            assert.ok(info.src.includes('radar.max-yu.workers.dev/api/radar/image'), 'Radar image should use Worker proxy');
-            assert.ok(info.naturalWidth > 0 && info.naturalHeight > 0, 'Radar image did not load');
-            assert.ok(info.opacity > 0.6 && info.opacity < 0.75, 'Initial radar opacity is unexpected');
+            assert.ok(info.src.includes('radar.max-yu.workers.dev/api/radar/image'));
+            assert.ok(info.naturalWidth > 0 && info.naturalHeight > 0);
+            assert.ok(info.opacity > .6 && info.opacity < .75);
 
-            await page.click('#drawer-close');
-            await page.waitForSelector('#settings-drawer[aria-hidden="true"]', { timeout: 5000 });
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
             const firstCounter = await page.locator('#radar-frame-counter').innerText();
             await page.click('#radar-play-button');
-            await page.waitForFunction(previous => {
-              const current = document.getElementById('radar-frame-counter')?.textContent || '';
-              return current && current !== previous;
-            }, firstCounter, { timeout: 5000 });
+            await page.waitForFunction(previous => document.getElementById('radar-frame-counter')?.textContent !== previous, firstCounter, { timeout:5000 });
             await page.click('#radar-play-button');
 
             await page.click('#drawer-button');
-            await page.waitForSelector('#settings-drawer[aria-hidden="false"]', { timeout: 5000 });
-            await page.selectOption('#radar-range', '256');
-            await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent?.includes('256'), { timeout: 30000 });
-            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout: 30000 });
-            await page.waitForSelector('img.rain-radar-overlay', { state: 'visible', timeout: 30000 });
-            info = await page.locator('img.rain-radar-overlay').evaluate(img => ({
-              src: img.currentSrc || img.src,
-              naturalWidth: img.naturalWidth,
-              naturalHeight: img.naturalHeight
-            }));
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
+            await page.selectOption('#radar-range','256');
+            await page.waitForFunction(() => document.getElementById('radar-mode-chip')?.textContent?.includes('256'), { timeout:30000 });
+            await page.waitForFunction(() => document.getElementById('radar-frame-counter')?.textContent === '20/20', { timeout:30000 });
+            info = await page.locator('img.rain-radar-overlay').evaluate(img => ({ naturalWidth:img.naturalWidth, naturalHeight:img.naturalHeight }));
             console.log('256 KM OVERLAY:', info);
-            assert.ok(info.naturalWidth > 0 && info.naturalHeight > 0, '256 km radar image did not load');
+            assert.ok(info.naturalWidth > 0 && info.naturalHeight > 0);
 
-            await page.locator('#radar-opacity').evaluate(input => {
-              input.value = '35';
-              input.dispatchEvent(new Event('input', { bubbles: true }));
-            });
+            await page.locator('#radar-opacity').evaluate(input => { input.value='35'; input.dispatchEvent(new Event('input',{bubbles:true})); });
             const opacity = await page.locator('img.rain-radar-overlay').evaluate(img => Number(getComputedStyle(img).opacity));
-            assert.ok(opacity > 0.30 && opacity < 0.40, `Opacity control failed: ${opacity}`);
-
-            await page.click('#drawer-close');
-            await page.waitForSelector('#settings-drawer[aria-hidden="true"]', { timeout: 5000 });
-            await page.screenshot({ path: 'live-radar-mobile.png', fullPage: true });
+            assert.ok(opacity > .30 && opacity < .40);
+            await page.keyboard.press('Escape');
+            await page.waitForSelector('#settings-drawer[aria-hidden="true"]');
+            await page.screenshot({ path:'live-radar-mobile.png', fullPage:true });
 
             await page.click('#drawer-button');
-            await page.waitForSelector('#settings-drawer[aria-hidden="false"]', { timeout: 5000 });
+            await page.waitForSelector('#settings-drawer[aria-hidden="false"]');
             await page.uncheck('#toggle-radar');
-            await page.waitForFunction(() => document.querySelectorAll('img.rain-radar-overlay').length === 0, { timeout: 5000 });
-            assert.ok(await page.locator('#radar-timeline').evaluate(el => el.classList.contains('hidden')), 'Timeline should hide when radar is disabled');
-            assert.deepEqual(pageErrors, [], `Page errors: ${pageErrors.join('\n')}`);
-
+            await page.waitForFunction(() => document.querySelectorAll('img.rain-radar-overlay').length === 0, { timeout:5000 });
+            assert.ok(await page.locator('#radar-timeline').evaluate(el => el.classList.contains('hidden')));
+            assert.deepEqual(pageErrors, []);
             await browser.close();
-          })().catch(error => {
-            console.error(error);
-            process.exit(1);
-          });
+          })().catch(error => { console.error(error); process.exit(1); });
           NODE
       - name: Upload mobile screenshot
         if: always()
