@@ -14,7 +14,7 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify official 2 km GIS KML and latest PNG
+      - name: Verify official 2 km GIS KML and actual radar PNG
         shell: bash
         run: |
           set -euo pipefail
@@ -26,31 +26,36 @@ jobs:
           curl -A 'Mozilla/5.0' -fsSL "$SERVER" -o /tmp/server.kml
           echo '--- page link ---'
           grep -Eio '.{0,120}radar_064_kml/Radar_064k\.kml.{0,120}' /tmp/page.html | head -5 || true
-          echo '--- latest server frame ---'
-          href=$(grep -Eio '<href>[^<]*_rad_064k\.png' /tmp/server.kml | sed 's#<href>##I' | head -1)
+          echo '--- radar frame href ---'
+          href=$(grep -Eio '<href>[0-9]{14}_[^<]*_rad_064k\.png' /tmp/server.kml | sed 's#<href>##I' | head -1)
           echo "$href"
           image="https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/$href"
           curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar2.png
           file /tmp/radar2.png
           python - <<'PY'
           import struct
-          p='/tmp/radar2.png'
-          b=open(p,'rb').read()
-          assert b[:8]==b'\x89PNG\r\n\x1a\n'
-          length=struct.unpack('>I',b[8:12])[0]
-          assert b[12:16]==b'IHDR'
+          p='/tmp/radar2.png'; b=open(p,'rb').read(); assert b[:8]==b'\x89PNG\r\n\x1a\n'
           w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',b[16:29])
           chunks=[]; i=8
-          while i+12 <= len(b):
-              n=struct.unpack('>I',b[i:i+4])[0]
-              typ=b[i+4:i+8].decode('latin1')
-              chunks.append(typ)
-              i += 12+n
+          while i+12<=len(b):
+              n=struct.unpack('>I',b[i:i+4])[0]; typ=b[i+4:i+8].decode('latin1'); chunks.append(typ); i+=12+n
               if typ=='IEND': break
-          print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks,'chunks':chunks[:20]})
+          print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks,'hasAlpha':color in (4,6)})
           PY
-          echo '--- latest frame time and bounds ---'
-          grep -Eio '<(name|href|north|south|east|west)>[^<]+' /tmp/server.kml | head -24 || true
+          echo '--- first actual frame bounds ---'
+          python - <<'PY'
+          import re
+          t=open('/tmp/server.kml').read()
+          blocks=re.findall(r'<GroundOverlay\b[^>]*>[\s\S]*?</GroundOverlay>',t,re.I)
+          for b in blocks:
+              h=re.search(r'<href>\s*([^<]*_rad_064k\.png)\s*</href>',b,re.I)
+              if h and not h.group(1).lower().startswith('label_'):
+                  print(h.group(1))
+                  for tag in ['name','north','south','east','west']:
+                      m=re.search(fr'<{tag}>\s*([^<]+)',b,re.I)
+                      print(tag, m.group(1).strip() if m else None)
+                  break
+          PY
 
       - name: Compare 3 km GIS PNG
         shell: bash
@@ -58,17 +63,16 @@ jobs:
           set -euo pipefail
           KML='https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/R4_GIS_server_Radar_064.kml'
           curl -A 'Mozilla/5.0' -fsSL "$KML" -o /tmp/radar3.kml
-          href=$(grep -Eio '<href>[^<]*_rad_064\.png' /tmp/radar3.kml | sed 's#<href>##I' | head -1)
+          href=$(grep -Eio '<href>[0-9]{14}_[^<]*_rad_064\.png' /tmp/radar3.kml | sed 's#<href>##I' | head -1)
           image="https://www.hko.gov.hk/wxinfo/radars/R4_GIS_rad_064/$href"
           curl -A 'Mozilla/5.0' -fsSL "$image" -o /tmp/radar3.png
           file /tmp/radar3.png
           python - <<'PY'
           import struct
-          for p in ['/tmp/radar3.png']:
-              b=open(p,'rb').read(); w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',b[16:29])
-              chunks=[]; i=8
-              while i+12<=len(b):
-                  n=struct.unpack('>I',b[i:i+4])[0]; typ=b[i+4:i+8].decode('latin1'); chunks.append(typ); i+=12+n
-                  if typ=='IEND': break
-              print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks})
+          b=open('/tmp/radar3.png','rb').read(); w,h,depth,color,comp,filt,interlace=struct.unpack('>IIBBBBB',b[16:29])
+          chunks=[]; i=8
+          while i+12<=len(b):
+              n=struct.unpack('>I',b[i:i+4])[0]; typ=b[i+4:i+8].decode('latin1'); chunks.append(typ); i+=12+n
+              if typ=='IEND': break
+          print({'width':w,'height':h,'bitDepth':depth,'colorType':color,'hasTRNS':'tRNS' in chunks,'hasAlpha':color in (4,6)})
           PY
