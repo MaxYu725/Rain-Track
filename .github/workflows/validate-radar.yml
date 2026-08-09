@@ -1,0 +1,25 @@
+name: Validate radar build
+
+on:
+  push:
+    branches:
+      - feature/radar-phase-ab
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JavaScript syntax
+        run: |
+          node --check worker.js
+          node --check service-worker.js
+          node --check js/api.js
+          node --check js/config.js
+          node --check js/radar.js
