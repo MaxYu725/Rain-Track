@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.4.1
+ * Hong Kong Point Rainfall Forecast Worker v2.4.2
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -14,23 +14,32 @@
  *   GET /probe/radar?range=64|256&mode=live|test
  */
 
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
-const RADAR_CACHE_TTL_SECONDS = 180;
+const RADAR_CACHE_TTL_SECONDS = 60;
 const RADAR_IMAGE_CACHE_TTL_SECONDS = 86400;
 const RADAR_CADENCE_MINUTES = 6;
 const RADAR_MAX_FRAMES = 30;
 const RADAR_LIVE_MAX_AGE_MINUTES = 30;
 const RADAR_LIVE_MAX_FUTURE_MINUTES = 10;
+const RADAR_LIVE_HISTORY_MINUTES = 150;
+const HKO_RADAR_INDEX = 'https://www.hko.gov.hk/wxinfo/radars/temp_json/nradar_img.json';
+const HKO_RADAR_IMAGE_ROOT = 'https://www.hko.gov.hk/wxinfo/radars/';
 
 const RADAR = Object.freeze({
   64: {
-    root: 'https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064.kml',
+    feedKey: 'range2',
+    pathPrefix: 'rad_064_png/',
+    product: '64 km range, 3 km height',
+    legacyKmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/radar_064_kml/Radar_064.kml',
     fallbackBounds: { north: 22.89, south: 21.72, east: 114.82, west: 113.53 }
   },
   256: {
-    root: 'https://www.hko.gov.hk/wxinfo/radars/radar_256_kml/Radar_256.kml',
+    feedKey: 'range0',
+    pathPrefix: 'rad_256_png/',
+    product: '256 km range, 3 km height',
+    legacyKmlRoot: 'https://www.hko.gov.hk/wxinfo/radars/radar_256_kml/Radar_256.kml',
     fallbackBounds: { north: 24.61, south: 19.99, east: 116.67, west: 111.68 }
   }
 });
@@ -154,7 +163,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.1)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.2)',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -503,7 +512,7 @@ function insideCoverage(lat, lon, grid) {
 }
 
 // ---------------------------------------------------------------------------
-// Radar KML, image proxy and deterministic test frames
+// Current HKO radar JSON feed, image proxy and deterministic test frames
 // ---------------------------------------------------------------------------
 
 async function handleRadarFrames(range, mode, probe) {
@@ -511,19 +520,21 @@ async function handleRadarFrames(range, mode, probe) {
 
   const source = RADAR[range];
   const diagnostics = {
-    attempts: [], documents: [], errors: [], rejected: [],
-    policy: `KML-only; live frames must be within ${RADAR_LIVE_MAX_AGE_MINUTES} minutes of current time`,
-    mode: 'live'
+    attempts: [], errors: [], rejected: [],
+    policy: `Current HKO radar JSON; latest frame <= ${RADAR_LIVE_MAX_AGE_MINUTES} min old; history <= ${RADAR_LIVE_HISTORY_MINUTES} min`,
+    mode: 'live',
+    feedKey: source.feedKey,
+    product: source.product,
+    legacyKml: { root: source.legacyKmlRoot, status: 'deprecated-not-queried' }
   };
   let frames = [];
   try {
-    frames = await collectKmlFrames(source.root, range, diagnostics);
+    frames = await collectCurrentRadarFrames(source, range, diagnostics);
   } catch (error) {
     diagnostics.errors.push(safeError(error));
   }
 
-  frames = validateRadarFrames(dedupeFrames(frames), diagnostics);
-  frames = normalizeRadarFrameTimes(frames, diagnostics).slice(-RADAR_MAX_FRAMES);
+  frames = validateCurrentRadarFrames(dedupeFrames(frames), diagnostics).slice(-RADAR_MAX_FRAMES);
   const issueTime = frames.at(-1)?.time || null;
   const payload = {
     ok: frames.length > 0,
@@ -531,8 +542,9 @@ async function handleRadarFrames(range, mode, probe) {
     contractVersion: RADAR_CONTRACT.version,
     rangeKm: range,
     mode: 'live',
-    source: 'Hong Kong Observatory radar KML',
-    root: source.root,
+    source: 'Hong Kong Observatory current radar image index',
+    root: HKO_RADAR_INDEX,
+    product: source.product,
     generatedAt: new Date().toISOString(),
     issueTime,
     cadenceMinutes: RADAR_CADENCE_MINUTES,
@@ -553,11 +565,150 @@ async function handleRadarFrames(range, mode, probe) {
 
   if (probe) {
     payload.diagnostics = diagnostics;
-    payload.frames = payload.frames.slice(-10);
     return json(payload, 200, { 'Cache-Control': 'no-store' });
   }
 
   return json(payload, frames.length ? 200 : 502, { 'Cache-Control': `public, max-age=${RADAR_CACHE_TTL_SECONDS}` });
+}
+
+async function collectCurrentRadarFrames(source, range, diagnostics) {
+  const response = await fetchCached(HKO_RADAR_INDEX, RADAR_CACHE_TTL_SECONDS, 'application/json,text/plain,*/*');
+  const text = await response.text();
+  diagnostics.attempts.push({
+    url: HKO_RADAR_INDEX,
+    status: response.status,
+    bytes: text.length,
+    lastModified: response.headers.get('last-modified'),
+    date: response.headers.get('date')
+  });
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error('HKO radar index returned invalid JSON');
+  }
+
+  const items = data?.radar?.[source.feedKey]?.image;
+  if (!Array.isArray(items) || !items.length) {
+    throw new Error(`HKO radar index has no ${source.feedKey} image list`);
+  }
+
+  diagnostics.index = {
+    feedKey: source.feedKey,
+    inputCount: items.length,
+    pathPrefix: source.pathPrefix
+  };
+
+  const frames = [];
+  for (const item of items) {
+    const relativePath = extractCurrentRadarPath(item);
+    if (!relativePath) {
+      diagnostics.rejected.push({ raw: String(item).slice(0, 180), reason: 'unparseable-index-entry' });
+      continue;
+    }
+    if (!relativePath.startsWith(source.pathPrefix)) {
+      diagnostics.rejected.push({ raw: relativePath, reason: 'unexpected-product-path' });
+      continue;
+    }
+
+    const href = resolveUrl(relativePath, HKO_RADAR_IMAGE_ROOT);
+    if (!isAllowedRadarImage(href)) {
+      diagnostics.rejected.push({ raw: relativePath, reason: 'image-url-not-allowed' });
+      continue;
+    }
+
+    const time = parseTimeFromText(relativePath);
+    if (!time) {
+      diagnostics.rejected.push({ raw: relativePath, reason: 'missing-time-in-filename' });
+      continue;
+    }
+
+    frames.push({
+      href,
+      bounds: source.fallbackBounds,
+      name: `${range} km radar`,
+      time,
+      rawTime: relativePath,
+      timeSource: 'filename-hkt',
+      source: 'hko-current-json'
+    });
+  }
+  return frames;
+}
+
+function extractCurrentRadarPath(value) {
+  const match = String(value || '').match(/["']([^"']+\.(?:png|gif|jpe?g|webp))["']/i);
+  return match ? match[1].trim() : null;
+}
+
+function validateCurrentRadarFrames(frames, diagnostics) {
+  const nowMs = Date.now();
+  const maxLatestPastMs = RADAR_LIVE_MAX_AGE_MINUTES * 60 * 1000;
+  const maxHistoryMs = RADAR_LIVE_HISTORY_MINUTES * 60 * 1000;
+  const maxFutureMs = RADAR_LIVE_MAX_FUTURE_MINUTES * 60 * 1000;
+  const timed = frames
+    .map(frame => ({ frame, ms: Date.parse(frame.time || '') }))
+    .filter(item => Number.isFinite(item.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  const latestMs = timed.at(-1)?.ms;
+  const latestFresh = Number.isFinite(latestMs)
+    && latestMs >= nowMs - maxLatestPastMs
+    && latestMs <= nowMs + maxFutureMs;
+
+  diagnostics.sourceFreshness = {
+    latestFrameTime: Number.isFinite(latestMs) ? new Date(latestMs).toISOString() : null,
+    latestAgeMinutes: Number.isFinite(latestMs) ? Math.round((nowMs - latestMs) / 60000) : null,
+    latestFresh,
+    liveMaxAgeMinutes: RADAR_LIVE_MAX_AGE_MINUTES,
+    historyMaxAgeMinutes: RADAR_LIVE_HISTORY_MINUTES,
+    liveMaxFutureMinutes: RADAR_LIVE_MAX_FUTURE_MINUTES
+  };
+
+  if (!latestFresh) {
+    for (const { frame, ms } of timed) {
+      diagnostics.rejected.push({
+        href: frame.href,
+        rawTime: frame.time,
+        ageMinutes: Math.round((nowMs - ms) / 60000),
+        reason: 'stale-live-feed-latest-frame'
+      });
+    }
+    diagnostics.validation = {
+      inputCount: frames.length,
+      acceptedCount: 0,
+      rejectedCount: diagnostics.rejected.length,
+      referenceTime: new Date(nowMs).toISOString(),
+      latestFrameTime: Number.isFinite(latestMs) ? new Date(latestMs).toISOString() : null
+    };
+    return [];
+  }
+
+  const accepted = [];
+  for (const { frame, ms } of timed) {
+    if (ms < nowMs - maxHistoryMs || ms > nowMs + maxFutureMs) {
+      diagnostics.rejected.push({
+        href: frame.href,
+        rawTime: frame.time,
+        ageMinutes: Math.round((nowMs - ms) / 60000),
+        reason: 'outside-live-animation-window'
+      });
+      continue;
+    }
+    accepted.push(frame);
+  }
+
+  diagnostics.validation = {
+    inputCount: frames.length,
+    acceptedCount: accepted.length,
+    rejectedCount: diagnostics.rejected.length,
+    referenceTime: new Date(nowMs).toISOString(),
+    latestFrameTime: new Date(latestMs).toISOString(),
+    freshnessWindowMinutes: RADAR_LIVE_MAX_AGE_MINUTES,
+    historyWindowMinutes: RADAR_LIVE_HISTORY_MINUTES
+  };
+  return accepted;
 }
 
 function handleTestRadarFrames(range, probe) {
