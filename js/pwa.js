@@ -2,6 +2,9 @@ import { toast } from './ui.js';
 
 let deferredInstallPrompt = null;
 let waitingWorker = null;
+let registrationRef = null;
+let updateInProgress = false;
+let reloadStarted = false;
 
 export function isInstalledPwa() {
   return window.matchMedia('(display-mode: fullscreen)').matches ||
@@ -14,8 +17,30 @@ function isIosDevice() {
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+function clearUpdateQuery() {
+  const url = new URL(location.href);
+  if (!url.searchParams.has('_pwa')) return;
+  url.searchParams.delete('_pwa');
+  history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function reloadForNewController() {
+  if (reloadStarted) return;
+  reloadStarted = true;
+  const url = new URL(location.href);
+  url.searchParams.set('_pwa', Date.now().toString(36));
+  location.replace(url.toString());
+}
+
+function setUpdateButtonBusy(busy) {
+  const button = document.getElementById('pwa-update-button');
+  if (!button) return;
+  button.disabled = busy;
+  button.textContent = busy ? '更新中…' : '立即更新';
+}
+
 export function initPwa() {
-  sessionStorage.removeItem('hkRainReloadingForUpdate');
+  clearUpdateQuery();
   document.documentElement.classList.toggle('pwa-mode', isInstalledPwa());
   updatePwaStatus();
 
@@ -36,11 +61,17 @@ export function initPwa() {
     return;
   }
   if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-    updatePwaStatus('PWA 需要 HTTPS；請部署至 Cloudflare Pages 後使用。');
+    updatePwaStatus('PWA 需要 HTTPS；請部署至 HTTPS 網站後使用。');
     return;
   }
 
-  navigator.serviceWorker.register('./service-worker.js', { scope:'./' }).then(registration => {
+  const hadControllerAtStart = Boolean(navigator.serviceWorker.controller);
+
+  navigator.serviceWorker.register('./service-worker.js', {
+    scope:'./',
+    updateViaCache:'none'
+  }).then(registration => {
+    registrationRef = registration;
     if (registration.waiting) exposeUpdate(registration.waiting);
     registration.addEventListener('updatefound', () => {
       const installing = registration.installing;
@@ -48,29 +79,52 @@ export function initPwa() {
         if (installing.state === 'installed' && navigator.serviceWorker.controller) exposeUpdate(installing);
       });
     });
+    registration.update().catch(() => {});
     updatePwaStatus();
   }).catch(error => updatePwaStatus(`離線快取啟動失敗：${error.message}`));
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (sessionStorage.getItem('hkRainReloadingForUpdate') === '1') return;
-    sessionStorage.setItem('hkRainReloadingForUpdate','1');
-    location.reload();
+    if (!hadControllerAtStart && !updateInProgress) return;
+    reloadForNewController();
   });
 }
 
 function exposeUpdate(worker) {
   waitingWorker = worker;
+  updateInProgress = false;
+  setUpdateButtonBusy(false);
   const bar = document.getElementById('pwa-update-bar');
   bar?.classList.remove('hidden');
-  updatePwaStatus('已有新版可用；按「立即更新」後會安全重新載入。');
+  updatePwaStatus('已有新版可用；按「立即更新」後會切換整套新版檔案並重新載入。');
 }
 
 export async function applyPwaUpdate() {
-  if (!waitingWorker) {
+  if (!registrationRef && 'serviceWorker' in navigator) {
+    registrationRef = await navigator.serviceWorker.getRegistration('./').catch(() => null);
+  }
+
+  let worker = waitingWorker || registrationRef?.waiting || null;
+  if (!worker && registrationRef) {
+    await registrationRef.update().catch(() => {});
+    worker = registrationRef.waiting || null;
+  }
+
+  if (!worker) {
     toast('目前沒有等待安裝的新版');
     return;
   }
-  waitingWorker.postMessage({ type:'SKIP_WAITING' });
+
+  updateInProgress = true;
+  waitingWorker = worker;
+  setUpdateButtonBusy(true);
+  updatePwaStatus('正在套用新版並重建應用程式快取…');
+  worker.postMessage({ type:'SKIP_WAITING' });
+
+  // Android WebView/PWA 偶爾不會即時送出 controllerchange；
+  // 超時後以 cache-busting navigation 作最後保險，不要求使用者清除瀏覽器資料。
+  setTimeout(() => {
+    if (updateInProgress) reloadForNewController();
+  }, 7000);
 }
 
 export async function installPwa() {
