@@ -19,6 +19,7 @@ const APP_SHELL = [
   './js/map.js',
   './js/pwa.js',
   './js/radar.js',
+  './js/settings-v165.js',
   './js/state.js',
   './js/ui.js',
   './js/utils.js',
