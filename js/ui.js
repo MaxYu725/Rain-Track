@@ -151,10 +151,15 @@ export function toggleDrawer(force, trigger = null) {
   const open = typeof force === 'boolean' ? force : !drawer.classList.contains('open');
   if (open) {
     state.drawerTrigger = trigger || document.activeElement;
+    drawer.scrollTop = 0;
     drawer.classList.add('open'); drawer.setAttribute('aria-hidden','false');
     document.getElementById('drawer-backdrop')?.classList.remove('hidden');
     document.body.classList.add('drawer-open');
-    setTimeout(() => document.getElementById('drawer-close')?.focus(), 40);
+    requestAnimationFrame(() => { drawer.scrollTop = 0; });
+    setTimeout(() => {
+      drawer.scrollTop = 0;
+      if (!isMobileLayout()) document.getElementById('drawer-close')?.focus();
+    }, 40);
   } else {
     drawer.classList.remove('open'); drawer.setAttribute('aria-hidden','true');
     document.getElementById('drawer-backdrop')?.classList.add('hidden');
