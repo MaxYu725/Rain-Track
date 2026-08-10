@@ -1,6 +1,6 @@
 /* Settings Redesign Phase 1A: information architecture and layout only. */
-.settings-drawer-phase1a{width:min(420px,100vw)}
-.settings-drawer-phase1a .drawer-heading{margin-bottom:4px}
+.settings-drawer-phase1a{width:min(420px,100vw);scroll-padding-top:68px;overscroll-behavior:contain}
+.settings-drawer-phase1a .drawer-heading{position:sticky;top:0;z-index:6;min-height:56px;margin:0 0 8px;padding:6px 0;border-bottom:1px solid #2d2d2d;background:rgba(0,0,0,.985);box-shadow:0 6px 12px rgba(0,0,0,.35)}
 .settings-section{margin:0 0 8px;padding:0 0 5px}
 .settings-section-primary{margin-top:6px;padding:0 12px 10px;border:1px solid #2b4959;background:linear-gradient(180deg,rgba(10,29,39,.72),rgba(7,13,17,.45))}
 .settings-section-primary .panel-title{margin-top:13px}
@@ -32,8 +32,8 @@
 .settings-drawer-phase1a .wide-btn{min-height:42px}
 
 @media(max-width:700px){
-  .settings-drawer-phase1a{width:min(94vw,390px);padding-left:14px;padding-right:14px}
-  .settings-drawer-phase1a .drawer-heading{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}
+  .settings-drawer-phase1a{width:min(94vw,390px);padding-left:14px;padding-right:14px;scroll-padding-top:64px}
+  .settings-drawer-phase1a .drawer-heading{min-height:54px;margin-left:-14px;margin-right:-14px;margin-bottom:8px;padding:6px 14px}
   .settings-section-primary{padding-left:10px;padding-right:10px}
   .settings-section{margin-bottom:4px}
   .settings-drawer-phase1a .panel-title{margin:14px 0 9px;padding-bottom:6px;font-size:.9rem}
