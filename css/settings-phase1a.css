@@ -1,0 +1,47 @@
+/* Settings Redesign Phase 1A: information architecture and layout only. */
+.settings-drawer-phase1a{width:min(420px,100vw)}
+.settings-drawer-phase1a .drawer-heading{margin-bottom:4px}
+.settings-section{margin:0 0 8px;padding:0 0 5px}
+.settings-section-primary{margin-top:6px;padding:0 12px 10px;border:1px solid #2b4959;background:linear-gradient(180deg,rgba(10,29,39,.72),rgba(7,13,17,.45))}
+.settings-section-primary .panel-title{margin-top:13px}
+.settings-section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.settings-section-heading p{margin:-6px 0 8px;color:#8e9ca4;font-size:.72rem;line-height:1.45}
+.settings-toggle-emphasis{min-height:48px;margin-bottom:4px;font-weight:600}
+.settings-toggle-emphasis input{width:22px;height:22px}
+.settings-compact-note{margin-top:6px;color:#878f94;font-size:.72rem}
+.settings-inline-status{margin:5px 0 10px;padding-left:2px;color:#8f979b}
+.settings-search{margin-top:4px}
+.settings-saved-list:not(:empty){margin-top:8px}
+.settings-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.settings-action-grid .wide-btn{margin-top:0;padding:0 10px}
+.settings-action-grid-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.settings-action-grid-three .wide-btn{font-size:.78rem}
+.settings-primary-action{min-height:48px;border-color:#286f93;background:#071720;color:#f4fbff;font-weight:600}
+.settings-primary-action:hover{border-color:#37a8df}
+.settings-advanced{margin:11px 0 2px;border:1px solid #373737;background:#080808}
+.settings-advanced>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;padding:0 12px;cursor:pointer;list-style:none;color:#d6d6d6;font-size:.88rem;font-weight:600}
+.settings-advanced>summary::-webkit-details-marker{display:none}
+.settings-advanced>summary::after{content:'＋';flex:none;color:#7f8c92;font-size:1.05rem;font-weight:300}
+.settings-advanced[open]>summary::after{content:'−'}
+.settings-advanced>summary small{margin-left:auto;color:#747d82;font-size:.68rem;font-weight:400}
+.settings-advanced-body{padding:0 12px 12px;border-top:1px solid #2d2d2d}
+.settings-advanced-body .panel-title{margin-top:15px}
+.settings-drawer-phase1a .panel-title{font-size:.92rem;letter-spacing:.2px;text-transform:none}
+.settings-drawer-phase1a .toggle-row,.settings-drawer-phase1a .setting-row{min-height:42px;margin-bottom:4px}
+.settings-drawer-phase1a .setting-row select,.settings-drawer-phase1a .setting-row input{height:40px}
+.settings-drawer-phase1a .wide-btn{min-height:42px}
+
+@media(max-width:700px){
+  .settings-drawer-phase1a{width:min(94vw,390px);padding-left:14px;padding-right:14px}
+  .settings-drawer-phase1a .drawer-heading{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px}
+  .settings-section-primary{padding-left:10px;padding-right:10px}
+  .settings-section{margin-bottom:4px}
+  .settings-drawer-phase1a .panel-title{margin:14px 0 9px;padding-bottom:6px;font-size:.9rem}
+  .settings-drawer-phase1a .toggle-row,.settings-drawer-phase1a .setting-row{min-height:40px;font-size:.86rem}
+  .settings-drawer-phase1a .toggle-row input{margin-right:10px}
+  .settings-action-grid-three{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .settings-action-grid-three .wide-btn:last-child{grid-column:1/-1}
+  .settings-advanced>summary{min-height:48px;padding:0 10px;font-size:.84rem}
+  .settings-advanced>summary small{font-size:.64rem}
+  .settings-advanced-body{padding:0 10px 10px}
+}
