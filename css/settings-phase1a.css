@@ -32,7 +32,7 @@
 .settings-drawer-phase1a .wide-btn{min-height:42px}
 
 @media(max-width:700px){
-  .settings-drawer-phase1a{width:min(94vw,390px);padding-left:14px;padding-right:14px;scroll-padding-top:12px}
+  .settings-drawer-phase1a{top:calc(50px + var(--safe-top));height:calc(100dvh - 50px - var(--safe-top));width:min(94vw,390px);padding:18px 14px calc(18px + var(--safe-bottom));scroll-padding-top:12px}
   .settings-drawer-phase1a .drawer-heading{display:none}
   .settings-section-primary{margin-top:8px;padding-left:10px;padding-right:10px}
   .settings-section{margin-bottom:4px}
