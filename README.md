@@ -1,4 +1,4 @@
-# 香港定點雨量預報 v1.6.4
+# 香港定點雨量預報 v1.6.5
 
 ## 部署內容
 
@@ -20,7 +20,14 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.4 的定點預報仍兼容 Worker v2.3 或以上；要啟用 64 km 的 2 / 3 km 雷達高度切換，需部署 Repository 的最新 `worker.js` v2.4.4 到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+前端 v1.6.5 的定點預報仍兼容 Worker v2.3 或以上；要啟用 64 km 的 2 / 3 km 雷達高度切換，需部署 Repository 的最新 `worker.js` v2.4.4 到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
+
+## v1.6.5 Settings Page Redesign
+
+- 設定頁重組為快速控制、地圖顯示、位置、地圖與應用程式及預設收合的進階設定。
+- 雷達覆蓋範圍、高度、資料模式、動畫速度及附近半徑改為 segmented controls。
+- 雷達時間軸的範圍／高度標籤可直接點擊切換；64 km 可直接切換 2 / 3 km 高度。
+- Worker／契約／診斷及快取集中到進階設定；App / PWA cache 更新至 v1.6.5，Worker 維持 v2.4.4。
 
 ## v1.6.4 Radar Height Products
 
