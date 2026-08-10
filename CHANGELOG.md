@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.6.5 Settings Page Redesign
+
+- 設定頁改為「快速控制／地圖顯示／位置／地圖與應用程式／進階設定」五個層次，減少長表單感。
+- 雷達常用設定移到最上方；資料狀態、Worker、診斷及快取改為預設收合。
+- 位置操作重新排版；立即定位為主要按鈕，儲存／分享改為兩欄短按鈕，地圖操作改為緊湊按鈕群。
+- 覆蓋範圍、雷達高度、資料模式、動畫速度及附近半徑改為直接點選 segmented controls；保留原生 select 作事件相容層。
+- 雷達時間軸加入可直接點擊的範圍／高度 chip；64 / 256 km 可快速切換，64 km 下可直接切換 2 / 3 km 高度。
+- 雷達設定狀態文案精簡為 HKO GIS 摘要，避免一般設定頁長期顯示契約等技術資訊。
+- 新增獨立 `js/settings-v165.js` 及 `css/settings-v165.css`，並納入 PWA App Shell；CI 追加語法檢查。
+- App / PWA cache 更新至 v1.6.5；Worker 維持 v2.4.4。
+
 ## v1.6.4 Radar Height Products
 
 - 新增 HKO 64 km／2 km 高度透明 GIS 雷達產品，保留既有 64 km／3 km 及 256 km／3 km。
