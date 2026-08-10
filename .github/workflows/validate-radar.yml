@@ -20,7 +20,9 @@ jobs:
         run: |
           node --check worker.js
           node --check service-worker.js
-          node --check js/api.js
-          node --check js/config.js
-          node --check js/radar.js
-          node --check js/pwa.js
+          for file in js/*.js; do
+            node --check "$file"
+          done
+          node --check scripts/validate-app-shell.mjs
+      - name: Validate PWA app shell
+        run: node scripts/validate-app-shell.mjs
