@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa7';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa8';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -45,7 +45,7 @@ self.addEventListener('install', event => {
     await Promise.allSettled(OPTIONAL_EXTERNAL.map(async url => {
       const request = new Request(url, { mode:'no-cors', cache:'reload' });
       const response = await fetch(request);
-      if (response) await cache.put(request, response);
+      if (response) await cache.put(request, response.clone());
     }));
   })());
 });
