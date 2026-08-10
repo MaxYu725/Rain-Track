@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa1';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa2';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './',
   './index.html',
   './css/app.css',
+  './css/settings-phase1a.css',
   './js/app.js',
   './js/api.js',
   './js/config.js',
