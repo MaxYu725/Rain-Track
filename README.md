@@ -20,17 +20,14 @@ _headers
 
 Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目錄。
 
-前端 v1.6.5 的定點預報仍兼容 Worker v2.3 或以上；雷達高度切換維持使用 Worker v2.4.4 的 Radar Contract additive 欄位。正式 API 為 `https://radar.max-yu.workers.dev`。
+前端 v1.6.5 的定點預報仍兼容 Worker v2.3 或以上；要啟用 64 km 的 2 / 3 km 雷達高度切換，需部署 Repository 的最新 `worker.js` v2.4.4 到 `https://radar.max-yu.workers.dev`。前端會透過 `/api/capabilities` 自動判斷是否解鎖雷達開關。
 
 ## v1.6.5 Settings Page Redesign
 
-- 設定頁重組為快速控制、地圖顯示、位置、地圖與應用程式及預設收合的進階設定，減少長表單與技術資訊干擾。
-- 雷達覆蓋範圍、雷達高度、資料模式、動畫速度及附近半徑改為 segmented controls，手機可直接點選。
-- 雷達時間軸的範圍／高度標籤改為可操作 quick chips：可直接切換 64 / 256 km；64 km 可直接切換 2 / 3 km 高度。
-- 位置操作重新排版：立即定位為主要按鈕；儲存／分享為雙欄；香港全景／明暗地圖／全螢幕為緊湊操作群。
-- Worker／契約／診斷及快取集中到「資料狀態與進階設定」，一般使用時保持收合。
-- 新增 `css/settings-v165.css` 及 `js/settings-v165.js`，並納入 Service Worker App Shell。
-- App / PWA cache 更新至 v1.6.5；Worker 維持 v2.4.4。
+- 設定頁重組為快速控制、地圖顯示、位置、地圖與應用程式及預設收合的進階設定。
+- 雷達覆蓋範圍、高度、資料模式、動畫速度及附近半徑改為 segmented controls。
+- 雷達時間軸的範圍／高度標籤可直接點擊切換；64 km 可直接切換 2 / 3 km 高度。
+- Worker／契約／診斷及快取集中到進階設定；App / PWA cache 更新至 v1.6.5，Worker 維持 v2.4.4。
 
 ## v1.6.4 Radar Height Products
 
@@ -53,143 +50,95 @@ Cloudflare Pages 不需要 build command；輸出目錄使用 Repository 根目�
 
 ## v1.6.2 HKO GIS Radar Overlay
 
-### 正確雷達圖層
-- 實機截圖確認完整 HKO JPEG 會把底圖、色板、時間及 Logo 一同疊加，造成比例失真及雙重地圖。
-- 研究 HKO Regional Weather Information Portal 後改用其現行 `R4_GIS` GroundOverlay。
-- 64 km：800×800 透明 PNG，官方 bounds `22.87770 / 21.72659 / 114.79378 / 113.54956`。
-- 256 km：1900×1900 透明 PNG，官方 bounds `24.58614 / 19.98259 / 116.66013 / 111.68321`。
-- PNG palette 含 `tRNS` 透明資料，因此 CARTO 底圖可保留，只有雷達回波覆蓋在地圖上。
+- 實機截圖確認 HKO 完整雷達 JPEG 不適合直接作 Leaflet Overlay：成品圖包含底圖、時間及右側色板，會造成地圖重疊、泛藍及比例失真。
+- Worker v2.4.3 改用香港天文台 Regional Weather Information Portal 使用的現行 `R4_GIS` KML／PNG 雷達圖層。
+- 64 公里來源為 `R4_GIS_rad_064/R4_GIS_server_Radar_064.kml`，PNG 為 800×800；256 公里來源為 `R4_GIS_rad_256/R4_GIS_server_Radar_256.kml`，PNG 為 1900×1900。
+- 兩種 GIS PNG 均帶透明度資料，可直接疊在 CARTO／OpenStreetMap 底圖上，只顯示雷達回波，不再顯示 HKO 成品圖底圖、Logo、時間及色板。
+- 每個 GroundOverlay 使用 HKO KML 提供的 LatLonBox，64／256 公里分別使用其官方地理邊界。
+- R4 KML 的畫面名稱／檔名使用香港本地時間；Worker 優先從檔名解析 HKT，避免把 KML `<when>` 尾端 `Z` 誤當真正 UTC。
+- 保留最多20幀、約每6分鐘更新；Live 最新幀仍須通過30分鐘 freshness 驗證。
+- 前端加入專用 Leaflet `radarPane`（z-index 350），雷達位於底圖之上、定點及附近半徑向量之下；底圖切換仍可正常使用。
+- Radar Contract 維持 v1.0；TEST 模式、播放／暫停、時間軸、透明度及64／256公里切換保持相容。
+- App 版本更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
 
-### Worker v2.4.3
-- Live `/api/radar/frames` 改由 HKO `R4_GIS_rad_064`／`R4_GIS_rad_256` KML 讀取20個 GroundOverlay。
-- 優先由檔名／畫面名稱解析香港時間，避免誤用 KML `<when>` 的 `Z` 尾碼。
-- 保留最新30分鐘 freshness、150分鐘動畫歷史及 Radar Contract v1.0。
-- 回應新增 `renderMode: transparent-georeferenced-overlay`。
+## Worker v2.4.3 Current HKO GIS Radar Source
 
-### 前端
-- Live 及 TEST 均使用專用 Leaflet `radarPane`（z-index 350）。
-- 移除先前試驗的 Canvas 裁圖、blob cache、隱藏 CARTO 及停用底圖切換做法。
-- App 更新至 v1.6.2，Service Worker 快取更新至 `point-rain-pwa-v1.6.2`。
-
-## Worker v2.4.2 Current HKO Live Source
-
-### Live 雷達來源
-- Live 雷達主來源由舊 KML 改為香港天文台現行雷達頁使用的 `wxinfo/radars/temp_json/nradar_img.json`。
-- 64 公里使用 `range2`／`rad_064_png`（3 公里高度）；256 公里使用 `range0`／`rad_256_png`。
-- 解析 HKO JSON 內的 `picture[...]="...jpg"` 路徑及檔名香港時間，並經既有 `/api/radar/image` 安全代理載入。
-- 實測現行 feed 為20幀、每6分鐘一幀，64及256公里最新影像均可直接取得。
-
-### 新鮮度及安全
-- 最新 Live frame 必須在30分鐘內，否則整個 Live feed 回報 stale/unavailable。
-- 最新幀新鮮時，保留最多150分鐘歷史幀供動畫使用；修正 v2.4.1 對每個歷史 frame 使用30分鐘門檻而會截短動畫的限制。
-- 未來時間最多容許10分鐘偏差。
-- 舊 KML 端點只保留在 probe 診斷資訊，標記為 `deprecated-not-queried`，不再作 Live fallback。
-- Radar Contract 維持 v1.0；前端 v1.6.0 無需修改。
+- Live 主來源改為 HKO 現行 `R4_GIS` KML；不再把 `temp_json/nradar_img.json` 的完整成品 JPEG 當作地理 Overlay。
+- `/api/radar/frames` 繼續輸出同一 Radar Contract v1.0，新增 `renderMode: transparent-georeferenced-overlay` 說明。
+- `/api/radar/image` 繼續作官方 HKO 雷達 PNG 安全代理。
+- 64 公里及256公里各提供20個 GroundOverlay；圖片本身含透明 palette (`tRNS`)。
+- Worker v2.4.3 需要手動重新部署到 `https://radar.max-yu.workers.dev`；GitHub Pages 部署不會自動更新 Cloudflare Worker。
 
 ## v1.6.1 Live Radar Integration Fix
 
-### Live 雷達驗證
-- 以 390×844 手機 viewport 對正式 Worker v2.4.2 執行 Live Radar smoke test。
-- 64 km／256 km 均成功取得20幀，實際 JPEG Overlay 可載入；播放、時間軸、範圍切換及透明度控制通過。
-
-### UI／穩定性
-- 更新雷達來源文案，移除已淘汰的 KML 描述。
-- 首次 Live Radar 載入失敗時自動取消雷達開關，避免 UI 顯示已啟用但地圖沒有圖層。
-- 雷達範圍及透明度加入本機保存。
-- 設定抽屜標題及關閉按鈕固定在捲動頂部，改善手機長設定頁操作。
+- 實機／Chromium 手機 smoke test 已驗證 HKO Live 64 km、256 km 雷達影像均可經 Worker proxy 載入。
+- 驗證播放／暫停、時間軸、64／256 km 切換、透明度控制及關閉圖層流程。
+- 雷達設定說明由舊 KML 文案改為 HKO 現行即時雷達影像索引。
+- 雷達首次載入失敗時會自動關閉雷達狀態及開關，並恢復原本 Bottom Sheet。
+- 記住 64／256 km 範圍及雷達透明度。
+- 設定抽屜標題／關閉按鈕改為 sticky，長頁面捲動後仍可操作。
 - Service Worker 快取版本更新至 `point-rain-pwa-v1.6.1`。
 
 ## v1.6.0 Rain Radar Phase A + B
 
-### 雷達資料
-- Worker 升級至 v2.4.0，啟用 HKO 雨量雷達能力及 Radar Contract v1.0。
-- 新增 64 公里／256 公里 HKO KML 雷達幀讀取、KML NetworkLink 遞迴解析、影像代理及幀邊界處理。
-- 只接受 HKO 雷達 KML 可驗證影像；顯式過舊／未來時間會被拒絕，缺失時間才按6分鐘節奏補齊。
-- 新增 `/probe/radar` 診斷接口。
+- 新增 HKO 雷達幀讀取，支援 64 公里及 256 公里範圍；目前 Live 來源由 Worker v2.4.3 的現行 HKO R4 GIS KML／透明 PNG 提供。
+- Worker 新增 `/api/radar/frames`、`/api/radar/image` 及 `/probe/radar`。
+- 雷達影像以 Leaflet image overlay 疊加在現有定點雨量地圖，不另開頁面。
+- 時間軸加入播放／暫停、拖曳選幀、最新幀及幀數顯示。
+- 預載最近及相鄰影像，切換時先載入新幀再替換舊圖層，減少閃爍。
+- 即時模式約每 5.5 分鐘檢查新幀；背景更新失敗時保留最後可用雷達畫面。
+- 設定支援 64／256 公里、透明度及慢／標準／快動畫速度。
+- 手機開啟雷達時自動將定點預報 Bottom Sheet 收至 peek；關閉雷達後恢復先前高度。
+- 新增 `mode=test` 測試動畫及 Worker 合成測試圖，晴天亦可驗證圖層、時間軸及動畫流程。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.6.0`。
 
-### 雷達 UI／動畫
-- 雷達影像直接疊加在現有 Leaflet 地圖，保留定點位置及預報 Bottom Sheet。
-- 新增播放／暫停、雷達時間軸、最新幀、幀數、64／256公里、透明度及三段動畫速度。
-- 預載最近12幀及目前幀前後影像；新幀載入成功後才替換舊 Overlay，降低閃爍。
-- 即時雷達在前景期間定時檢查新幀；背景更新失敗時保留最後成功畫面。
-- 手機啟用雷達自動把 Bottom Sheet 收到 peek；關閉後恢復原本高度；初次載入失敗時亦恢復面板。
+### 雷達 API
 
-### 晴天測試
-- 新增 `mode=test`，由 Worker 產生12幀透明合成雷達 SVG，無降雨時仍可驗證播放、時間軸、透明度及64／256公里流程。
-- 測試動畫有清楚 TEST 標示，不會被誤認為實況雷達。
-
-### PWA／品質
-- App版本更新至 v1.6.0，Service Worker快取更新至 `point-rain-pwa-v1.6.0`。
-- 新增 GitHub Actions `Validate radar build`，使用 Node 22 檢查 Worker及雷達相關 JavaScript 語法。
+```text
+GET /api/radar/frames?range=64&mode=live
+GET /api/radar/frames?range=256&mode=live
+GET /api/radar/frames?range=64&mode=test
+GET /api/radar/image?id=...
+GET /api/radar/test-image?range=64&frame=0
+GET /probe/radar?range=64&mode=live
+```
 
 ## v1.5.3 Location Stability & Time UX
 
-### 定位穩定性
-- 一般定位及高精度定位不再各自更新地圖；完成精度比較後只採用一次最終位置。
-- 定位請求加入鎖定，進行中會停用所有定位按鈕，避免重複請求互相競爭。
-- 使用者手動按定位時，第一階段定位快取由最長5分鐘收緊至30秒；自動啟動仍可使用較舊快取以縮短等待。
-- 手機地圖置中改為一次計算 Bottom Sheet 可視區後直接設定最終中心，避免 `setView` 後再 `panBy` 的跳動。
-- 預報重新渲染及背景更新不再主動移動地圖。
-
-### 預報時間 UX
-- 時段卡取消「0–30分鐘」相對標籤，改以實際半小時區間為主，例如 `15:00–15:30`。
-- 每個時段加入「進行中／已過／下一時段／其後」狀態，避免把舊預報基準誤解成由目前時間起計。
-- 新增「預報有效至」資訊；第四個摘要指標由資料時差改為有效時間。
-- 延遲狀態集中顯示，手機標題不再重複顯示一般延遲文字。
-- 無雨時段進一步精簡，只保留時間、時段狀態及「無雨」。
-
-### UI
-- 儲存位置及分享位置按鈕改用書籤／分享圖示，避免與地圖放大 `+` 混淆。
-- 附近比較圓圈降低填色及線條視覺權重，為後續雨量雷達圖層預留清晰度。
-- 無雨但只有一般更新延遲時，Bottom Sheet 可保持收起；只有有雨、資料明顯過期或雨區邊界接近時才自動半開。
-- Service Worker快取版本更新至 `point-rain-pwa-v1.5.3`。
+- 定位只在一般／高精度結果比較完成後更新一次地圖，消除定位後地圖來回跳動。
+- 定位進行期間鎖定定位按鈕；手動定位最多只接受30秒快取位置。
+- 手機地圖置中直接計算 Bottom Sheet 可視區，一次設定最終地圖中心。
+- 預報刷新不再自動移動地圖。
+- 時段卡以實際區間為主，加入「進行中／已過／下一時段／其後」狀態。
+- 摘要新增「預報有效至」，避免把預報基準誤解為目前時間。
+- 無雨時段再精簡；一般更新延遲不會強制打開 Bottom Sheet。
+- 儲存／分享按鈕改用標準圖示，附近比較圓圈降低視覺權重。
+- Service Worker 快取版本更新至 `point-rain-pwa-v1.5.3`。
 
 ## v1.5.2 UI Compression & Diagnostics
 
-### UI／UX
-- 手機頂部工具列壓縮，減少地圖被遮擋。
-- Bottom Sheet展開時隱藏地圖右上狀態，避免「資料更新正常」重複出現。
-- 無雨且資料正常時自動收起預報面板，保留地圖視野。
-- 無雨模式壓縮重複內容，半開狀態不再顯示乾燥趨勢卡。
-- 時段卡以 `0–30分鐘`、`30–60分鐘` 等相對時間為主，實際時間區間改為輔助文字。
+- 自動清除舊 `radar.maxyu0725.workers.dev` 本地設定，改用 `https://radar.max-yu.workers.dev`。
+- 設定頁新增 App／Worker／API 診斷資訊。
+- 手機頂部工具列壓縮，Bottom Sheet 展開時隱藏地圖右上狀態。
+- 無雨、資料正常時自動收起 Bottom Sheet，減少遮擋地圖。
+- 無雨模式減少重複的 `0.0 mm` 顯示。
+- `位置變化穩定` 改名為 `附近差異小`，敏感狀態改為 `雨區邊界接近`。
 
-### 診斷及穩定性
-- 自動遷移舊 Worker URL，清除 `radar.maxyu0725.workers.dev` 本地設定。
-- 設定頁新增 App版本、Worker版本及目前API主機。
-- Service Worker快取版本更新至 `point-rain-pwa-v1.5.2`。
+## v1.5 Foundation 內容
 
-### 文案
-- `位置變化穩定` 改名為 `附近差異小`。
-- `位置較敏感` 改名為 `雨區邊界接近`。
+- CSS及JavaScript拆分成模組，雷達程式獨立在 `js/radar.js`。
+- 資料新鮮度與位置敏感度分開顯示。
+- 每個預報時段使用完整半小時區間。
+- 定位先檢查權限；尚未決定時不會在啟動後立即彈系統提示。
+- 頁面在背景時暫停自動更新；返回前景後按資料年齡更新。
+- API請求加入12秒逾時；背景更新保留原有預報。
+- 改善文字尺寸、對比、鍵盤焦點、讀屏公告及設定抽屜焦點管理。
+- 加入香港地區搜尋、官方網格範圍、分享私隱選項及應用程式內對話框。
+- PWA更新改為由使用者確認後才套用，避免運作途中混用新舊檔案。
+- 雷達 API 契約版本定為 v1.0。
 
-## v1.5.0 Foundation
+## 第三方地圖程式
 
-### 資料表達
-- 資料新鮮度與位置敏感度改為兩個獨立狀態。
-- 半小時預報卡改顯示完整時間區間。
-- 開始降雨及最強雨勢改用半小時區間，避免過度精確。
+Leaflet 1.9.4 以固定版本及完整性雜湊載入；Service Worker會在首次成功載入後快取該資源。線上底圖仍由 OpenStreetMap／CARTO 提供；Live HKO 雷達開啟期間會暫時隱藏 CARTO，以避免兩套地圖重疊。
 
-### 定位及私隱
-- 先查詢定位權限，未決定時使用應用程式內提示。
-- 先快速定位，精度不足時才嘗試高精度定位。
-- 定位精度圈顯示實際誤差，不再截短至1500米。
-- 分享時預設使用附近地區，可另選精確座標。
-
-### UI／UX及無障礙
-- 改善小字、對比、鍵盤焦點及減少動態效果設定。
-- 預報面板不再整區使用 aria-live，改用簡短狀態公告。
-- 設定抽屜加入 dialog 語義、焦點圈定及焦點返回。
-- 加入香港地區搜尋、官方網格範圍及應用程式內對話框。
-
-### 穩定性及架構
-- 前端拆分為 CSS及JavaScript模組。
-- API請求加入12秒逾時。
-- 頁面背景時暫停更新，返回前景後按資料年齡更新。
-- 移除舊 Worker 完整網格前端後備，要求 Worker v2.3。
-- PWA更新改為使用者確認後才套用。
-- 加入 Cloudflare Pages `_headers` 安全標頭。
-
-### 雷達準備
-- `js/radar.js`獨立處理雷達契約及未來圖層。
-- 雷達 API契約版本定為 v1.0。
-- Worker在v1.5階段仍回報 `radarFrames: false`。
+`_headers` 提供 Cloudflare Pages 的基本安全標頭及定位權限政策。
