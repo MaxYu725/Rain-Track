@@ -42,6 +42,13 @@
 .segment-btn:disabled{cursor:not-allowed;opacity:.36}
 .segmented-radius-select{min-width:240px}
 
+/* Settings Redesign Phase 1C: radar timeline range / height quick switches. */
+.radar-mode-chip.radar-quick-chip{appearance:none;min-height:24px;padding:2px 7px;border:1px solid #3d5664;background:#081116;color:#9bdcff;cursor:pointer;font:inherit;font-size:.66rem;line-height:1.2;touch-action:manipulation}
+.radar-mode-chip.radar-quick-chip:active:not(:disabled){background:#123347;color:#fff}
+.radar-mode-chip.radar-quick-chip.test{border-color:#8b6b20;background:#151006;color:#ffd06a}
+.radar-height-chip.radar-quick-chip{margin-left:-2px}
+.radar-height-chip.radar-quick-chip.hidden{display:none!important}
+
 @media(max-width:700px){
   .settings-drawer-phase1a{top:calc(50px + var(--safe-top));height:calc(100dvh - 50px - var(--safe-top));width:min(94vw,390px);padding:18px 14px calc(18px + var(--safe-bottom));scroll-padding-top:12px}
   .settings-drawer-phase1a .drawer-heading{display:none}
@@ -54,9 +61,15 @@
   .segmented-control{min-width:0;width:min(64%,240px);max-width:none;flex:0 1 240px}
   .segmented-radius-select{width:min(68%,250px)}
   .segment-btn{min-height:42px;padding:0 6px;font-size:.74rem}
+  .radar-mode-chip.radar-quick-chip{min-height:25px;padding:2px 6px;font-size:.62rem}
+  .radar-timeline .timeline-head{gap:4px}
   .settings-action-grid-three{grid-template-columns:repeat(2,minmax(0,1fr))}
   .settings-action-grid-three .wide-btn:last-child{grid-column:1/-1}
   .settings-advanced>summary{min-height:48px;padding:0 10px;font-size:.84rem}
   .settings-advanced>summary small{font-size:.64rem}
   .settings-advanced-body{padding:0 10px 10px}
+}
+
+@media(max-width:430px){
+  #radar-source-label{display:none}
 }
