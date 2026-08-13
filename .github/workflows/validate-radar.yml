@@ -24,5 +24,8 @@ jobs:
             node --check "$file"
           done
           node --check scripts/validate-app-shell.mjs
+          node --check scripts/validate-forecast-map-contract.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
+      - name: Validate forecast map contract
+        run: node scripts/validate-forecast-map-contract.mjs
