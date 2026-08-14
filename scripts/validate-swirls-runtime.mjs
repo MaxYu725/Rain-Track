@@ -16,9 +16,10 @@ function compactHkt(date) {
 
 function makeIndex(runIso = '2026-08-14T02:00:00.000Z') {
   const run = new Date(runIso);
+  const assetMinute = compactHkt(run).slice(-2);
   return Array.from({ length: SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => {
     const valid = new Date(run.getTime() + (30 + frameIndex * 6) * 60_000);
-    return `${compactHkt(valid)},ncrf_minute00_${frameIndex}.png,ncrf_minute00_${frameIndex}.af.mdl`;
+    return `${compactHkt(valid)},ncrf_minute${assetMinute}_${frameIndex}.png,ncrf_minute${assetMinute}_${frameIndex}.af.mdl`;
   }).join('\n');
 }
 
