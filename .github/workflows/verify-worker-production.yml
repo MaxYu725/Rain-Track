@@ -28,12 +28,15 @@ jobs:
       - name: Syntax check production smoke
         run: node --check scripts/smoke-worker-production.mjs
 
-      - name: Verify Cloudflare deployment credentials
-        uses: cloudflare/wrangler-action@v3
+      - name: Verify Cloudflare credentials and deployment
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: whoami
+          wranglerVersion: '4.123.0'
+          command: |
+            whoami
+            deployments status --name radar --json
 
       - name: Smoke production Worker
         run: node scripts/smoke-worker-production.mjs
