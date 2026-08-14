@@ -5,7 +5,7 @@ import { renderForecastFrameToCanvas } from './forecast-map-browser-canvas.js';
 import { forecastWindow } from './forecast-map-renderer.js';
 import { removeForecastOverlay, setForecastOverlayOpacity, upsertForecastOverlay } from './forecast-map-leaflet.js';
 
-const DEFAULT_OPACITY = 0.72;
+const DEFAULT_OPACITY = 0.58;
 
 let forecast = null;
 let canvas = null;
