@@ -1,0 +1,42 @@
+name: Deploy Worker production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-worker-production
+  cancel-in-progress: false
+
+env:
+  WORKER_BASE_URL: https://radar.max-yu.workers.dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout main source
+        uses: actions/checkout@v6
+
+      - name: Validate deployable Worker source
+        run: |
+          node --check worker.js
+          node --check scripts/smoke-worker-production.mjs
+          node scripts/validate-worker-swirls-inline.mjs
+
+      - name: Dry run and deploy production Worker
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.123.0'
+          command: |
+            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
+            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars
+            deployments status --name radar --json
+
+      - name: Smoke production Worker
+        run: node scripts/smoke-worker-production.mjs

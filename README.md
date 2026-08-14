@@ -6,13 +6,14 @@ Rain-Track 是香港定點未來兩小時雨量、HKO 雷達觀測與兩小時�
 
 - App UI：`v1.6.4`（Forecast Map extension）
 - PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa17`
-- Worker：`v2.4.4`
+- Worker：`v2.5.0`
 - Radar Contract：`v1.0`
 - Forecast Map feature baseline：`a4544663abb01ddfba90d35ecb0f55dbb3498c5c`
+- SWIRLS Worker source baseline：`c95d82b10370d834fdb4ec8a64d571bcf8e145c6`
 - 正式 Worker：`https://radar.max-yu.workers.dev`
 - 前端：GitHub Pages，由 `main` repository root 發布
 
-2026-08-14 真雨實測已完成：定點預報、Live Radar、正式兩小時 Forecast Map、4-frame timeline、Radar / Forecast 互斥切換及手機 rendering 均已在 Android 實機驗證。
+2026-08-14 真雨實測已完成：定點預報、Live Radar、正式兩小時 Forecast Map、4-frame timeline、Radar / Forecast 互斥切換及手機 rendering 均已在 Android 實機驗證。同日 Worker `v2.5.0` 已正式部署，SWIRLS 16-frame runtime 與既有 Point / Nowcast / 三組 Live Radar 均通過 production smoke。
 
 ## 已完成能力
 
@@ -59,6 +60,28 @@ GET /api/rain/nowcast
 - 與 Radar 使用正式三段模式：`關閉 / 雷達 / 2小時預報`
 - Radar 與 Forecast Map 永遠互斥，避免把觀測回波與未來預報誤讀為同一產品
 
+### SWIRLS 6 分鐘預報資料層
+
+Worker `v2.5.0` 另加入經驗證的 HKO SWIRLS raw forecast runtime，作為未來 Weather App 更細時間軸的 backend contract：
+
+```http
+GET /probe/swirls
+GET /api/rain/swirls/frame?frame=0..15
+```
+
+目前 contract：
+
+- 16 個 forecast frame
+- 6 分鐘 cadence
+- 約 +30 至 +120 分鐘 forecast horizon
+- 每個 frame 代表 30 分鐘累積雨量
+- 單位：`mm / 30 min`
+- 每個 frame 為 `121 × 121`，共 `14,641` cells
+- index / MDL publication rollover mismatch 會 bypass cache 重試一次；仍不一致則 fail closed
+- index 與 MDL 正常 cache TTL 為 45 秒，upstream timeout 為 12 秒
+
+SWIRLS frame 是**預報資料**；Live Radar 仍然是**觀測資料**。目前獨立 Rain-Track PWA 的 Forecast Map 保持既有 4-frame `/api/rain/nowcast` UI，不把 SWIRLS 16-frame backend 強行塞入已封版介面。
+
 ### Forecast Map 重要資料契約
 
 HKO CSV 的 latitude / longitude 會因三位小數 rounding 出現相鄰差值 `0.019 / 0.020` 交錯。因此：
@@ -80,15 +103,17 @@ GitHub Pages PWA
   service-worker.js
         │
         ▼
-Cloudflare Worker v2.4.4
+Cloudflare Worker v2.5.0
   /api/capabilities
   /api/rain/point
   /api/rain/nowcast
+  /probe/swirls
+  /api/rain/swirls/frame?frame=0..15
   /api/radar/frames
   /api/radar/image
         │
         ▼
-Hong Kong Observatory public data / GIS radar sources
+Hong Kong Observatory public data / GIS radar / SWIRLS sources
 ```
 
 Forecast Map 前端 pipeline：
@@ -127,6 +152,11 @@ Pull request 到 `main` 及 `main` push 會執行：
 - App Shell 檔案存在性／module dependency 驗證
 - `scripts/validate-forecast-map-contract.mjs`
 - Forecast Map 四個時段、完整格點、row-major orientation 與 observed-axis regression
+- `scripts/validate-swirls-contract.mjs`
+- `scripts/validate-swirls-runtime.mjs`
+- `scripts/validate-worker-swirls-inline.mjs`
+
+Production Worker 另有 `scripts/smoke-worker-production.mjs`，驗證 v2.5.0/SWIRLS、Point、Nowcast、三組 Live Radar 及實際 radar image proxy。
 
 ## 2026-08-14 真雨驗收結論
 
@@ -151,13 +181,30 @@ Pull request 到 `main` 及 `main` push 會執行：
 
 ### Worker
 
-修改 `worker.js` 後必須另外部署到：
+正式 Worker：
 
 ```text
 https://radar.max-yu.workers.dev
 ```
 
-目前正式 Worker `v2.4.4` 已穩定。Forecast Map 使用既有 `/api/rain/nowcast`，本輪沒有要求 Worker 重新部署。
+目前正式 Worker 為 `v2.5.0`，2026-08-14 production smoke 已通過。
+
+Repository 提供 `.github/workflows/deploy-worker.yml` 作正式部署入口。此 workflow **只接受手動 `workflow_dispatch`**，不會因普通 `main` push 自動覆寫 production。流程固定為：
+
+1. Worker syntax + SWIRLS inline parity validation。
+2. Wrangler production dry-run。
+3. 部署 `worker.js` 到 Worker `radar`。
+4. 保留現行 `compatibility_date = 2026-08-05` 與 Dashboard variables。
+5. 自動執行完整 production smoke。
+
+GitHub Actions 需要 repository secrets：
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+不要把 Cloudflare token 寫入 repository、workflow 明文或 Worker source。
 
 ## 封版原則
 
