@@ -21,7 +21,8 @@ if (worker.includes('RAIN_TRACK_SWIRLS_INLINE_BEGIN')) {
 
 swirlsData = swirlsData
   .replace(/^export /gm, '')
-  .replace(/\bcoordKey\b/g, 'swirlsCoordKey');
+  .replace(/\bcoordKey\b/g, 'swirlsCoordKey')
+  .replace(/\bsubtractMinutesIso\b/g, 'swirlsSubtractMinutesIso');
 
 swirlsRuntime = swirlsRuntime
   .replace(/^import \{[\s\S]*?\} from '\.\/swirls-data\.js';\r?\n\r?\n/, '')
