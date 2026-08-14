@@ -118,8 +118,10 @@ export function compactForecastGrid({ issueTime, unit = FORECAST_MAP_CONTRACT.un
       && frame.diagnostics.missingValueCount === 0
   );
 
-  const stepLat = Number(grid?.stepLat) || (latitudes.length > 1 ? Math.abs(latitudes[1] - latitudes[0]) : null);
-  const stepLon = Number(grid?.stepLon) || (longitudes.length > 1 ? Math.abs(longitudes[1] - longitudes[0]) : null);
+  const rawStepLat = Number(grid?.stepLat) || (latitudes.length > 1 ? Math.abs(latitudes[1] - latitudes[0]) : null);
+  const rawStepLon = Number(grid?.stepLon) || (longitudes.length > 1 ? Math.abs(longitudes[1] - longitudes[0]) : null);
+  const stepLat = Number.isFinite(rawStepLat) ? round6(rawStepLat) : null;
+  const stepLon = Number.isFinite(rawStepLon) ? round6(rawStepLon) : null;
   const minLat = latitudes.length ? Math.min(...latitudes) : null;
   const maxLat = latitudes.length ? Math.max(...latitudes) : null;
   const minLon = longitudes.length ? Math.min(...longitudes) : null;
@@ -140,10 +142,10 @@ export function compactForecastGrid({ issueTime, unit = FORECAST_MAP_CONTRACT.un
       latitudes: northToSouth,
       longitudes: westToEast,
       bounds: {
-        north: Number.isFinite(maxLat) && Number.isFinite(stepLat) ? maxLat + stepLat / 2 : maxLat,
-        south: Number.isFinite(minLat) && Number.isFinite(stepLat) ? minLat - stepLat / 2 : minLat,
-        east: Number.isFinite(maxLon) && Number.isFinite(stepLon) ? maxLon + stepLon / 2 : maxLon,
-        west: Number.isFinite(minLon) && Number.isFinite(stepLon) ? minLon - stepLon / 2 : minLon
+        north: Number.isFinite(maxLat) && Number.isFinite(stepLat) ? round6(maxLat + stepLat / 2) : maxLat,
+        south: Number.isFinite(minLat) && Number.isFinite(stepLat) ? round6(minLat - stepLat / 2) : minLat,
+        east: Number.isFinite(maxLon) && Number.isFinite(stepLon) ? round6(maxLon + stepLon / 2) : maxLon,
+        west: Number.isFinite(minLon) && Number.isFinite(stepLon) ? round6(minLon - stepLon / 2) : minLon
       }
     },
     frames: compactFrames,
