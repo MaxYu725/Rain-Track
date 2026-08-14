@@ -1,0 +1,25 @@
+name: Validate forecast renderer
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  renderer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check renderer syntax
+        run: |
+          node --check js/forecast-map-data.js
+          node --check js/forecast-map-renderer.js
+          node --check scripts/validate-forecast-map-renderer.mjs
+      - name: Validate forecast renderer
+        run: node scripts/validate-forecast-map-renderer.mjs
