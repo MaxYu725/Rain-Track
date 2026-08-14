@@ -1,20 +1,7 @@
-import { SWIRLS_RAW_CONTRACT } from '../swirls-data.js';
 import {
   createNetworkFetchText,
   createSwirlsRuntime
 } from '../swirls-worker-runtime.js';
-
-const diagnosticResponse = await fetch(SWIRLS_RAW_CONTRACT.indexUrl, {
-  cache: 'no-store',
-  headers: {
-    Accept: 'text/plain,*/*',
-    'User-Agent': 'Rain-Track-GitHub-Live-Probe/1.0'
-  }
-});
-if (!diagnosticResponse.ok) throw new Error(`Live index diagnostic HTTP ${diagnosticResponse.status}`);
-const diagnosticText = await diagnosticResponse.text();
-console.log('SWIRLS live index first lines:');
-console.log(diagnosticText.split(/\r?\n/).filter(Boolean).slice(0, 4).join('\n'));
 
 const runtime = createSwirlsRuntime({
   fetchText: createNetworkFetchText({
