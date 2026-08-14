@@ -1,5 +1,5 @@
 /**
- * Hong Kong Point Rainfall Forecast Worker v2.4.4
+ * Hong Kong Point Rainfall Forecast Worker v2.5.0
  * Cloudflare Worker (module syntax)
  *
  * Routes:
@@ -7,6 +7,8 @@
  *   GET /api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2
  *   GET /api/rain/nowcast
  *   GET /probe/rain
+ *   GET /probe/swirls
+ *   GET /api/rain/swirls/frame?frame=0..15
  *   GET /api/capabilities
  *   GET /api/radar/frames?range=64|256&height=2|3&mode=live|test
  *   GET /api/radar/image?id=<base64url>
@@ -14,7 +16,7 @@
  *   GET /probe/radar?range=64|256&height=2|3&mode=live|test
  */
 
-const VERSION = '2.4.4';
+const VERSION = '2.5.0';
 const HKO_NOWCAST = 'https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv';
 const CACHE_TTL_SECONDS = 600;
 const RADAR_CACHE_TTL_SECONDS = 60;
@@ -94,6 +96,8 @@ export default {
             '/api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2',
             '/api/rain/nowcast',
             '/probe/rain',
+            '/probe/swirls',
+            '/api/rain/swirls/frame?frame=0',
             '/api/capabilities',
             '/api/radar/frames?range=64&height=3&mode=live',
             '/api/radar/image?id=...',
@@ -103,6 +107,8 @@ export default {
           capabilities: {
             pointForecast: true,
             nowcastGrid: true,
+            swirlsFrames: true,
+            swirls: SWIRLS_PUBLIC_CONTRACT,
             radarFrames: true,
             radar: RADAR_CONTRACT
           },
@@ -114,13 +120,23 @@ export default {
       if (url.pathname === '/api/capabilities') return json({
         ok: true,
         version: VERSION,
-        capabilities: { pointForecast: true, nowcastGrid: true, radarFrames: true, radar: RADAR_CONTRACT },
+        capabilities: {
+          pointForecast: true,
+          nowcastGrid: true,
+          swirlsFrames: true,
+          swirls: SWIRLS_PUBLIC_CONTRACT,
+          radarFrames: true,
+          radar: RADAR_CONTRACT
+        },
+        swirlsContract: SWIRLS_PUBLIC_CONTRACT,
         radarContract: RADAR_CONTRACT
       }, 200, { 'Cache-Control': 'public, max-age=300' });
 
       if (url.pathname === '/api/rain/point') return await handlePointForecast(url);
       if (url.pathname === '/api/rain/nowcast') return await handleNowcast(false);
       if (url.pathname === '/probe/rain') return await handleNowcast(true);
+      if (url.pathname === '/probe/swirls') return await handleSwirlsProbe();
+      if (url.pathname === '/api/rain/swirls/frame') return await handleSwirlsFrame(url);
 
       if (url.pathname === '/api/radar/frames') {
         const range = normalizeRange(url.searchParams.get('range'));
@@ -178,7 +194,7 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
       ...options,
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/2.4.4)',
+        'User-Agent': 'Mozilla/5.0 (compatible; HK-Point-Rain-Worker/' + VERSION + ')',
         Accept: '*/*',
         ...(options.headers || {})
       }
@@ -1185,3 +1201,664 @@ function round(value, digits = 1) {
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
+
+/* RAIN_TRACK_SWIRLS_INLINE_BEGIN
+ * Phase 3B2 production inline adapter. Keep worker.js directly deployable.
+ * Contract source of truth remains swirls-data.js / swirls-worker-runtime.js.
+ */
+const SWIRLS_RAW_CONTRACT = Object.freeze({
+  version: '1.0',
+  indexUrl: 'https://maps.weather.gov.hk/ocf/dat/nc/nc.rf.index.2.txt',
+  assetBaseUrl: 'https://maps.weather.gov.hk/ocf/dat/nc/',
+  frameCount: 16,
+  cadenceMinutes: 6,
+  accumulationMinutes: 30,
+  firstLeadMinutes: 30,
+  lastLeadMinutes: 120,
+  rows: 121,
+  cols: 121,
+  cellCount: 121 * 121,
+  unit: 'mm / 30 min',
+  orientation: 'row-major-north-to-south-west-to-east',
+  coverage: {
+    minLat: 21.328,
+    maxLat: 23.487,
+    minLon: 112.956,
+    maxLon: 115.291
+  }
+});
+
+const CADENCE_MINUTE_RE = '(?:00|06|12|18|24|30|36|42|48|54)';
+const INDEX_PNG = new RegExp(`^ncrf_minute(${CADENCE_MINUTE_RE})_(\\d+)\\.png$`);
+const INDEX_MDL = new RegExp(`^ncrf_minute(${CADENCE_MINUTE_RE})_(\\d+)\\.af\\.mdl$`);
+const HEADER_RE = /SL-RF\s+DMO\s+(20\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})/;
+const EPSILON = 1e-6;
+
+function parseSwirlsIndex(text) {
+  const lines = String(text || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) throw new Error('SWIRLS index is empty');
+
+  const frames = lines.map((line, lineIndex) => {
+    const parts = line.split(',').map(part => part.trim());
+    if (parts.length !== 3) throw new Error(`SWIRLS index line ${lineIndex + 1} is malformed`);
+
+    const [validToken, pngFile, mdlFile] = parts;
+    const validTime = parseHktCompact(validToken);
+    if (!validTime) throw new Error(`SWIRLS index line ${lineIndex + 1} has invalid valid time`);
+
+    const pngMatch = pngFile.match(INDEX_PNG);
+    const mdlMatch = mdlFile.match(INDEX_MDL);
+    if (!pngMatch || !mdlMatch) throw new Error(`SWIRLS index line ${lineIndex + 1} has unexpected asset names`);
+
+    const pngMinute = pngMatch[1];
+    const mdlMinute = mdlMatch[1];
+    const pngIndex = Number(pngMatch[2]);
+    const mdlIndex = Number(mdlMatch[2]);
+    if (pngMinute !== mdlMinute) throw new Error(`SWIRLS index line ${lineIndex + 1} asset minutes disagree`);
+    if (pngIndex !== mdlIndex) throw new Error(`SWIRLS index line ${lineIndex + 1} asset indices disagree`);
+
+    return {
+      frameIndex: mdlIndex,
+      assetMinute: mdlMinute,
+      validTime,
+      pngFile,
+      mdlFile,
+      pngUrl: new URL(pngFile, SWIRLS_RAW_CONTRACT.assetBaseUrl).toString(),
+      mdlUrl: new URL(mdlFile, SWIRLS_RAW_CONTRACT.assetBaseUrl).toString()
+    };
+  }).sort((a, b) => a.frameIndex - b.frameIndex);
+
+  validateIndexFrames(frames);
+
+  const firstValidMs = Date.parse(frames[0].validTime);
+  const inferredRunTime = new Date(firstValidMs - SWIRLS_RAW_CONTRACT.accumulationMinutes * 60_000).toISOString();
+  const inferredRunMinute = String(new Date(inferredRunTime).getUTCMinutes()).padStart(2, '0');
+  const assetMinute = frames[0].assetMinute;
+  if (assetMinute !== inferredRunMinute) {
+    throw new Error(`SWIRLS index asset minute ${assetMinute} does not match inferred run minute ${inferredRunMinute}`);
+  }
+
+  return {
+    contractVersion: SWIRLS_RAW_CONTRACT.version,
+    parser: 'hko-swirls-index-v1',
+    source: SWIRLS_RAW_CONTRACT.indexUrl,
+    cadenceMinutes: SWIRLS_RAW_CONTRACT.cadenceMinutes,
+    accumulationMinutes: SWIRLS_RAW_CONTRACT.accumulationMinutes,
+    unit: SWIRLS_RAW_CONTRACT.unit,
+    assetMinute,
+    inferredRunTime,
+    frameCount: frames.length,
+    frames: frames.map(frame => ({
+      ...frame,
+      leadMinutes: Math.round((Date.parse(frame.validTime) - Date.parse(inferredRunTime)) / 60_000),
+      windowStart: swirlsSubtractMinutesIso(frame.validTime, SWIRLS_RAW_CONTRACT.accumulationMinutes),
+      windowEnd: frame.validTime
+    }))
+  };
+}
+
+function parseSwirlsMdl(text) {
+  const source = unwrapBrowserSavedHtml(String(text || '')).replace(/\r/g, '');
+  const header = source.match(HEADER_RE);
+  if (!header) throw new Error('SWIRLS MDL header is missing or invalid');
+
+  const runTime = parseHktParts(header[1], header[2], header[3], header[4], header[5]);
+  if (!runTime) throw new Error('SWIRLS MDL run time is invalid');
+
+  const points = [];
+  let invalidPointCount = 0;
+  for (const rawLine of source.split('\n')) {
+    const line = rawLine.trim();
+    if (!line || line.includes('SL-RF')) continue;
+    const parts = line.split(/\s+/);
+    if (parts.length !== 3) continue;
+
+    const lon = Number(parts[0]);
+    const lat = Number(parts[1]);
+    const rainfall = Number(parts[2]);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(rainfall)) {
+      invalidPointCount += 1;
+      continue;
+    }
+    if (lat < 18 || lat > 26 || lon < 110 || lon > 118 || rainfall < 0 || rainfall > 1000) {
+      invalidPointCount += 1;
+      continue;
+    }
+    points.push({ lat, lon, rainfall });
+  }
+
+  if (invalidPointCount) throw new Error(`SWIRLS MDL contains ${invalidPointCount} invalid grid point(s)`);
+  if (!points.length) throw new Error('SWIRLS MDL contains no grid points');
+
+  const latAsc = uniqueSorted(points.map(point => point.lat));
+  const lonAsc = uniqueSorted(points.map(point => point.lon));
+  const latDesc = [...latAsc].reverse();
+  const expectedCellCount = latAsc.length * lonAsc.length;
+  const coordSet = new Set();
+  let duplicatePointCount = 0;
+
+  for (const point of points) {
+    const key = swirlsCoordKey(point.lat, point.lon);
+    if (coordSet.has(key)) duplicatePointCount += 1;
+    coordSet.add(key);
+  }
+
+  const completeGrid = latAsc.length === SWIRLS_RAW_CONTRACT.rows
+    && lonAsc.length === SWIRLS_RAW_CONTRACT.cols
+    && points.length === SWIRLS_RAW_CONTRACT.cellCount
+    && expectedCellCount === SWIRLS_RAW_CONTRACT.cellCount
+    && coordSet.size === SWIRLS_RAW_CONTRACT.cellCount
+    && duplicatePointCount === 0;
+
+  if (!completeGrid) {
+    throw new Error(`SWIRLS MDL grid incomplete: ${latAsc.length}x${lonAsc.length}, ${points.length} points, ${duplicatePointCount} duplicate(s)`);
+  }
+
+  const orientationValid = validateSourceOrientation(points, latDesc, lonAsc);
+  if (!orientationValid) throw new Error('SWIRLS MDL grid orientation is unexpected');
+
+  const latEdges = axisEdgeBounds(latAsc);
+  const lonEdges = axisEdgeBounds(lonAsc);
+  const values = points.map(point => point.rainfall);
+
+  return {
+    contractVersion: SWIRLS_RAW_CONTRACT.version,
+    parser: 'hko-swirls-af-mdl-v1',
+    runTime,
+    unit: SWIRLS_RAW_CONTRACT.unit,
+    grid: {
+      rows: latDesc.length,
+      cols: lonAsc.length,
+      cellCount: points.length,
+      orientation: SWIRLS_RAW_CONTRACT.orientation,
+      latitudes: latDesc,
+      longitudes: lonAsc,
+      stepLat: averageAxisStep(latAsc),
+      stepLon: averageAxisStep(lonAsc),
+      bounds: {
+        south: latEdges.min,
+        north: latEdges.max,
+        west: lonEdges.min,
+        east: lonEdges.max
+      }
+    },
+    values,
+    validation: {
+      expectedCellCount: SWIRLS_RAW_CONTRACT.cellCount,
+      actualCellCount: points.length,
+      uniqueCellCount: coordSet.size,
+      duplicatePointCount,
+      completeGrid,
+      orientationValid,
+      ready: completeGrid && orientationValid
+    }
+  };
+}
+
+function bindSwirlsMdlFrame(indexData, frameIndex, mdlText) {
+  if (!indexData || !Array.isArray(indexData.frames)) throw new Error('SWIRLS index data is required');
+  const frame = indexData.frames.find(item => item.frameIndex === Number(frameIndex));
+  if (!frame) throw new Error(`SWIRLS frame ${frameIndex} is not present in the index`);
+
+  const mdl = parseSwirlsMdl(mdlText);
+  if (mdl.runTime !== indexData.inferredRunTime) {
+    throw new Error(`SWIRLS run time mismatch: index infers ${indexData.inferredRunTime}, MDL reports ${mdl.runTime}`);
+  }
+
+  return {
+    contractVersion: SWIRLS_RAW_CONTRACT.version,
+    frameIndex: frame.frameIndex,
+    runTime: mdl.runTime,
+    validTime: frame.validTime,
+    leadMinutes: frame.leadMinutes,
+    windowStart: frame.windowStart,
+    windowEnd: frame.windowEnd,
+    unit: mdl.unit,
+    source: {
+      indexUrl: indexData.source,
+      mdlUrl: frame.mdlUrl,
+      pngUrl: frame.pngUrl
+    },
+    grid: mdl.grid,
+    values: mdl.values,
+    validation: {
+      ...mdl.validation,
+      runTimeMatchesIndex: true
+    }
+  };
+}
+
+function validateIndexFrames(frames) {
+  if (frames.length !== SWIRLS_RAW_CONTRACT.frameCount) {
+    throw new Error(`SWIRLS index expected ${SWIRLS_RAW_CONTRACT.frameCount} frames, received ${frames.length}`);
+  }
+
+  const seen = new Set();
+  const assetMinute = frames[0]?.assetMinute || null;
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index];
+    if (frame.frameIndex !== index) throw new Error(`SWIRLS index is missing or reorders frame ${index}`);
+    if (frame.assetMinute !== assetMinute) throw new Error(`SWIRLS index asset minute changes at frame ${index}`);
+    if (seen.has(frame.validTime)) throw new Error('SWIRLS index contains duplicate valid times');
+    seen.add(frame.validTime);
+
+    if (index > 0) {
+      const gap = Math.round((Date.parse(frame.validTime) - Date.parse(frames[index - 1].validTime)) / 60_000);
+      if (gap !== SWIRLS_RAW_CONTRACT.cadenceMinutes) {
+        throw new Error(`SWIRLS index cadence mismatch at frame ${index}: ${gap} minutes`);
+      }
+    }
+  }
+
+  const horizon = Math.round((Date.parse(frames.at(-1).validTime) - Date.parse(frames[0].validTime)) / 60_000)
+    + SWIRLS_RAW_CONTRACT.firstLeadMinutes;
+  if (horizon !== SWIRLS_RAW_CONTRACT.lastLeadMinutes) {
+    throw new Error(`SWIRLS index horizon mismatch: ${horizon} minutes`);
+  }
+}
+
+function validateSourceOrientation(points, latDesc, lonAsc) {
+  if (points.length !== latDesc.length * lonAsc.length) return false;
+  let offset = 0;
+  for (const lat of latDesc) {
+    for (const lon of lonAsc) {
+      const point = points[offset++];
+      if (Math.abs(point.lat - lat) > EPSILON || Math.abs(point.lon - lon) > EPSILON) return false;
+    }
+  }
+  return true;
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.map(value => Number(value.toFixed(6))))].sort((a, b) => a - b);
+}
+
+function averageAxisStep(axis) {
+  if (!Array.isArray(axis) || axis.length < 2) return null;
+  return Number(((axis.at(-1) - axis[0]) / (axis.length - 1)).toFixed(6));
+}
+
+function axisEdgeBounds(axis) {
+  if (!Array.isArray(axis) || !axis.length) return { min: null, max: null };
+  if (axis.length === 1) return { min: axis[0], max: axis[0] };
+  const firstGap = axis[1] - axis[0];
+  const lastGap = axis.at(-1) - axis.at(-2);
+  return {
+    min: Number((axis[0] - firstGap / 2).toFixed(6)),
+    max: Number((axis.at(-1) + lastGap / 2).toFixed(6))
+  };
+}
+
+function swirlsCoordKey(lat, lon) {
+  return `${Number(lat).toFixed(6)}|${Number(lon).toFixed(6)}`;
+}
+
+function parseHktCompact(value) {
+  const match = String(value || '').match(/^(20\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);
+  if (!match) return null;
+  return parseHktParts(match[1], match[2], match[3], match[4], match[5]);
+}
+
+function parseHktParts(year, month, day, hour, minute) {
+  const iso = `${year}-${month}-${day}T${hour}:${minute}:00+08:00`;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function swirlsSubtractMinutesIso(value, minutes) {
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return null;
+  return new Date(time - minutes * 60_000).toISOString();
+}
+
+function unwrapBrowserSavedHtml(value) {
+  if (!/<html|<body|<!--\s*saved from url=/i.test(value)) return value;
+  return value
+    .replace(/<!--[^]*?-->/g, '\n')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+const SWIRLS_FETCH_POLICY = Object.freeze({
+  indexTtlSeconds: 45,
+  mdlTtlSeconds: 45,
+  timeoutMs: 12_000,
+  retryOnRollover: true
+});
+
+function createSwirlsRuntime({
+  fetchText,
+  policy = SWIRLS_FETCH_POLICY
+} = {}) {
+  if (typeof fetchText !== 'function') {
+    throw new Error('SWIRLS runtime requires a fetchText function');
+  }
+
+  async function loadIndex({ bypassCache = false } = {}) {
+    const result = await fetchText(SWIRLS_RAW_CONTRACT.indexUrl, {
+      kind: 'index',
+      ttlSeconds: policy.indexTtlSeconds,
+      timeoutMs: policy.timeoutMs,
+      bypassCache
+    });
+    const text = normalizeFetchResult(result, 'SWIRLS index');
+    const parsed = parseSwirlsIndex(text.body);
+    return {
+      ...parsed,
+      sourceBytes: text.bytes,
+      sourceUpdatedAt: text.updatedAt,
+      cacheStatus: text.cacheStatus
+    };
+  }
+
+  async function loadFrame(frameIndex, { bypassCache = false } = {}) {
+    const normalizedIndex = normalizeFrameIndex(frameIndex);
+    let indexData = await loadIndex({ bypassCache });
+
+    try {
+      return await loadBoundFrame(indexData, normalizedIndex, { bypassCache });
+    } catch (error) {
+      if (!policy.retryOnRollover || bypassCache || !isRolloverMismatch(error)) throw error;
+
+      // HKO reuses the same asset filenames for every SWIRLS run. Around an
+      // upstream publication rollover, index and MDL can briefly belong to
+      // different runs. Refresh both once, then fail closed if still mixed.
+      indexData = await loadIndex({ bypassCache: true });
+      return await loadBoundFrame(indexData, normalizedIndex, { bypassCache: true });
+    }
+  }
+
+  async function loadBoundFrame(indexData, frameIndex, { bypassCache = false } = {}) {
+    const descriptor = indexData.frames.find(frame => frame.frameIndex === frameIndex);
+    if (!descriptor) throw new Error(`SWIRLS frame ${frameIndex} is not present in the current index`);
+
+    const result = await fetchText(descriptor.mdlUrl, {
+      kind: 'mdl',
+      frameIndex,
+      runTime: indexData.inferredRunTime,
+      ttlSeconds: policy.mdlTtlSeconds,
+      timeoutMs: policy.timeoutMs,
+      bypassCache
+    });
+    const text = normalizeFetchResult(result, `SWIRLS frame ${frameIndex}`);
+    const frame = bindSwirlsMdlFrame(indexData, frameIndex, text.body);
+
+    return {
+      ...frame,
+      sourceBytes: text.bytes,
+      sourceUpdatedAt: text.updatedAt,
+      cacheStatus: text.cacheStatus,
+      index: summarizeIndex(indexData)
+    };
+  }
+
+  async function probe({ frameIndex = 0, includeLastFrame = false, bypassCache = false } = {}) {
+    const first = await loadFrame(frameIndex, { bypassCache });
+    const last = includeLastFrame && frameIndex !== SWIRLS_RAW_CONTRACT.frameCount - 1
+      ? await loadFrame(SWIRLS_RAW_CONTRACT.frameCount - 1, { bypassCache })
+      : null;
+
+    return {
+      ok: true,
+      contractVersion: SWIRLS_RAW_CONTRACT.version,
+      source: SWIRLS_RAW_CONTRACT.indexUrl,
+      runTime: first.runTime,
+      frameCount: first.index.frameCount,
+      cadenceMinutes: first.index.cadenceMinutes,
+      accumulationMinutes: SWIRLS_RAW_CONTRACT.accumulationMinutes,
+      unit: first.unit,
+      firstValidTime: first.index.firstValidTime,
+      lastValidTime: first.index.lastValidTime,
+      sampledFrames: [first, last].filter(Boolean).map(summarizeFrame),
+      generatedAt: new Date().toISOString()
+    };
+  }
+
+  return Object.freeze({ loadIndex, loadFrame, probe });
+}
+
+function createNetworkFetchText({
+  fetchImpl = globalThis.fetch,
+  userAgent = 'Rain-Track-SWIRLS/1.0'
+} = {}) {
+  if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
+
+  return async function fetchText(url, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort('timeout'), Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
+    try {
+      const response = await fetchImpl(url, {
+        redirect: 'follow',
+        cache: options.bypassCache ? 'no-store' : 'no-cache',
+        headers: {
+          Accept: 'text/plain,*/*',
+          'User-Agent': userAgent
+        },
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error(`SWIRLS upstream HTTP ${response.status}`);
+      const body = await response.text();
+      return {
+        body,
+        bytes: new TextEncoder().encode(body).byteLength,
+        updatedAt: response.headers.get('last-modified'),
+        cacheStatus: response.headers.get('cf-cache-status') || null
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+function summarizeIndex(indexData) {
+  const frames = Array.isArray(indexData?.frames) ? indexData.frames : [];
+  return {
+    contractVersion: indexData?.contractVersion || SWIRLS_RAW_CONTRACT.version,
+    runTime: indexData?.inferredRunTime || null,
+    frameCount: frames.length,
+    cadenceMinutes: indexData?.cadenceMinutes ?? SWIRLS_RAW_CONTRACT.cadenceMinutes,
+    accumulationMinutes: indexData?.accumulationMinutes ?? SWIRLS_RAW_CONTRACT.accumulationMinutes,
+    firstValidTime: frames[0]?.validTime || null,
+    lastValidTime: frames.at(-1)?.validTime || null,
+    sourceBytes: Number.isFinite(indexData?.sourceBytes) ? indexData.sourceBytes : null,
+    sourceUpdatedAt: indexData?.sourceUpdatedAt || null,
+    cacheStatus: indexData?.cacheStatus || null
+  };
+}
+
+function summarizeFrame(frame) {
+  const values = Array.isArray(frame?.values) ? frame.values : [];
+  let minMm = Infinity;
+  let maxMm = -Infinity;
+  let wetCellCount = 0;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    if (value < minMm) minMm = value;
+    if (value > maxMm) maxMm = value;
+    if (value >= 0.05) wetCellCount += 1;
+  }
+
+  return {
+    frameIndex: frame?.frameIndex ?? null,
+    runTime: frame?.runTime || null,
+    validTime: frame?.validTime || null,
+    leadMinutes: frame?.leadMinutes ?? null,
+    windowStart: frame?.windowStart || null,
+    windowEnd: frame?.windowEnd || null,
+    unit: frame?.unit || SWIRLS_RAW_CONTRACT.unit,
+    grid: frame?.grid ? {
+      rows: frame.grid.rows,
+      cols: frame.grid.cols,
+      cellCount: frame.grid.cellCount,
+      orientation: frame.grid.orientation,
+      bounds: frame.grid.bounds
+    } : null,
+    minMm: Number.isFinite(minMm) ? minMm : null,
+    maxMm: Number.isFinite(maxMm) ? maxMm : null,
+    wetCellCount,
+    sourceBytes: Number.isFinite(frame?.sourceBytes) ? frame.sourceBytes : null,
+    sourceUpdatedAt: frame?.sourceUpdatedAt || null,
+    cacheStatus: frame?.cacheStatus || null,
+    ready: frame?.validation?.ready === true && frame?.validation?.runTimeMatchesIndex === true
+  };
+}
+
+function normalizeFrameIndex(value) {
+  const index = Number(value);
+  if (!Number.isInteger(index) || index < 0 || index >= SWIRLS_RAW_CONTRACT.frameCount) {
+    throw new Error(`SWIRLS frame index must be 0..${SWIRLS_RAW_CONTRACT.frameCount - 1}`);
+  }
+  return index;
+}
+
+function normalizeFetchResult(result, label) {
+  if (typeof result === 'string') {
+    return {
+      body: result,
+      bytes: new TextEncoder().encode(result).byteLength,
+      updatedAt: null,
+      cacheStatus: null
+    };
+  }
+  if (!result || typeof result.body !== 'string') throw new Error(`${label} fetch returned no text body`);
+  return {
+    body: result.body,
+    bytes: Number.isFinite(result.bytes) ? result.bytes : new TextEncoder().encode(result.body).byteLength,
+    updatedAt: result.updatedAt || null,
+    cacheStatus: result.cacheStatus || null
+  };
+}
+
+function isRolloverMismatch(error) {
+  return error instanceof Error && /SWIRLS run time mismatch/.test(error.message);
+}
+
+const SWIRLS_PUBLIC_CONTRACT = Object.freeze({
+  version: SWIRLS_RAW_CONTRACT.version,
+  enabled: true,
+  probeEndpoint: '/probe/swirls',
+  frameEndpoint: '/api/rain/swirls/frame?frame=0..15',
+  frameCount: SWIRLS_RAW_CONTRACT.frameCount,
+  cadenceMinutes: SWIRLS_RAW_CONTRACT.cadenceMinutes,
+  accumulationMinutes: SWIRLS_RAW_CONTRACT.accumulationMinutes,
+  firstLeadMinutes: SWIRLS_RAW_CONTRACT.firstLeadMinutes,
+  lastLeadMinutes: SWIRLS_RAW_CONTRACT.lastLeadMinutes,
+  unit: SWIRLS_RAW_CONTRACT.unit,
+  grid: {
+    rows: SWIRLS_RAW_CONTRACT.rows,
+    cols: SWIRLS_RAW_CONTRACT.cols,
+    cellCount: SWIRLS_RAW_CONTRACT.cellCount,
+    orientation: SWIRLS_RAW_CONTRACT.orientation,
+    coverage: SWIRLS_RAW_CONTRACT.coverage
+  }
+});
+
+function createWorkerSwirlsFetchText() {
+  return async function fetchSwirlsText(url, options = {}) {
+    const ttlSeconds = Math.max(1, Number(options.ttlSeconds) || SWIRLS_FETCH_POLICY.indexTtlSeconds);
+    const timeoutMs = Math.max(1, Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
+    const bypassCache = options.bypassCache === true;
+    const accept = 'text/plain,*/*';
+    const cache = caches.default;
+    const cacheKey = new Request(url, { headers: { Accept: accept } });
+
+    if (!bypassCache) {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        const body = await cached.text();
+        return {
+          body,
+          bytes: new TextEncoder().encode(body).byteLength,
+          updatedAt: cached.headers.get('last-modified'),
+          cacheStatus: 'worker-hit'
+        };
+      }
+    }
+
+    const upstream = await fetchWithTimeout(url, {
+      cache: bypassCache ? 'no-store' : 'no-cache',
+      headers: {
+        Accept: accept,
+        'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache'
+      },
+      cf: bypassCache
+        ? { cacheEverything: false, cacheTtl: 0 }
+        : { cacheEverything: true, cacheTtl: ttlSeconds }
+    }, timeoutMs);
+
+    if (!upstream.ok) throw new Error('SWIRLS upstream HTTP ' + upstream.status);
+    const body = await upstream.text();
+    const updatedAt = upstream.headers.get('last-modified');
+    const upstreamCacheStatus = upstream.headers.get('cf-cache-status') || null;
+
+    if (!bypassCache) {
+      const headers = new Headers(upstream.headers);
+      headers.set('Cache-Control', 'public, max-age=' + ttlSeconds);
+      await cache.put(cacheKey, new Response(body, { status: 200, headers }));
+    }
+
+    return {
+      body,
+      bytes: new TextEncoder().encode(body).byteLength,
+      updatedAt,
+      cacheStatus: upstreamCacheStatus || (bypassCache ? 'bypass' : 'worker-miss')
+    };
+  };
+}
+
+const SWIRLS_RUNTIME = createSwirlsRuntime({
+  fetchText: createWorkerSwirlsFetchText(),
+  policy: SWIRLS_FETCH_POLICY
+});
+
+async function handleSwirlsProbe() {
+  const probe = await SWIRLS_RUNTIME.probe({ frameIndex: 0, includeLastFrame: true });
+  return json({
+    ...probe,
+    version: VERSION,
+    workerVersion: VERSION
+  }, 200, { 'Cache-Control': 'no-store' });
+}
+
+async function handleSwirlsFrame(url) {
+  const rawFrame = url.searchParams.get('frame');
+  if (!/^\d+$/.test(String(rawFrame || ''))) {
+    return json({ ok: false, version: VERSION, error: 'SWIRLS frame must be an integer from 0 to 15' }, 400, { 'Cache-Control': 'no-store' });
+  }
+
+  const frameIndex = Number(rawFrame);
+  if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex >= SWIRLS_RAW_CONTRACT.frameCount) {
+    return json({ ok: false, version: VERSION, error: 'SWIRLS frame must be an integer from 0 to 15' }, 400, { 'Cache-Control': 'no-store' });
+  }
+
+  const frame = await SWIRLS_RUNTIME.loadFrame(frameIndex);
+  return json({
+    ok: true,
+    version: VERSION,
+    generatedAt: new Date().toISOString(),
+    contractVersion: frame.contractVersion,
+    frameIndex: frame.frameIndex,
+    runTime: frame.runTime,
+    validTime: frame.validTime,
+    leadMinutes: frame.leadMinutes,
+    windowStart: frame.windowStart,
+    windowEnd: frame.windowEnd,
+    unit: frame.unit,
+    source: frame.source,
+    sourceBytes: frame.sourceBytes,
+    sourceUpdatedAt: frame.sourceUpdatedAt,
+    cacheStatus: frame.cacheStatus,
+    index: frame.index,
+    grid: frame.grid,
+    values: frame.values,
+    validation: frame.validation
+  }, 200, { 'Cache-Control': 'public, max-age=' + SWIRLS_FETCH_POLICY.mdlTtlSeconds });
+}
+/* RAIN_TRACK_SWIRLS_INLINE_END */
