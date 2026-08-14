@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa15';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa16';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -21,6 +21,7 @@ const APP_SHELL = [
   './js/forecast-map-browser-canvas.js',
   './js/forecast-map-leaflet.js',
   './js/forecast-map-runtime.js',
+  './js/forecast-map-timeline.js',
   './js/forecast-map-smoke.js',
   './js/location.js',
   './js/map.js',

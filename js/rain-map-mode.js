@@ -1,3 +1,4 @@
+import './forecast-map-timeline.js';
 import { state } from './state.js';
 import { clearRadar, toggleRadar } from './radar.js';
 import { clearForecastMap, loadForecastMap } from './forecast-map-runtime.js';
