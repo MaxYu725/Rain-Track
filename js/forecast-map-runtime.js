@@ -7,6 +7,10 @@ import { forecastWindow } from './forecast-map-renderer.js';
 import { removeForecastOverlay, setForecastOverlayOpacity, upsertForecastOverlay } from './forecast-map-leaflet.js';
 
 const DEFAULT_OPACITY = 0.72;
+// Worker SWIRLS rollover recovery can perform index + MDL twice, with each
+// upstream fetch capped at 12 seconds. Keep the browser request alive long
+// enough for that bounded recovery path instead of falling back prematurely.
+const SWIRLS_REQUEST_TIMEOUT_MS = 55_000;
 
 let forecast = null;
 let canvas = null;
@@ -122,7 +126,10 @@ export function showForecastMap(frameIndex = index) {
 }
 
 async function loadSwirlsForecast(requestId, controller, requestedOpacity) {
-  const payload = await api('/api/rain/swirls/frame?frame=0', { signal:controller.signal });
+  const payload = await api('/api/rain/swirls/frame?frame=0', {
+    signal:controller.signal,
+    timeoutMs:SWIRLS_REQUEST_TIMEOUT_MS
+  });
   const firstFrame = normalizeSwirlsFramePayload(payload);
   if (requestId !== requestSequence) throw new DOMException('Forecast request superseded', 'AbortError');
 
@@ -186,7 +193,10 @@ export async function setForecastMapIndex(frameIndex) {
   activeFrameController = controller;
 
   try {
-    const payload = await api(`/api/rain/swirls/frame?frame=${targetIndex}`, { signal:controller.signal });
+    const payload = await api(`/api/rain/swirls/frame?frame=${targetIndex}`, {
+      signal:controller.signal,
+      timeoutMs:SWIRLS_REQUEST_TIMEOUT_MS
+    });
     const frame = normalizeSwirlsFramePayload(payload);
     assertSwirlsFrameCompatible(forecast, frame);
     if (requestId !== frameRequestSequence) throw new DOMException('Forecast frame request superseded', 'AbortError');
