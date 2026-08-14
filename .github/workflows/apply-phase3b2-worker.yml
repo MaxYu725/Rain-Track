@@ -1,0 +1,40 @@
+name: Apply Phase 3B2 worker rewrite
+
+on:
+  push:
+    branches:
+      - feature/phase3b2-worker-swirls-routes
+    paths:
+      - scripts/apply-phase3b2-worker.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Rewrite worker.js deterministically
+        run: node scripts/apply-phase3b2-worker.mjs
+      - name: Validate generated Worker
+        run: |
+          node --check worker.js
+          git diff --check
+      - name: Commit generated Worker
+        run: |
+          if git diff --quiet -- worker.js; then
+            echo "worker.js already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker.js
+          git commit -m "Phase 3B2: integrate SWIRLS Worker routes"
+          git push origin HEAD:feature/phase3b2-worker-swirls-routes
