@@ -31,6 +31,7 @@ jobs:
           node --check scripts/validate-swirls-runtime.mjs
           node --check scripts/validate-worker-swirls-inline.mjs
           node --check scripts/validate-swirls-frontend.mjs
+          node --check scripts/probe-swirls-frontend-live.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
       - name: Validate forecast map contract
@@ -43,3 +44,5 @@ jobs:
         run: node scripts/validate-worker-swirls-inline.mjs
       - name: Validate SWIRLS frontend 6-minute forecast
         run: node scripts/validate-swirls-frontend.mjs
+      - name: Probe live SWIRLS frontend contract
+        run: node scripts/probe-swirls-frontend-live.mjs
