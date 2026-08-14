@@ -37,6 +37,7 @@ jobs:
           command: |
             whoami
             deployments status --name radar --json
+            versions view 9a823208-918e-4416-b1a6-16ca8c371467 --name radar --json
 
       - name: Smoke production Worker
         run: node scripts/smoke-worker-production.mjs
