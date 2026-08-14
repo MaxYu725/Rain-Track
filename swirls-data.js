@@ -20,8 +20,9 @@ export const SWIRLS_RAW_CONTRACT = Object.freeze({
   }
 });
 
-const INDEX_PNG = /^ncrf_minute00_(\d+)\.png$/;
-const INDEX_MDL = /^ncrf_minute00_(\d+)\.af\.mdl$/;
+const CADENCE_MINUTE_RE = '(?:00|06|12|18|24|30|36|42|48|54)';
+const INDEX_PNG = new RegExp(`^ncrf_minute(${CADENCE_MINUTE_RE})_(\\d+)\\.png$`);
+const INDEX_MDL = new RegExp(`^ncrf_minute(${CADENCE_MINUTE_RE})_(\\d+)\\.af\\.mdl$`);
 const HEADER_RE = /SL-RF\s+DMO\s+(20\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})\s+(\d{2})/;
 const EPSILON = 1e-6;
 
@@ -46,12 +47,16 @@ export function parseSwirlsIndex(text) {
     const mdlMatch = mdlFile.match(INDEX_MDL);
     if (!pngMatch || !mdlMatch) throw new Error(`SWIRLS index line ${lineIndex + 1} has unexpected asset names`);
 
-    const pngIndex = Number(pngMatch[1]);
-    const mdlIndex = Number(mdlMatch[1]);
+    const pngMinute = pngMatch[1];
+    const mdlMinute = mdlMatch[1];
+    const pngIndex = Number(pngMatch[2]);
+    const mdlIndex = Number(mdlMatch[2]);
+    if (pngMinute !== mdlMinute) throw new Error(`SWIRLS index line ${lineIndex + 1} asset minutes disagree`);
     if (pngIndex !== mdlIndex) throw new Error(`SWIRLS index line ${lineIndex + 1} asset indices disagree`);
 
     return {
       frameIndex: mdlIndex,
+      assetMinute: mdlMinute,
       validTime,
       pngFile,
       mdlFile,
@@ -64,6 +69,11 @@ export function parseSwirlsIndex(text) {
 
   const firstValidMs = Date.parse(frames[0].validTime);
   const inferredRunTime = new Date(firstValidMs - SWIRLS_RAW_CONTRACT.accumulationMinutes * 60_000).toISOString();
+  const inferredRunMinute = String(new Date(inferredRunTime).getUTCMinutes()).padStart(2, '0');
+  const assetMinute = frames[0].assetMinute;
+  if (assetMinute !== inferredRunMinute) {
+    throw new Error(`SWIRLS index asset minute ${assetMinute} does not match inferred run minute ${inferredRunMinute}`);
+  }
 
   return {
     contractVersion: SWIRLS_RAW_CONTRACT.version,
@@ -72,6 +82,7 @@ export function parseSwirlsIndex(text) {
     cadenceMinutes: SWIRLS_RAW_CONTRACT.cadenceMinutes,
     accumulationMinutes: SWIRLS_RAW_CONTRACT.accumulationMinutes,
     unit: SWIRLS_RAW_CONTRACT.unit,
+    assetMinute,
     inferredRunTime,
     frameCount: frames.length,
     frames: frames.map(frame => ({
@@ -220,9 +231,11 @@ function validateIndexFrames(frames) {
   }
 
   const seen = new Set();
+  const assetMinute = frames[0]?.assetMinute || null;
   for (let index = 0; index < frames.length; index += 1) {
     const frame = frames[index];
     if (frame.frameIndex !== index) throw new Error(`SWIRLS index is missing or reorders frame ${index}`);
+    if (frame.assetMinute !== assetMinute) throw new Error(`SWIRLS index asset minute changes at frame ${index}`);
     if (seen.has(frame.validTime)) throw new Error('SWIRLS index contains duplicate valid times');
     seen.add(frame.validTime);
 

@@ -23,11 +23,12 @@ function compactHkt(date) {
   return `${parts.year}${parts.month}${parts.day}${parts.hour}${parts.minute}`;
 }
 
-function makeIndexFixture() {
-  const run = new Date('2026-08-14T10:00:00+08:00');
+function makeIndexFixture({ runIso = '2026-08-14T10:00:00+08:00', assetMinute = null } = {}) {
+  const run = new Date(runIso);
+  const minute = assetMinute ?? compactHkt(run).slice(-2);
   return Array.from({ length: SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => {
     const valid = new Date(run.getTime() + (SWIRLS_RAW_CONTRACT.firstLeadMinutes + frameIndex * SWIRLS_RAW_CONTRACT.cadenceMinutes) * 60_000);
-    return `${compactHkt(valid)},ncrf_minute00_${frameIndex}.png,ncrf_minute00_${frameIndex}.af.mdl`;
+    return `${compactHkt(valid)},ncrf_minute${minute}_${frameIndex}.png,ncrf_minute${minute}_${frameIndex}.af.mdl`;
   }).join('\n');
 }
 
@@ -62,8 +63,10 @@ assert.equal(index.frameCount, 16);
 assert.equal(index.cadenceMinutes, 6);
 assert.equal(index.accumulationMinutes, 30);
 assert.equal(index.unit, 'mm / 30 min');
+assert.equal(index.assetMinute, '00');
 assert.equal(index.inferredRunTime, '2026-08-14T02:00:00.000Z');
 assert.equal(index.frames[0].frameIndex, 0);
+assert.equal(index.frames[0].assetMinute, '00');
 assert.equal(index.frames[0].validTime, '2026-08-14T02:30:00.000Z');
 assert.equal(index.frames[0].leadMinutes, 30);
 assert.equal(index.frames[0].windowStart, '2026-08-14T02:00:00.000Z');
@@ -72,6 +75,14 @@ assert.equal(index.frames[1].validTime, '2026-08-14T02:36:00.000Z');
 assert.equal(index.frames[1].windowStart, '2026-08-14T02:06:00.000Z');
 assert.equal(index.frames.at(-1).validTime, '2026-08-14T04:00:00.000Z');
 assert.equal(index.frames.at(-1).leadMinutes, 120);
+
+// Live HKO asset names follow the six-minute run minute. A 10:30 run uses
+// ncrf_minute30_N.* while preserving the same 16-frame / 6-minute contract.
+const index30 = parseSwirlsIndex(makeIndexFixture({ runIso: '2026-08-14T10:30:00+08:00' }));
+assert.equal(index30.assetMinute, '30');
+assert.equal(index30.inferredRunTime, '2026-08-14T02:30:00.000Z');
+assert.equal(index30.frames[0].validTime, '2026-08-14T03:00:00.000Z');
+assert.equal(index30.frames.at(-1).validTime, '2026-08-14T04:30:00.000Z');
 
 const mdl = parseSwirlsMdl(makeMdlFixture());
 assert.equal(mdl.contractVersion, '1.0');
@@ -125,6 +136,19 @@ assert.throws(() => parseSwirlsIndex(badCadence.join('\n')), /cadence mismatch/)
 const mismatchedAsset = makeIndexFixture().split('\n');
 mismatchedAsset[3] = mismatchedAsset[3].replace('ncrf_minute00_3.af.mdl', 'ncrf_minute00_4.af.mdl');
 assert.throws(() => parseSwirlsIndex(mismatchedAsset.join('\n')), /asset indices disagree/);
+
+const changedAssetMinute = makeIndexFixture().split('\n');
+changedAssetMinute[8] = changedAssetMinute[8].replace(/minute00/g, 'minute06');
+assert.throws(() => parseSwirlsIndex(changedAssetMinute.join('\n')), /asset minute changes/);
+
+assert.throws(
+  () => parseSwirlsIndex(makeIndexFixture({ assetMinute: '30' })),
+  /asset minute 30 does not match inferred run minute 00/
+);
+assert.throws(
+  () => parseSwirlsIndex(makeIndexFixture().replace(/minute00/g, 'minute05')),
+  /unexpected asset names/
+);
 
 const missingFrame = makeIndexFixture().split('\n').slice(0, -1).join('\n');
 assert.throws(() => parseSwirlsIndex(missingFrame), /expected 16 frames/);
