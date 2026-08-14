@@ -29,6 +29,7 @@ jobs:
           node --check scripts/validate-forecast-map-contract.mjs
           node --check scripts/validate-swirls-contract.mjs
           node --check scripts/validate-swirls-runtime.mjs
+          node --check scripts/validate-worker-swirls-inline.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
       - name: Validate forecast map contract
@@ -37,3 +38,5 @@ jobs:
         run: node scripts/validate-swirls-contract.mjs
       - name: Validate SWIRLS live fetch runtime
         run: node scripts/validate-swirls-runtime.mjs
+      - name: Validate inline SWIRLS Worker parity
+        run: node scripts/validate-worker-swirls-inline.mjs
