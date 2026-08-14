@@ -34,7 +34,7 @@ async function runSmoke() {
   if (!ENABLED) return;
   try {
     await waitForMap();
-    let snapshot = await loadForecastMap({ frameIndex:0, opacity:0.72 });
+    let snapshot = await loadForecastMap({ frameIndex:0 });
     renderSmokeStatus(snapshot);
     for (let i = 1; i < snapshot.frameCount; i += 1) {
       await sleep(STEP_MS);
