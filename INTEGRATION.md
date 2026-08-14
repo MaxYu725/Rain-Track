@@ -1,129 +1,151 @@
-# Rain-Track → Weather App Integration Handoff
+# Rain-Track → Weather Metro integration contract
 
-## 目的
+Status: **Integration Phase 0 source contract**  
+Rain-Track verified baseline: `b762b27ac428b5369b53ba2b6c5ee7b7d65dfc9d`  
+Weather Metro verified baseline: `32fc4dd08344b1eb3c59e84c4423bc7ee476d557`  
+Production Worker: `v2.5.0`
 
-Rain-Track 的獨立 PWA 已完成定點兩小時降雨、Live Radar，以及正式兩小時 Forecast Map。未來主要方向是把 Rain-Track 與 Storm-Track 的成熟能力整合到 `MaxYu725/Weather_Metro_App`，取代／重構 Weather App 現有 `tools` page，而不是把三個完整獨立前端彼此嵌套。
+## 1. Integration decision
 
-此文件只定義 Rain-Track 的整合邊界。Storm-Track 仍是獨立專案，不應把熱帶氣旋程式碼加入 Rain-Track。
+`MaxYu725/Weather_Metro_App` remains the native Android host. Rain-Track becomes a native tool module inside the existing `tools` Pivot together with Storm-Track.
 
-## 目標架構
+Do **not** embed the standalone Rain-Track PWA in a WebView. The standalone PWA remains:
 
-`Weather_Metro_App` 已是 Kotlin + Jetpack Compose 原生 Android app，並已有 `data / domain / ui` 分層。建議：
+- the reference implementation;
+- the browser/PWA fallback;
+- a Worker smoke-test client;
+- a regression reference for native Weather Metro behavior.
+
+The Android host should consume the production Worker contract directly and render native Compose/domain models.
 
 ```text
 Weather_Metro_App
   data/
-    RainTrackApi / DTO / repository
-    StormTrackApi / DTO / repository      (另一獨立整合)
+    rain/       Rain service / JSON transport / cache
+    storm/      Storm service / JSON transport / cache
   domain/
-    PointRainForecast
-    ForecastGrid / ForecastFrame
-    RadarFrame / RadarProduct
+    rain/       point forecast / forecast frames / radar models
+    storm/      independent cyclone models
   ui/
-    native Compose rain / forecast-map / radar experience
+    tools/
+      ToolsHome
+      Rain tool
+      Storm tool
 ```
 
-Rain-Track PWA 保留作：
+Rain and Storm stay independent at the backend boundary during initial integration.
 
-- reference implementation
-- Worker API smoke-test client
-- browser / PWA fallback
-- 對照 Weather App native implementation 的行為基準
-
-**不建議**在 Weather App 以 WebView 直接嵌入 Rain-Track PWA。這會重複 PWA lifecycle、定位、localStorage、Service Worker、Leaflet 地圖及設定狀態，並與 Weather App 現有 Compose architecture 衝突。
-
-## Production backend
+## 2. Verified production backend
 
 ```text
 Base URL: https://radar.max-yu.workers.dev
-Worker: v2.4.4
-Radar Contract: v1.0
+Worker: v2.5.0
+Radar contract: v1.0
+SWIRLS: 16 frames / 6-minute valid-time cadence
 ```
 
-Worker 目前允許跨來源 GET，因此原生 Android client 可以直接讀取，不需要依賴 Rain-Track GitHub Pages 前端。
+The Android client must keep this origin in one service/config location. Do not scatter the hostname through Compose code.
 
-## 建議優先整合的 API
+The Worker exposes public GET APIs and the Android app requires no Cloudflare credential.
 
-### 1. Capabilities
+## 3. Required API surface
+
+### 3.1 Capabilities
 
 ```http
 GET /api/capabilities
 ```
 
-用途：
+Use this as the feature gate for runtime controls. Weather Metro should not assume that every radar range supports every height, or that a future Worker version keeps every optional capability enabled.
 
-- Worker version
-- `pointForecast`
-- `nowcastGrid`
-- `radarFrames`
-- radar contract / ranges / heights / modes
+Expected Rain capabilities include point forecast, full nowcast grid, radar frames, and SWIRLS frame support.
 
-Weather App 不應硬編碼「一定支援 2 km height」；應按 capabilities 啟用控制。
-
-### 2. Point rainfall forecast
+### 3.2 Point rainfall forecast
 
 ```http
 GET /api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2
 ```
 
-目前 `radiusKm` UI 支援：
+Supported nearby-radius UI values in the reference implementation:
 
 ```text
 1 / 2 / 3 / 5 km
 ```
 
-重要回應欄位：
+Important semantic fields:
 
-- `issueTime`
-- `generatedAt`
-- `location`
-- `nearbyRadiusKm`
-- `grid`
-- `summary`
-- `dataQuality.freshness`
-- `dataQuality.spatial`
-- `periods[].time`
-- `periods[].leadMinutes`
-- `periods[].amountMm`
-- `periods[].nearbyMaxMm`
-- `periods[].nearbyMeanMm`
-- `periods[].nearestGridKm`
-- `periods[].spatialSpreadMm`
-- `periods[].level`
+- issue/generated time;
+- selected location;
+- nearby radius;
+- summary;
+- freshness/spatial quality;
+- forecast periods;
+- amount / nearby maximum / nearby mean;
+- nearest-grid distance and spatial spread.
 
-資料單位：`mm / 30 min`。
+Rainfall unit is `mm / 30 min`.
 
-### 3. Full two-hour Forecast Map grid
+Weather Metro should reuse its existing fused-location pipeline and pass the resulting coordinates to this endpoint. Do not add a second location subsystem inside the Rain tool.
+
+### 3.3 Preferred two-hour Forecast Map transport — SWIRLS
+
+```http
+GET /api/rain/swirls/frame?frame=0
+...
+GET /api/rain/swirls/frame?frame=15
+```
+
+This is now the preferred fine-timeline integration contract.
+
+Verified contract:
+
+- 16 frames;
+- frame indices `0..15`;
+- valid-time cadence: 6 minutes;
+- forecast horizon: approximately `+30` through `+120` minutes;
+- every frame represents a **30-minute accumulated rainfall window**;
+- unit: `mm / 30 min`;
+- grid: `121 × 121`;
+- values: `14,641` row-major cells;
+- orientation: north → south, west → east;
+- one model run / publication must be used consistently across a displayed timeline.
+
+The UI wording must make the distinction explicit:
+
+```text
+6-minute step = forecast valid-time step
+30-minute accumulation = value represented by each frame
+```
+
+Do not label the values as "6-minute rainfall".
+
+#### Loading policy
+
+The standalone reference implementation lazy-loads SWIRLS frames rather than downloading all 16 frames immediately. Weather Metro should preserve the same product behavior:
+
+1. load frame 0 to establish the run/timeline;
+2. load selected/next frames on demand;
+3. cache successfully decoded frames for the active run;
+4. discard or isolate frames when the run changes;
+5. an older response must never overwrite a newer selected run/frame.
+
+The Worker already handles index/MDL publication rollover by bypassing cache and retrying once. The native client should use a bounded request timeout large enough for that server-side recovery path; avoid an aggressive 10–15 second timeout for SWIRLS frame calls.
+
+### 3.4 Full gridded nowcast fallback
 
 ```http
 GET /api/rain/nowcast
 ```
 
-Rain-Track 已正式用這個既有 endpoint 重建完整兩小時 Forecast Map；目前不需要新增另一個 backend endpoint。
-
-用途：
-
-- 完整 HKO gridded rainfall nowcast
-- 4 個未來半小時累積雨量 frame
-- +30 / +60 / +90 / +120 分鐘
-- Canvas / native raster map rendering
-- Forecast timeline
-
-Weather App 可把它映射成：
+Keep this endpoint as the fallback/reference path. It contains the complete HKO gridded rainfall nowcast and can reconstruct the traditional four valid periods:
 
 ```text
-ForecastGrid
-  issueTime
-  unit = mm / 30 min
-  latitudeAxis[]
-  longitudeAxis[]
-  frames[]
-    time
-    leadMinutes
-    values[row-major]
++30 / +60 / +90 / +120 minutes
 ```
 
-### 4. Radar frames
+Weather Metro should not remove this path when SWIRLS is integrated. If SWIRLS is temporarily unavailable, a 4-period fallback is preferable to making the whole Rain tool unavailable.
+
+### 3.5 Radar frames
 
 ```http
 GET /api/radar/frames?range=64&height=2&mode=live
@@ -132,179 +154,240 @@ GET /api/radar/frames?range=256&height=3&mode=live
 GET /api/radar/frames?range=64&height=3&mode=test
 ```
 
-目前產品：
+Verified products:
 
 ```text
 64 km  → 2 km / 3 km height
 256 km → 3 km height only
 ```
 
-重要回應欄位：
+Important response semantics:
 
-- `contractVersion`
-- `rangeKm`
-- `heightKm`
-- `mode`
-- `issueTime`
-- `cadenceMinutes`
-- `frameCount`
-- `renderMode`
-- `frames[].time`
-- `frames[].bounds`
-- `frames[].imageUrl`
+- contract version;
+- range/height/mode;
+- issue time and cadence;
+- frame count;
+- render mode;
+- frame scan time;
+- geographic bounds;
+- Worker-relative image URL.
 
-`imageUrl` 是 Worker-relative URL；native client 應相對 production Worker base URL resolve。
+Resolve `imageUrl` relative to the Rain Worker base URL.
 
-### 5. Radar image proxy
+### 3.6 Radar image proxy
 
 ```http
 GET /api/radar/image?id=...
 ```
 
-不要由 Weather App 自行重建 HKO KML parsing 或直接信任任意 image URL。Worker 已限制可接受 HKO host / radar image path，並統一 proxy / cache 行為。
+Weather Metro should use the Worker proxy. Do not rebuild HKO KML parsing or trust arbitrary image hosts inside the Android app.
 
-## Forecast Map contract — 必須保留
+## 4. Forecast grid contracts
 
-2026-08-14 真雨測試發現一個重要 upstream formatting 特性：HKO CSV 的 latitude / longitude 只保留到三位小數，相鄰座標差值可能在 `0.019 / 0.020` 之間交錯。
+### 4.1 `/api/rain/nowcast` observed-axis rule
 
-因此 Weather App **不可**：
+A wet-weather regression found that the HKO CSV latitude/longitude values are rounded to three decimals, so adjacent differences can alternate between `0.019` and `0.020`.
+
+Therefore Weather Metro must **not** reconstruct the grid using one minimum/nominal step:
 
 ```text
 minLat + row * stepLat
 minLon + col * stepLon
 ```
 
-用單一 `stepLat / stepLon` 人工重建整條座標軸。
+For the nowcast fallback path:
 
-必須：
+1. collect actual unique latitude values;
+2. collect actual unique longitude values;
+3. latitude axis: north → south;
+4. longitude axis: west → east;
+5. map points onto those observed axes;
+6. require a complete unique `rows × cols` grid for every frame;
+7. fail closed on duplicates, missing cells or missing required periods.
 
-1. 從實際 points 收集 unique latitude / longitude。
-2. latitude 由北至南排序，longitude 由西至東排序。
-3. 以這兩條 observed axes 建立 row-major index。
-4. 每個 frame 必須包含完整 `rows × cols` 唯一格點。
-5. 缺格／重複格／缺少 +30/+60/+90/+120 任一時段時 fail closed。
+`stepLat` / `stepLon` are metadata only, not reconstruction truth.
 
-`grid.stepLat / stepLon` 只應視為 metadata / diagnostics，不應成為 reconstruction source of truth。
+### 4.2 SWIRLS fixed-grid rule
 
-這是 Weather App 整合時最重要的 Forecast Map regression contract。
-
-## Forecast Map rendering 原則
-
-Rain-Track web reference pipeline：
+For `/api/rain/swirls/frame` use the validated Worker grid contract directly:
 
 ```text
-/api/rain/nowcast
-  → observed-axis normalization
-  → row-major values
-  → RGBA Canvas raster
-  → Leaflet ImageOverlay
+rows = 121
+cols = 121
+cellCount = 14641
+orientation = north→south / west→east
 ```
 
-Weather App 不需要複製 Web Canvas / Leaflet；可以使用 native bitmap / map overlay，但應保留以下產品語義：
+A frame that does not satisfy its declared dimensions/cell count should fail closed instead of being partially rendered.
 
-- `0 mm` / very-low threshold cell 可透明。
-- 色階只影響 presentation，不改官方 rainfall values。
-- 顯示單位必須是 `mm / 30 min`。
-- 每個 Forecast frame 顯示完整有效時段，例如 `09:00–09:30`，不要只顯示一個時間而與 Radar scan time 混淆。
-- 不自行插值成 HKO 未公開的 6 分鐘 Forecast frames。
-- Radar 與 Forecast Map 應視為兩種不同產品，不應疊加後讓使用者誤認為同一時間維度。
+## 5. Product semantics that must survive native migration
 
-Rain-Track 正式 UI 使用：
+### Radar and Forecast are different products
+
+- Radar = observation / past scan time.
+- SWIRLS/nowcast = future forecast valid time / accumulation window.
+
+Do not compare the two clocks as if they were expected to match.
+
+Weather Metro should preserve the reference app's mutually exclusive map mode:
 
 ```text
-關閉 / 雷達 / 2小時預報
+Off / Radar / 2-hour Forecast
 ```
 
-作互斥模式，可直接作 native UX 參考。
+Do not overlay Radar and Forecast by default in a way that implies one continuous time series.
 
-## HKO source assumptions
+### Forecast timeline
 
-### Point rainfall / Forecast Map
+Current standalone behavior:
 
-Worker 使用 HKO gridded rainfall nowcast CSV：
+- 16 selectable SWIRLS frames when available;
+- 6-minute valid-time steps;
+- play/pause autoplay;
+- independent forecast playback speed;
+- independent forecast opacity;
+- fallback to four nowcast periods when SWIRLS is unavailable;
+- timeline stops when the forecast surface is no longer active.
+
+For native Compose, playback should advance only after the target frame is available. Hidden/off-screen tools must stop playback and disposable requests.
+
+### Radar settings remain separate
+
+Radar-only controls:
+
+- range;
+- height;
+- opacity;
+- live/test mode;
+- radar animation speed.
+
+Forecast-only controls:
+
+- forecast opacity;
+- forecast playback speed;
+- autoplay preference.
+
+Do not place Radar settings under the Forecast mode or vice versa.
+
+## 6. Cache and cancellation ownership
+
+Do not reuse Rain-Track browser `localStorage` or Service Worker cache inside Android.
+
+Weather Metro should use a Rain-specific native cache namespace and preserve these semantics:
+
+- last successful data may render immediately;
+- failed refresh must not erase good cached data;
+- stale/fallback state remains visible;
+- SWIRLS frames are keyed by run + frame index;
+- radar metadata/images can use their own short-lived cache policy;
+- clearing Weather Metro cache should eventually clear native Rain caches too.
+
+Use structured coroutine cancellation:
+
+- leaving Rain cancels disposable UI-owned requests;
+- selecting a different frame invalidates older selection work;
+- an older response cannot overwrite a newer request;
+- forecast autoplay and radar animation stop when hidden/backgrounded.
+
+## 7. Native rendering boundary
+
+The standalone frontend uses Leaflet + Canvas. Weather Metro should not port the DOM implementation.
+
+Reference pipeline:
 
 ```text
-https://data.weather.gov.hk/weatherAPI/hko_data/F3/Gridded_rainfall_nowcast_tc.csv
+Worker JSON
+  → validated domain grid/frame
+  → native bitmap/raster
+  → native map/image overlay
 ```
 
-Worker 已負責 CSV parser、official grid coverage、point interpolation、nearby samples、freshness / spatial quality assessment。
+Presentation rules:
 
-Rain-Track 前端則使用完整 `/api/rain/nowcast` points 做 Forecast Map normalization。Weather App 初次整合應消費 Worker response，**不要直接重新抓 HKO CSV 建第二套 backend parser**。
+- rainfall values remain official values;
+- the colour scale is presentation only;
+- dry/very-low cells may be transparent;
+- unit remains `mm / 30 min`;
+- show the complete accumulation window where useful;
+- do not synthesize missing radar echo or missing forecast cells.
 
-### Radar
+The final native map library/renderer may be selected during the rendering phase; it is not part of this source-contract checkpoint.
 
-Live radar 使用 HKO 現行 transparent GIS overlay：
+## 8. Weather Metro navigation target
 
-- 64 km / 3 km：`R4_GIS_rad_064`
-- 256 km / 3 km：`R4_GIS_rad_256`
-- 64 km / 2 km：現行 64 km 2 km KML product
+Keep `PageColourSlot.TOOLS` as the top-level host page.
 
-不要恢復：
+Recommended internal navigation:
 
-- 舊 2019 `Radar_064.kml` / `Radar_256.kml` Live feed
-- 包含 HKO 底圖、legend、logo、time label 的完整成品 JPEG Leaflet overlay
+```text
+ToolsHome
+  ├── Rain
+  │    ├── Point forecast
+  │    └── Map: Radar / 2-hour Forecast
+  └── Storm
+       ├── Live
+       └── Archive
+```
 
-Radar scan time 是觀測時間；Forecast valid time 是未來預報時段，兩者不可直接比較。
+Do not add a permanent top-level Rain page to the main Pivot.
 
-個別 radar product 可能存在 blind sector / data void。不要在 native app 自行合成或插值不存在的 radar echo。
+Back behavior should unwind the internal tool state before leaving the Tools host.
 
-## Weather App state mapping
+## 9. Security boundary
 
-| Rain-Track PWA | Weather App 建議 |
-|---|---|
-| `localStorage` preferences | Android DataStore / existing app settings layer |
-| Browser geolocation | Weather App existing fused location pipeline |
-| `state.selected` | shared Weather App location/domain state |
-| saved points | native persistence only if product still needs it |
-| Service Worker cache | Weather App repository/cache policy |
-| Leaflet map | native map choice to be decided during integration |
-| Canvas Forecast raster | native bitmap / map overlay |
-| PWA update lifecycle | Android app release lifecycle |
+The Android app must not contain:
 
-Weather App 已有定位、offline atomic cache、settings 及 native lifecycle；整合時應重用這些既有能力。
+- Cloudflare API tokens;
+- Worker deployment credentials;
+- HKO proxy allow-list logic duplicated from the Worker;
+- arbitrary proxy URL construction.
 
-## UI migration priority
+Only public runtime endpoints belong in the client.
 
-建議按價值移植：
+The Weather Metro architecture currently has no WebView/JavaScript bridge; Rain integration should preserve that boundary.
 
-1. 定點兩小時降雨摘要／時段。
-2. 正式兩小時 Forecast Map + 4-frame有效時段 timeline。
-3. Live Radar + timeline。
-4. `關閉 / 雷達 / 2小時預報` 互斥模式。
-5. 64 / 256 km、2 / 3 km、opacity、Live / TEST controls。
-6. nearby radius / spatial-sensitivity explanation。
-7. 進階 diagnostics 只保留開發／debug 需要的部分。
+## 10. Integration implementation order
 
-Rain-Track 的 mobile information density、segmented controls 及 timeline 可作 Compose UI 參考，但不必複製 DOM 結構。
+Recommended sequence:
 
-## 與 Storm-Track 的整合原則
+1. central Tool endpoint/origin registry in Weather Metro;
+2. Rain domain models and JSON parsers with fixture tests;
+3. capabilities + point forecast service;
+4. SWIRLS frame service + run/frame cache;
+5. `/api/rain/nowcast` fallback parser and observed-axis regression test;
+6. radar metadata + image service;
+7. ToolsHome native navigation;
+8. native point forecast UI;
+9. native Forecast map/timeline/autoplay;
+10. native Radar map/timeline;
+11. lifecycle/cache/rotation/background regression;
+12. integrate Storm module beside Rain without merging either backend.
 
-Rain-Track 與 Storm-Track 應在 Weather App 才匯合：
+## 11. Acceptance reference
 
-- Rain-Track Worker 繼續專責 point rainfall + Forecast grid + radar。
-- Storm-Track Worker 繼續專責 tropical cyclone live/history data。
-- 初期不要為了「一個 app」而先強行合併兩個 Cloudflare Workers。
-- Weather App data layer 可以同時接兩個 backend，等 native integration 穩定後再評估 backend consolidation。
+Standalone Rain-Track has already verified on Android/PWA:
 
-## 2026-08-14 wet-weather acceptance
+- point forecast;
+- three production Live Radar products;
+- 16-frame SWIRLS 6-minute forecast timeline;
+- forecast autoplay;
+- independent Radar/Forecast settings;
+- forecast sheet/timeline mobile layout;
+- SWIRLS lazy frame loading;
+- nowcast fallback;
+- observed-axis grid regression;
+- Worker v2.5.0 production smoke.
 
-已完成的真雨驗證包括：
+This standalone app is the behavioral reference while Weather Metro is being implemented.
 
-- 定點 forecast window 能正常更新。
-- Live radar 64 km / 2 km、64 km / 3 km、256 km / 3 km 正常切換。
-- Forecast Map 真實 HKO grid 能渲染至 4/4 +120 分鐘。
-- observed-axis rounding bug 已修正並加入 regression test。
-- Forecast smooth rendering 在手機上比強制 pixelated rendering 可讀性更佳，因此正式版保持瀏覽器平滑縮放。
-- 正式 `關閉 / 雷達 / 2小時預報` 互斥切換、Forecast timeline 及 legend 已通過 Android 真機測試。
+## 12. Freeze rule
 
-## 封版原則
+Rain-Track is now a stable reference implementation. Re-open standalone runtime work only for:
 
-Rain-Track 現在再次視為 stable reference implementation。除非出現以下情況，否則不再主動增加獨立 PWA 功能：
+- HKO upstream/schema changes;
+- Worker API contract defects;
+- PWA startup/update regressions;
+- real-rain calculation/source defects;
+- a backend field genuinely required by Weather Metro integration.
 
-- HKO upstream schema / URL 改變
-- Worker API contract bug
-- PWA startup / atomic update regression
-- 真雨實測發現明顯 calculation / source-contract bug
-- Weather App integration 發現缺少必要 backend field
-
-其他新產品功能優先在 `Weather_Metro_App` 規劃。
+New product UX should be implemented in Weather Metro first.
