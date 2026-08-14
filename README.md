@@ -1,18 +1,18 @@
-# Rain-Track — 香港定點雨量預報
+# Rain-Track — 香港定點雨量與兩小時預報地圖
 
-Rain-Track 是香港定點未來兩小時雨量預報及 HKO 雷達 PWA。專案目前進入 **stable / maintenance mode**；下一個主要產品階段不是繼續擴充獨立 PWA，而是把已驗證的資料能力日後整合到 `Weather_Metro_App`。
+Rain-Track 是香港定點未來兩小時雨量、HKO 雷達觀測與兩小時格點預報地圖 PWA。專案目前再次進入 **stable / maintenance mode**；下一個主要產品階段是把已驗證能力整合到 `Weather_Metro_App`，而不是繼續擴充獨立 PWA。
 
-## 穩定基線 — 2026-08-10
+## 穩定基線 — 2026-08-14
 
-- App UI：`v1.6.4`
-- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa8`
+- App UI：`v1.6.4`（Forecast Map extension）
+- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa17`
 - Worker：`v2.4.4`
 - Radar Contract：`v1.0`
-- Runtime baseline commit：`b46099fea54dbcdf87e43565cd62f1d0769979cb`
+- Forecast Map feature baseline：`a4544663abb01ddfba90d35ecb0f55dbb3498c5c`
 - 正式 Worker：`https://radar.max-yu.workers.dev`
 - 前端：GitHub Pages，由 `main` repository root 發布
 
-這個 baseline 已完成 Android installed-PWA 實機驗收，包括 atomic update、設定頁、定點預報初始化、定位、Live / TEST radar、64 / 256 km、64 km 2 / 3 km 高度、透明度、動畫、時間軸及 quick switches。
+2026-08-14 真雨實測已完成：定點預報、Live Radar、正式兩小時 Forecast Map、4-frame timeline、Radar / Forecast 互斥切換及手機 rendering 均已在 Android 實機驗證。
 
 ## 已完成能力
 
@@ -28,7 +28,7 @@ Rain-Track 是香港定點未來兩小時雨量預報及 HKO 雷達 PWA。專案
 
 ### HKO Live Radar
 
-正式 Live source 使用 HKO 現行 GIS transparent overlay：
+正式 Live source 使用 HKO 現行透明 GIS radar overlay：
 
 - 64 km / 2 km height
 - 64 km / 3 km height
@@ -38,7 +38,37 @@ Rain-Track 是香港定點未來兩小時雨量預報及 HKO 雷達 PWA。專案
 - 播放／暫停、最新幀、slider、透明度及 freshness
 - TEST synthetic radar，可在無雨日驗證 UI / animation flow
 
-**不要重新使用**舊 `Radar_064.kml` / `Radar_256.kml` 作 Live source；那些舊 feed 已不適合作現行 Live radar。亦不要把包含底圖、legend、logo 的完整 HKO 成品 JPEG 當 Leaflet georeferenced overlay。現行方向是透明 GIS radar PNG 疊在 CARTO / OSM 底圖之上。
+Radar 顯示的是**觀測／過去掃描**，不是未來兩小時預報。個別產品可能存在上游 blind sector / data void；Rain-Track 不會自行補畫雷達回波。
+
+**不要重新使用**舊 `Radar_064.kml` / `Radar_256.kml` 作 Live source，亦不要把包含底圖、legend、logo 的完整 HKO 成品 JPEG 當 Leaflet georeferenced overlay。現行方向是透明 GIS radar image 疊在 CARTO / OSM 底圖之上。
+
+### 兩小時 Forecast Map
+
+正式 Forecast Map 直接使用現有 Worker：
+
+```http
+GET /api/rain/nowcast
+```
+
+前端把官方完整 gridded nowcast normalization 成 4 個未來 30 分鐘累積雨量 frame，並以 Canvas raster + Leaflet overlay 顯示：
+
+- +30 / +60 / +90 / +120 分鐘
+- 單位：`mm / 30 min`
+- 4 個可直接選取的有效時段
+- 明確顯示 `開始–結束` window、HKO issue time、frame counter 與半小時雨量 legend
+- 與 Radar 使用正式三段模式：`關閉 / 雷達 / 2小時預報`
+- Radar 與 Forecast Map 永遠互斥，避免把觀測回波與未來預報誤讀為同一產品
+
+### Forecast Map 重要資料契約
+
+HKO CSV 的 latitude / longitude 會因三位小數 rounding 出現相鄰差值 `0.019 / 0.020` 交錯。因此：
+
+- **實際 points 的 unique latitude / longitude axes 才是 source of truth**。
+- `stepLat / stepLon` 只可視為 metadata，不應拿來重建完整 axis。
+- frame 必須包含完整 `rows × cols` 唯一格點；缺格／缺時段時 fail closed。
+- 不自行插值生成不存在的 6 分鐘 Forecast Map frame。
+
+這個 contract 已有 synthetic regression gate，並經 2026-08-14 真雨資料驗證。
 
 ## 架構
 
@@ -61,19 +91,30 @@ Cloudflare Worker v2.4.4
 Hong Kong Observatory public data / GIS radar sources
 ```
 
-前端 API base 集中在 `js/config.js`，實際請求封裝在 `js/api.js`。Worker 對外只提供 GET / OPTIONS，雷達影像代理只接受允許的 HKO host 及 radar image path。
+Forecast Map 前端 pipeline：
+
+```text
+/api/rain/nowcast
+  → observed-axis normalization
+  → row-major rainfall raster
+  → RGBA Canvas
+  → Leaflet ImageOverlay
+  → 4-frame Forecast timeline
+```
+
+前端 API base 集中在 `js/config.js`，實際請求封裝在 `js/api.js`。
 
 ## PWA 更新策略
 
-2026-08-10 起使用 atomic App Shell update：
+使用 atomic App Shell update：
 
 1. 新 Service Worker 以新的 generation cache 預載完整本地 App Shell。
-2. HTML / JS / CSS 不再由舊 runtime stale-while-revalidate 混合取得。
+2. HTML / JS / CSS 不由舊 runtime cache 混合取得。
 3. 使用者看到「已有新版可用」後按「立即更新」。
 4. 新 Worker activate、清除舊 Rain-Track caches 並 `clients.claim()`。
 5. controller change 後以 cache-busting navigation reload 切換整套版本。
 
-Android installed PWA 已實機確認更新時不再需要手動清除瀏覽器資料。
+Android installed PWA 已實機確認更新時不需要手動清除瀏覽器資料。
 
 ## CI
 
@@ -83,26 +124,24 @@ Pull request 到 `main` 及 `main` push 會執行：
 - `node --check service-worker.js`
 - 全部 `js/*.js` syntax check
 - `scripts/validate-app-shell.mjs`
-- App Shell 檔案存在性
-- `index.html` 本地 script / stylesheet / manifest / icon 對應
-- ES module import 與 App Shell 一致性
+- App Shell 檔案存在性／module dependency 驗證
+- `scripts/validate-forecast-map-contract.mjs`
+- Forecast Map 四個時段、完整格點、row-major orientation 與 observed-axis regression
 
-## 尚未阻塞封版的實地測試
+## 2026-08-14 真雨驗收結論
 
-唯一值得等待真正降雨時再做的是 **wet-weather observational acceptance**，不是目前的 release blocker：
+真雨測試曾發現兩個值得保留的結論：
 
-- 比較定點預報的開始／最強時段與實際降雨。
-- 驗證「附近雨勢」在雨區邊界時是否具實際辨識價值。
-- 比較 Live radar 回波移動與定點預報時序是否合理一致。
-- 留意強對流、快速生成雨區時的 interpolation / 30-minute period 表達。
+1. HKO 官方網頁顯示的未來時間是 Forecast valid time，不能與 Radar scan time 直接比較。
+2. Forecast Map 初版因錯誤以 minimum step 重建等距 axis，會把完整 HKO grid 誤判成缺格；現已改為 observed unique axes 並加入 regression test。
 
-目前無雨日已可用 TEST radar 完成圖層、動畫、範圍、高度及時間軸驗證，因此沒有必要為等待下雨而繼續改程式。
+64 km / 2 km、64 km / 3 km、256 km / 3 km 同時出現的筆直雷達 data void 屬上游 radar coverage / product artifact 的合理可能性；Rain-Track 不應合成不存在的回波去填補。
 
 ## 未來 Weather App 整合
 
-`Weather_Metro_App` 已是 Kotlin + Jetpack Compose 原生 Android app。未來整合 Rain-Track 時，**建議把 Worker API / domain behaviour 移植進 Weather App data/domain layers，而不是用 WebView 嵌入這個 PWA**。
+`Weather_Metro_App` 是 Kotlin + Jetpack Compose 原生 Android app。整合 Rain-Track 時應直接消費 Worker API / domain contract，而不是用 WebView 嵌入本 PWA。
 
-具體整合契約及遷移注意事項見 [`INTEGRATION.md`](INTEGRATION.md)。Storm-Track 保持獨立專案，在 Weather App 整合階段才與 Rain-Track 一起規劃；Rain-Track 本身不加入熱帶氣旋功能。
+具體整合契約及 Forecast Map 注意事項見 [`INTEGRATION.md`](INTEGRATION.md)。Storm-Track 保持獨立專案，在 Weather App data layer 才與 Rain-Track 匯合。
 
 ## 部署
 
@@ -118,7 +157,19 @@ Pull request 到 `main` 及 `main` push 會執行：
 https://radar.max-yu.workers.dev
 ```
 
-目前正式 Worker `v2.4.4` 已穩定；除非資料來源、API contract 或 Worker logic 有實際需要，封版後不應因純 UI / 文件修改重新部署 Worker。
+目前正式 Worker `v2.4.4` 已穩定。Forecast Map 使用既有 `/api/rain/nowcast`，本輪沒有要求 Worker 重新部署。
+
+## 封版原則
+
+Rain-Track 再次視為 stable reference implementation。只有以下情況才應重新開發：
+
+- HKO upstream schema / URL 改變
+- Worker API contract bug
+- PWA startup / atomic-update regression
+- 真雨測試發現明顯 calculation / source-contract bug
+- Weather App integration 發現缺少必要 backend field
+
+純 UI 新功能優先在 `Weather_Metro_App` 規劃。
 
 ## 歷史
 
