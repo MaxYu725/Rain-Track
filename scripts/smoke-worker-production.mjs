@@ -87,8 +87,13 @@ async function smokeNowcast() {
   assert.equal(data.ok, true, 'nowcast must be ok');
   assertWorkerVersion(data, 'nowcast');
   assert.ok(Array.isArray(data.frames) && data.frames.length > 0, 'nowcast frames missing');
-  assert.ok(Number(data.grid?.rows) > 0 && Number(data.grid?.cols) > 0, 'nowcast grid missing');
-  console.log(`PASS nowcast frames=${data.frames.length} grid=${data.grid.rows}x${data.grid.cols}`);
+  assert.ok(data.frames.every(frame => Array.isArray(frame.points) && frame.points.length > 0), 'nowcast frame points missing');
+  for (const key of ['minLat', 'maxLat', 'minLon', 'maxLon']) {
+    assert.ok(Number.isFinite(Number(data.grid?.[key])), `nowcast grid ${key} missing`);
+  }
+  assert.ok(Number(data.grid.maxLat) > Number(data.grid.minLat), 'nowcast latitude coverage invalid');
+  assert.ok(Number(data.grid.maxLon) > Number(data.grid.minLon), 'nowcast longitude coverage invalid');
+  console.log(`PASS nowcast frames=${data.frames.length} coverage=${data.grid.minLat},${data.grid.minLon}..${data.grid.maxLat},${data.grid.maxLon}`);
 }
 
 async function smokeRadar(range, height) {
