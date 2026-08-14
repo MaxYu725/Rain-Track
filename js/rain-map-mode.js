@@ -240,7 +240,9 @@ function injectControls() {
   });
 
   legacyObserver = new MutationObserver(syncControls);
-  legacyObserver.observe(section, { childList:true, subtree:true, attributes:true, attributeFilter:['disabled'] });
+  legacyObserver.observe(legacyToggle, { attributes:true, attributeFilter:['disabled'] });
+  const radarPanel = document.getElementById('rain-radar-settings');
+  if (radarPanel) legacyObserver.observe(radarPanel, { childList:true });
   window.addEventListener('rain:forecast-playback-change', syncForecastSettings);
   controlsReady = true;
   syncControls();
