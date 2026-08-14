@@ -26,6 +26,7 @@ const last = await getFrame(15);
 assert.equal(forecast.frames.length, 16);
 assert.equal(forecast.frames[0].leadMinutes, 30);
 assert.equal(forecast.frames.at(-1).leadMinutes, 120);
+assert.equal(Math.round((Date.parse(last.validTime) - Date.parse(first.validTime)) / 60000), 90);
 assert.equal(forecast.frames.at(-1).time, last.validTime);
 assert.equal(assertSwirlsFrameCompatible(forecast, last), true);
 assert.equal(first.values.length, 14641);
