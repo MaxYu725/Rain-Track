@@ -1,3 +1,5 @@
+import './rain-map-mode.js';
+
 const SEGMENTED_CONTROLS = [
   { id:'radar-range', labels:{ '64':'64 km', '256':'256 km' } },
   { id:'radar-height', labels:{ '2':'2 km', '3':'3 km' } },
