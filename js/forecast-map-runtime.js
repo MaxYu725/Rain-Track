@@ -39,16 +39,23 @@ function ensureCanvas() {
   return canvas;
 }
 
-function selectedFrameSummary() {
-  const frame = forecast?.frames?.[index] || null;
-  const window = frame ? forecastWindow(frame) : null;
-  return frame ? {
-    index,
+function frameSummary(frame, frameIndex) {
+  if (!frame) return null;
+  return {
+    index:frameIndex,
     time:frame.time,
     leadMinutes:frame.leadMinutes,
-    window,
+    window:forecastWindow(frame),
     diagnostics:frame.diagnostics || null
-  } : null;
+  };
+}
+
+function selectedFrameSummary() {
+  return frameSummary(forecast?.frames?.[index] || null, index);
+}
+
+export function getForecastMapFrameSummaries() {
+  return (forecast?.frames || []).map((frame, frameIndex) => frameSummary(frame, frameIndex)).filter(Boolean);
 }
 
 export function getForecastMapRuntimeSnapshot() {
