@@ -85,14 +85,14 @@ function createWorkerSwirlsFetchText() {
         : { cacheEverything: true, cacheTtl: ttlSeconds }
     }, timeoutMs);
 
-    if (!upstream.ok) throw new Error(`SWIRLS upstream HTTP ${upstream.status}`);
+    if (!upstream.ok) throw new Error('SWIRLS upstream HTTP ' + upstream.status);
     const body = await upstream.text();
     const updatedAt = upstream.headers.get('last-modified');
     const upstreamCacheStatus = upstream.headers.get('cf-cache-status') || null;
 
     if (!bypassCache) {
       const headers = new Headers(upstream.headers);
-      headers.set('Cache-Control', `public, max-age=${ttlSeconds}`);
+      headers.set('Cache-Control', 'public, max-age=' + ttlSeconds);
       await cache.put(cacheKey, new Response(body, { status: 200, headers }));
     }
 
@@ -151,7 +151,7 @@ async function handleSwirlsFrame(url) {
     grid: frame.grid,
     values: frame.values,
     validation: frame.validation
-  }, 200, { 'Cache-Control': `public, max-age=${SWIRLS_FETCH_POLICY.mdlTtlSeconds}` });
+  }, 200, { 'Cache-Control': 'public, max-age=' + SWIRLS_FETCH_POLICY.mdlTtlSeconds });
 }
 `;
 
