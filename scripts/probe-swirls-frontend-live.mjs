@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { assertSwirlsFrameCompatible, buildSwirlsForecast, normalizeSwirlsFramePayload } from '../js/forecast-map-swirls.js';
 
 const BASE = (process.env.WORKER_BASE_URL || 'https://radar.max-yu.workers.dev').replace(/\/$/, '');
+const REQUEST_TIMEOUT_MS = 60_000;
+const ATTEMPTS = 2;
 
-async function getFrame(frameIndex) {
+async function fetchFrame(frameIndex) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort('timeout'), 30_000);
+  const timer = setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS);
   try {
     const response = await fetch(`${BASE}/api/rain/swirls/frame?frame=${frameIndex}`, {
       cache:'no-store',
@@ -17,6 +19,19 @@ async function getFrame(frameIndex) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function getFrame(frameIndex) {
+  let lastError;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
+    try {
+      return await fetchFrame(frameIndex);
+    } catch (error) {
+      lastError = error;
+      if (attempt < ATTEMPTS) console.warn(`SWIRLS frame ${frameIndex} live attempt ${attempt} failed; retrying once`);
+    }
+  }
+  throw lastError;
 }
 
 const first = await getFrame(0);
