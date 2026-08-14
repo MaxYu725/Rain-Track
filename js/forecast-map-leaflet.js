@@ -1,5 +1,5 @@
 const FORECAST_PANE = 'forecastMapPane';
-const DEFAULT_FORECAST_OPACITY = 0.58;
+const DEFAULT_FORECAST_OPACITY = 0.72;
 
 function leaflet() {
   if (!window.L) throw new Error('Leaflet 地圖程式未能載入');
@@ -31,7 +31,7 @@ export function ensureForecastMapPane(map, zIndex = 345) {
   if (!pane) pane = map.createPane(FORECAST_PANE);
   pane.style.zIndex = String(Number.isFinite(Number(zIndex)) ? Math.round(Number(zIndex)) : 345);
   pane.style.pointerEvents = 'none';
-  pane.style.imageRendering = 'pixelated';
+  pane.style.imageRendering = '';
   return pane;
 }
 
