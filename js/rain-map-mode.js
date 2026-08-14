@@ -11,6 +11,7 @@ let busy = false;
 let sequence = 0;
 let controlsReady = false;
 let legacyObserver = null;
+let lastNotifiedMode = null;
 
 function normalizeMode(value) {
   return MODES.has(value) ? value : 'off';
@@ -32,11 +33,20 @@ function controls() {
   };
 }
 
+function syncSectionCopy(legacyToggle) {
+  const section = legacyToggle?.closest('.settings-section');
+  const heading = section?.querySelector('.panel-title');
+  const intro = section?.querySelector('.settings-section-heading p');
+  if (heading) heading.textContent = '雨勢圖層';
+  if (intro) intro.textContent = '切換雷達觀測或未來兩小時降雨預報。';
+}
+
 function syncControls() {
   const { root, buttons, legacyToggle, status } = controls();
   const selectedMode = pendingMode || activeMode;
   const radarAvailable = Boolean(state.worker.capabilities.radarFrames) && !legacyToggle?.disabled;
 
+  syncSectionCopy(legacyToggle);
   root?.setAttribute('aria-busy', busy ? 'true' : 'false');
   buttons.forEach(button => {
     const mode = normalizeMode(button.dataset.rainMapMode);
@@ -56,6 +66,12 @@ function syncControls() {
           ? '顯示 HKO 雷達觀測；可在下方調整範圍、高度及動畫。'
           : '雨勢圖層已關閉。';
   }
+}
+
+function notifyModeChange() {
+  if (lastNotifiedMode === activeMode) return;
+  lastNotifiedMode = activeMode;
+  window.dispatchEvent(new CustomEvent('rain:map-mode-change', { detail:{ mode:activeMode } }));
 }
 
 function injectControls() {
@@ -86,11 +102,7 @@ function injectControls() {
     row.insertAdjacentElement('afterend', status);
   }
 
-  const heading = section.querySelector('.panel-title');
-  if (heading) heading.textContent = '雨勢圖層';
-  const intro = section.querySelector('.settings-section-heading p');
-  if (intro) intro.textContent = '切換雷達觀測或未來兩小時降雨預報。';
-
+  syncSectionCopy(legacyToggle);
   document.getElementById('rain-map-mode')?.addEventListener('click', event => {
     const button = event.target.closest('[data-rain-map-mode]');
     if (!button || button.disabled) return;
@@ -101,6 +113,7 @@ function injectControls() {
   legacyObserver.observe(legacyToggle, { attributes:true, attributeFilter:['disabled'] });
   controlsReady = true;
   syncControls();
+  notifyModeChange();
 }
 
 export async function setRainMapMode(requestedMode) {
@@ -148,6 +161,7 @@ export async function setRainMapMode(requestedMode) {
       busy = false;
       pendingMode = null;
       syncControls();
+      notifyModeChange();
     }
   }
 }
