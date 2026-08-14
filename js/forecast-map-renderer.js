@@ -67,6 +67,12 @@ export function rasterizeForecastFrame(frame, grid) {
 }
 
 export function forecastWindow(frame) {
+  const explicitStart = new Date(frame?.windowStart || '');
+  const explicitEnd = new Date(frame?.windowEnd || '');
+  if (!Number.isNaN(explicitStart.getTime()) && !Number.isNaN(explicitEnd.getTime()) && explicitEnd > explicitStart) {
+    return { start:explicitStart.toISOString(), end:explicitEnd.toISOString() };
+  }
+
   const end = new Date(frame?.time || '');
   if (Number.isNaN(end.getTime())) return null;
   return {

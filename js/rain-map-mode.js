@@ -1,7 +1,7 @@
 import './forecast-map-timeline.js';
 import { state } from './state.js';
 import { clearRadar, toggleRadar } from './radar.js';
-import { clearForecastMap, loadForecastMap } from './forecast-map-runtime.js';
+import { clearForecastMap, getForecastMapRuntimeSnapshot, loadForecastMap } from './forecast-map-runtime.js';
 import { toast } from './ui.js';
 
 const MODES = new Set(['off', 'radar', 'forecast']);
@@ -42,6 +42,13 @@ function syncSectionCopy(legacyToggle) {
   if (intro) intro.textContent = '切換雷達觀測或未來兩小時降雨預報。';
 }
 
+function forecastStatusText() {
+  const snapshot = getForecastMapRuntimeSnapshot();
+  if (snapshot.source === 'swirls') return '顯示 HKO SWIRLS 未來兩小時預報：每 6 分鐘一個有效時間，每格為 30 分鐘累積雨量。';
+  if (snapshot.source === 'nowcast-fallback') return 'SWIRLS 暫不可用，現正顯示原有 30 分鐘兩小時預報後備資料。';
+  return '正在準備未來兩小時降雨預報。';
+}
+
 function syncControls() {
   const { root, buttons, legacyToggle, status } = controls();
   const selectedMode = pendingMode || activeMode;
@@ -62,7 +69,7 @@ function syncControls() {
     status.textContent = busy
       ? `正在切換至${modeLabel(selectedMode)}…`
       : activeMode === 'forecast'
-        ? '顯示官方未來兩小時格點降雨預報。'
+        ? forecastStatusText()
         : activeMode === 'radar'
           ? '顯示 HKO 雷達觀測；可在下方調整範圍、高度及動畫。'
           : '雨勢圖層已關閉。';

@@ -1,11 +1,16 @@
 import { api } from './api.js';
 import { state } from './state.js';
 import { normalizeNowcastPayload } from './forecast-map-data.js';
+import { assertSwirlsFrameCompatible, buildSwirlsForecast, normalizeSwirlsFramePayload } from './forecast-map-swirls.js';
 import { renderForecastFrameToCanvas } from './forecast-map-browser-canvas.js';
 import { forecastWindow } from './forecast-map-renderer.js';
 import { removeForecastOverlay, setForecastOverlayOpacity, upsertForecastOverlay } from './forecast-map-leaflet.js';
 
 const DEFAULT_OPACITY = 0.72;
+// Worker SWIRLS rollover recovery can perform index + MDL twice, with each
+// upstream fetch capped at 12 seconds. Keep the browser request alive long
+// enough for that bounded recovery path instead of falling back prematurely.
+const SWIRLS_REQUEST_TIMEOUT_MS = 55_000;
 
 let forecast = null;
 let canvas = null;
@@ -16,6 +21,8 @@ let visible = false;
 let lastRender = null;
 let requestSequence = 0;
 let activeController = null;
+let frameRequestSequence = 0;
+let activeFrameController = null;
 
 function normalizeOpacity(value) {
   const number = Number(value);
@@ -46,12 +53,17 @@ function frameSummary(frame, frameIndex) {
     time:frame.time,
     leadMinutes:frame.leadMinutes,
     window:forecastWindow(frame),
+    loaded:Array.isArray(frame.values),
     diagnostics:frame.diagnostics || null
   };
 }
 
 function selectedFrameSummary() {
   return frameSummary(forecast?.frames?.[index] || null, index);
+}
+
+function loadedFrameCount() {
+  return (forecast?.frames || []).filter(frame => Array.isArray(frame?.values)).length;
 }
 
 export function getForecastMapFrameSummaries() {
@@ -62,9 +74,14 @@ export function getForecastMapRuntimeSnapshot() {
   return {
     ready:Boolean(forecast?.validation?.readyForOverlay),
     visible,
+    source:forecast?.source || null,
     issueTime:forecast?.issueTime || null,
     unit:forecast?.unit || null,
+    cadenceMinutes:forecast?.cadenceMinutes || null,
+    accumulationMinutes:forecast?.accumulationMinutes || 30,
+    fallbackReason:forecast?.fallbackReason || null,
     frameCount:forecast?.frames?.length || 0,
+    loadedFrameCount:loadedFrameCount(),
     index,
     opacity,
     selectedFrame:selectedFrameSummary(),
@@ -78,10 +95,12 @@ export function getForecastMapRuntimeSnapshot() {
   };
 }
 
-export function showForecastMap(frameIndex = index) {
+function renderForecastMapFrame(frameIndex) {
   if (!state.map) throw new Error('Leaflet 地圖尚未初始化');
   index = normalizeIndex(frameIndex);
   const frame = forecast.frames[index];
+  if (!Array.isArray(frame?.values)) throw new Error('這個 6 分鐘預報時段尚未下載');
+
   const targetCanvas = ensureCanvas();
   const rendered = renderForecastFrameToCanvas(targetCanvas, frame, forecast.grid);
   layer = upsertForecastOverlay({
@@ -102,28 +121,96 @@ export function showForecastMap(frameIndex = index) {
   return getForecastMapRuntimeSnapshot();
 }
 
+export function showForecastMap(frameIndex = index) {
+  return renderForecastMapFrame(frameIndex);
+}
+
+async function loadSwirlsForecast(requestId, controller, requestedOpacity) {
+  const payload = await api('/api/rain/swirls/frame?frame=0', {
+    signal:controller.signal,
+    timeoutMs:SWIRLS_REQUEST_TIMEOUT_MS
+  });
+  const firstFrame = normalizeSwirlsFramePayload(payload);
+  if (requestId !== requestSequence) throw new DOMException('Forecast request superseded', 'AbortError');
+
+  forecast = buildSwirlsForecast(firstFrame);
+  opacity = normalizeOpacity(requestedOpacity);
+  index = 0;
+  return renderForecastMapFrame(0);
+}
+
+async function loadNowcastFallback(requestId, controller, requestedOpacity, swirlsError) {
+  const payload = await api('/api/rain/nowcast', { signal:controller.signal });
+  const normalized = normalizeNowcastPayload(payload);
+  if (requestId !== requestSequence) throw new DOMException('Forecast request superseded', 'AbortError');
+
+  forecast = {
+    ...normalized,
+    source:'nowcast-fallback',
+    cadenceMinutes:30,
+    accumulationMinutes:30,
+    fallbackReason:swirlsError?.message || 'SWIRLS 暫不可用'
+  };
+  opacity = normalizeOpacity(requestedOpacity);
+  index = 0;
+  return renderForecastMapFrame(0);
+}
+
 export async function loadForecastMap({ frameIndex = 0, opacity:requestedOpacity = opacity } = {}) {
   const requestId = ++requestSequence;
   activeController?.abort();
+  activeFrameController?.abort();
+  activeFrameController = null;
+  frameRequestSequence += 1;
   const controller = new AbortController();
   activeController = controller;
 
   try {
-    const payload = await api('/api/rain/nowcast', { signal:controller.signal });
-    const normalized = normalizeNowcastPayload(payload);
-    if (requestId !== requestSequence) throw new DOMException('Forecast request superseded', 'AbortError');
+    let snapshot;
+    try {
+      snapshot = await loadSwirlsForecast(requestId, controller, requestedOpacity);
+    } catch (error) {
+      if (error?.name === 'AbortError' || controller.signal.aborted || requestId !== requestSequence) throw error;
+      snapshot = await loadNowcastFallback(requestId, controller, requestedOpacity, error);
+    }
 
-    forecast = normalized;
-    opacity = normalizeOpacity(requestedOpacity);
-    index = 0;
-    return showForecastMap(frameIndex);
+    if (Number(frameIndex) !== 0) return await setForecastMapIndex(frameIndex);
+    return snapshot;
   } finally {
     if (requestId === requestSequence) activeController = null;
   }
 }
 
-export function setForecastMapIndex(frameIndex) {
-  return showForecastMap(frameIndex);
+export async function setForecastMapIndex(frameIndex) {
+  const targetIndex = normalizeIndex(frameIndex);
+  const target = forecast.frames[targetIndex];
+  if (Array.isArray(target?.values)) return renderForecastMapFrame(targetIndex);
+  if (forecast?.source !== 'swirls') throw new Error('預報時段資料尚未載入');
+
+  const requestId = ++frameRequestSequence;
+  activeFrameController?.abort();
+  const controller = new AbortController();
+  activeFrameController = controller;
+
+  try {
+    const payload = await api(`/api/rain/swirls/frame?frame=${targetIndex}`, {
+      signal:controller.signal,
+      timeoutMs:SWIRLS_REQUEST_TIMEOUT_MS
+    });
+    const frame = normalizeSwirlsFramePayload(payload);
+    assertSwirlsFrameCompatible(forecast, frame);
+    if (requestId !== frameRequestSequence) throw new DOMException('Forecast frame request superseded', 'AbortError');
+
+    forecast.frames[targetIndex] = {
+      ...target,
+      values:frame.values,
+      diagnostics:frame.diagnostics,
+      loaded:true
+    };
+    return renderForecastMapFrame(targetIndex);
+  } finally {
+    if (requestId === frameRequestSequence) activeFrameController = null;
+  }
 }
 
 export function setForecastMapOpacity(value) {
@@ -141,8 +228,11 @@ export function hideForecastMap() {
 
 export function clearForecastMap() {
   requestSequence += 1;
+  frameRequestSequence += 1;
   activeController?.abort();
+  activeFrameController?.abort();
   activeController = null;
+  activeFrameController = null;
   hideForecastMap();
   forecast = null;
   canvas = null;
