@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 const BASE = (process.env.WORKER_BASE_URL || 'https://radar.max-yu.workers.dev').replace(/\/$/, '');
-const EXPECTED_VERSION = process.env.EXPECTED_WORKER_VERSION || '2.5.0';
+const workerSource = readFileSync(new URL('../worker.js', import.meta.url), 'utf8');
+const sourceVersion = workerSource.match(/const VERSION = ['"]([^'"]+)['"]/i)?.[1];
+assert.ok(sourceVersion, 'Unable to derive Worker version from worker.js');
+const EXPECTED_VERSION = process.env.EXPECTED_WORKER_VERSION || sourceVersion;
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 30_000);
 
 async function request(path, { expectJson = true } = {}) {
