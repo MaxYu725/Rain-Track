@@ -1,0 +1,44 @@
+name: Temporary Phase 3B2 clean Worker transform
+
+on:
+  push:
+    branches:
+      - feature/phase3b2-worker-swirls-routes-clean
+    paths:
+      - scripts/.tmp-apply-phase3b2-clean.mjs
+      - .github/workflows/.tmp-apply-phase3b2-clean.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rewrite:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate inline SWIRLS Worker
+        run: node scripts/.tmp-apply-phase3b2-clean.mjs
+      - name: Validate generated Worker and existing SWIRLS contracts
+        run: |
+          node --check worker.js
+          node scripts/validate-swirls-contract.mjs
+          node scripts/validate-swirls-runtime.mjs
+          git diff --check
+      - name: Commit generated Worker
+        run: |
+          if git diff --quiet -- worker.js; then
+            echo "worker.js already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add worker.js
+          git commit -m "Phase 3B2: integrate SWIRLS Worker routes"
+          git push origin HEAD:feature/phase3b2-worker-swirls-routes-clean
