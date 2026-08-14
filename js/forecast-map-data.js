@@ -21,16 +21,40 @@ function axisFromGrid(min, max, step) {
   return Array.from({ length:count }, (_, index) => round6(min + index * step));
 }
 
-function deriveAxes(grid, frames) {
-  let latitudes = axisFromGrid(Number(grid?.minLat), Number(grid?.maxLat), Number(grid?.stepLat));
-  let longitudes = axisFromGrid(Number(grid?.minLon), Number(grid?.maxLon), Number(grid?.stepLon));
-
-  if (latitudes.length > 1 && longitudes.length > 1) return { latitudes, longitudes };
-
+function observedAxes(frames) {
   const allPoints = frames.flatMap(frame => Array.isArray(frame?.points) ? frame.points : []);
-  latitudes = [...new Set(allPoints.map(point => round6(point?.[0])).filter(Number.isFinite))].sort((a, b) => a - b);
-  longitudes = [...new Set(allPoints.map(point => round6(point?.[1])).filter(Number.isFinite))].sort((a, b) => a - b);
+  const latitudes = [...new Set(allPoints.map(point => round6(point?.[0])).filter(Number.isFinite))].sort((a, b) => a - b);
+  const longitudes = [...new Set(allPoints.map(point => round6(point?.[1])).filter(Number.isFinite))].sort((a, b) => a - b);
   return { latitudes, longitudes };
+}
+
+function deriveAxes(grid, frames) {
+  const observed = observedAxes(frames);
+  if (observed.latitudes.length > 1 && observed.longitudes.length > 1) return observed;
+
+  return {
+    latitudes: axisFromGrid(Number(grid?.minLat), Number(grid?.maxLat), Number(grid?.stepLat)),
+    longitudes: axisFromGrid(Number(grid?.minLon), Number(grid?.maxLon), Number(grid?.stepLon))
+  };
+}
+
+function averageAxisStep(axis) {
+  if (!Array.isArray(axis) || axis.length < 2) return null;
+  const sorted = [...axis].sort((a, b) => a - b);
+  const step = (sorted.at(-1) - sorted[0]) / (sorted.length - 1);
+  return Number.isFinite(step) && step > 0 ? round6(step) : null;
+}
+
+function axisEdgeBounds(axis) {
+  if (!Array.isArray(axis) || !axis.length) return { min:null, max:null };
+  const sorted = [...axis].sort((a, b) => a - b);
+  if (sorted.length === 1) return { min:sorted[0], max:sorted[0] };
+  const lowGap = sorted[1] - sorted[0];
+  const highGap = sorted.at(-1) - sorted.at(-2);
+  return {
+    min: round6(sorted[0] - lowGap / 2),
+    max: round6(sorted.at(-1) + highGap / 2)
+  };
 }
 
 function normalizeLeadMinutes(frame, issueTime) {
@@ -118,14 +142,18 @@ export function compactForecastGrid({ issueTime, unit = FORECAST_MAP_CONTRACT.un
       && frame.diagnostics.missingValueCount === 0
   );
 
-  const rawStepLat = Number(grid?.stepLat) || (latitudes.length > 1 ? Math.abs(latitudes[1] - latitudes[0]) : null);
-  const rawStepLon = Number(grid?.stepLon) || (longitudes.length > 1 ? Math.abs(longitudes[1] - longitudes[0]) : null);
+  const observedStepLat = averageAxisStep(latitudes);
+  const observedStepLon = averageAxisStep(longitudes);
+  const rawStepLat = observedStepLat ?? Number(grid?.stepLat);
+  const rawStepLon = observedStepLon ?? Number(grid?.stepLon);
   const stepLat = Number.isFinite(rawStepLat) ? round6(rawStepLat) : null;
   const stepLon = Number.isFinite(rawStepLon) ? round6(rawStepLon) : null;
   const minLat = latitudes.length ? Math.min(...latitudes) : null;
   const maxLat = latitudes.length ? Math.max(...latitudes) : null;
   const minLon = longitudes.length ? Math.min(...longitudes) : null;
   const maxLon = longitudes.length ? Math.max(...longitudes) : null;
+  const latEdges = axisEdgeBounds(latitudes);
+  const lonEdges = axisEdgeBounds(longitudes);
   const reasonableSize = expectedCellCount > 0 && expectedCellCount <= 40000;
 
   return {
@@ -142,10 +170,10 @@ export function compactForecastGrid({ issueTime, unit = FORECAST_MAP_CONTRACT.un
       latitudes: northToSouth,
       longitudes: westToEast,
       bounds: {
-        north: Number.isFinite(maxLat) && Number.isFinite(stepLat) ? round6(maxLat + stepLat / 2) : maxLat,
-        south: Number.isFinite(minLat) && Number.isFinite(stepLat) ? round6(minLat - stepLat / 2) : minLat,
-        east: Number.isFinite(maxLon) && Number.isFinite(stepLon) ? round6(maxLon + stepLon / 2) : maxLon,
-        west: Number.isFinite(minLon) && Number.isFinite(stepLon) ? round6(minLon - stepLon / 2) : minLon
+        north: Number.isFinite(latEdges.max) ? latEdges.max : maxLat,
+        south: Number.isFinite(latEdges.min) ? latEdges.min : minLat,
+        east: Number.isFinite(lonEdges.max) ? lonEdges.max : maxLon,
+        west: Number.isFinite(lonEdges.min) ? lonEdges.min : minLon
       }
     },
     frames: compactFrames,
