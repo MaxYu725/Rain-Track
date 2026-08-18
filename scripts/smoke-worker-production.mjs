@@ -3,8 +3,11 @@ import { readFileSync } from 'node:fs';
 
 const BASE = (process.env.WORKER_BASE_URL || 'https://radar.max-yu.workers.dev').replace(/\/$/, '');
 const workerSource = readFileSync(new URL('../worker.js', import.meta.url), 'utf8');
+const entrySource = readFileSync(new URL('../worker-entry.js', import.meta.url), 'utf8');
 const sourceVersion = workerSource.match(/const VERSION = ['"]([^'"]+)['"]/i)?.[1];
+const pointSeriesVersion = entrySource.match(/const VERSION = ['"]([^'"]+)['"]/i)?.[1];
 assert.ok(sourceVersion, 'Unable to derive Worker version from worker.js');
+assert.ok(pointSeriesVersion, 'Unable to derive point-series Worker version from worker-entry.js');
 const EXPECTED_VERSION = process.env.EXPECTED_WORKER_VERSION || sourceVersion;
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 30_000);
 
@@ -77,6 +80,25 @@ async function smokeSwirlsFrame(frameIndex) {
   console.log(`PASS SWIRLS frame ${frameIndex} valid=${data.validTime}`);
 }
 
+async function smokeSwirlsPointSeries() {
+  const { response, data } = await request('/api/rain/swirls/point-series?lat=22.3023&lon=114.1746');
+  assert.equal(data.ok, true, 'SWIRLS point series must be ok');
+  assert.equal(data.version, pointSeriesVersion, 'SWIRLS point-series Worker entry version mismatch');
+  assert.equal(data.sampleCount, 16, 'SWIRLS point series sample count mismatch');
+  assert.equal(data.cadenceMinutes, 6, 'SWIRLS point series cadence mismatch');
+  assert.equal(data.accumulationMinutes, 30, 'SWIRLS point series accumulation mismatch');
+  assert.equal(data.unit, 'mm / 30 min', 'SWIRLS point series unit mismatch');
+  assert.equal(data.interpolation, 'bilinear-four-grid-points', 'SWIRLS point series interpolation mismatch');
+  assert.deepEqual(data.samples.map(sample => sample.leadMinutes), Array.from({ length: 16 }, (_, index) => 30 + index * 6));
+  assert.ok(data.samples.every(sample => Number.isFinite(sample.accumulationMm)), 'SWIRLS point series contains invalid rainfall');
+  assert.equal(data.values, undefined, 'compact endpoint must not return full frame values');
+  assert.equal(data.grid, undefined, 'compact endpoint must not return full grid');
+  const payloadBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
+  assert.ok(payloadBytes < 12_000, `compact endpoint payload unexpectedly large: ${payloadBytes} bytes`);
+  assert.match(response.headers.get('cache-control') || '', /max-age=/, 'SWIRLS point series should be cacheable');
+  console.log(`PASS SWIRLS point series samples=${data.sampleCount} payload=${payloadBytes}B`);
+}
+
 async function smokePoint() {
   const { data } = await request('/api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2');
   assert.equal(data.ok, true, 'point forecast must be ok');
@@ -124,6 +146,7 @@ await smokeCapabilities();
 await smokeSwirlsProbe();
 await smokeSwirlsFrame(0);
 await smokeSwirlsFrame(15);
+await smokeSwirlsPointSeries();
 await smokePoint();
 await smokeNowcast();
 await smokeRadar(64, 2);
