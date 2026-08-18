@@ -19,8 +19,10 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check worker.js
+          node --check worker-entry.js
           node --check swirls-data.js
           node --check swirls-worker-runtime.js
+          node --check swirls-point-series.js
           node --check service-worker.js
           for file in js/*.js; do
             node --check "$file"
@@ -30,6 +32,7 @@ jobs:
           node --check scripts/validate-swirls-contract.mjs
           node --check scripts/validate-swirls-runtime.mjs
           node --check scripts/validate-worker-swirls-inline.mjs
+          node --check scripts/validate-swirls-point-series.mjs
           node --check scripts/validate-swirls-frontend.mjs
           node --check scripts/probe-swirls-frontend-live.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
@@ -43,6 +46,8 @@ jobs:
         run: node scripts/validate-swirls-runtime.mjs
       - name: Validate inline SWIRLS Worker parity
         run: node scripts/validate-worker-swirls-inline.mjs
+      - name: Validate compact SWIRLS point series
+        run: node scripts/validate-swirls-point-series.mjs
       - name: Validate SWIRLS frontend 6-minute forecast
         run: node scripts/validate-swirls-frontend.mjs
       - name: Validate forecast playback and separated settings
