@@ -24,8 +24,11 @@ jobs:
       - name: Validate deployable Worker source
         run: |
           node --check worker.js
+          node --check worker-entry.js
+          node --check swirls-point-series.js
           node --check scripts/smoke-worker-production.mjs
           node scripts/validate-worker-swirls-inline.mjs
+          node scripts/validate-swirls-point-series.mjs
 
       - name: Dry run and deploy production Worker
         uses: cloudflare/wrangler-action@v4
@@ -34,8 +37,8 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.123.0'
           command: |
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars
+            deploy worker-entry.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
+            deploy worker-entry.js --name radar --compatibility-date 2026-08-05 --keep-vars
             deployments status --name radar --json
 
       - name: Smoke production Worker
