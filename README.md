@@ -7,10 +7,11 @@ Rain-Track 是香港定位降雨預報、HKO 雷達觀測與 HKO SWIRLS 兩小�
 
 ## Production baseline — 2026-08-19
 
-- Rain-Track main：`14b26e29a47bc4a01b9c701d6a3e92cfc5cb81a5`
+- Rain-Track main：`3136103366feb80bedccb3ef4bea5b23d3a4bf33`
 - App UI：`v1.6.4`
 - Rain Home：location-first 16-point SWIRLS trend
-- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa22`
+- Forecast Map：free pan / zoom + 香港／深圳／南面海域／全域／定位 quick views
+- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa23`
 - Worker baseline：`v2.5.0` + Phase 3C compact SWIRLS point routes
 - Radar Contract：`v1.0`
 - Production Worker：`https://radar.max-yu.workers.dev`
@@ -74,6 +75,18 @@ GET /api/rain/swirls/point-series?lat=22.3023&lon=114.1746
 - Forecast opacity 獨立保存
 - 手機 timeline 固定在 safe-area 上方
 - 不再有 bottom-sheet avoidance observer
+
+#### 雨區快速視野
+
+Forecast 模式提供使用者主動觸發的快速視野：
+
+- 香港
+- 深圳
+- 南面海域
+- 全域 SWIRLS coverage
+- 返回目前定位
+
+這些按鈕只在使用者點擊時改變 viewport。其後可繼續自由拖曳、縮放；forecast playback、timer 或資料更新不會自動把地圖拉回預設位置。
 
 ### Bottom sheet removal
 
@@ -154,6 +167,7 @@ GitHub Pages PWA
        └─ fallback: 16 × /api/rain/swirls/point
   2-hour Forecast Map
     └─ /api/rain/swirls/frame?frame=0..15
+       └─ user-controlled quick views: HK / Shenzhen / South Sea / Coverage / Location
   Radar
     └─ /api/radar/frames + /api/radar/image
         │
@@ -177,7 +191,7 @@ Hong Kong Observatory public data / GIS radar / SWIRLS sources
 
 ### Frontend
 
-`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa22`。
+`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa23`。
 
 ### Worker
 
@@ -221,9 +235,10 @@ PR / `main` validation 包括：
 - Forecast playback + Radar/Forecast settings separation
 - Rain Home location-first integration
 - bottom-sheet removal / fixed Forecast timeline contract
+- Forecast Map quick-view contract：只由使用者觸發，不與 playback / timer 綁定
 - live SWIRLS frontend probe
 
-Production Worker deployment另由 smoke scripts 驗證：
+Production Worker deployment 另由 smoke scripts 驗證：
 
 - health / capabilities
 - SWIRLS probe + frame 0 / 15
@@ -255,7 +270,7 @@ Rain-Track standalone 可繼續開發，但產品層保持三個問題分離：
 | 模式 | 要回答的問題 | 主要資料 |
 | --- | --- | --- |
 | Rain Home | 我這裡會不會下雨？ | SWIRLS 定位 16-point series |
-| 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids |
+| 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids + user-controlled map views |
 | Radar | 現在實際雨區在哪裡？ | HKO radar observation |
 
 不要重新把三者塞回同一個首頁 map + bottom sheet hierarchy。
