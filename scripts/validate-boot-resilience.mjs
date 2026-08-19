@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const index = readFileSync('index.html', 'utf8');
 const boot = readFileSync('js/boot-watchdog.js', 'utf8');
 const map = readFileSync('js/map.js', 'utf8');
+const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
+const mode = readFileSync('js/rain-map-mode.js', 'utf8');
+const pwa = readFileSync('js/pwa.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
 assert.ok(index.includes('<script src="./js/boot-watchdog.js"></script>'), 'boot watchdog must load before the application modules');
@@ -16,20 +19,49 @@ assert.ok(map.includes("window.addEventListener('rain:leaflet-ready', retry)"), 
 assert.ok(map.includes("window.addEventListener('load', retry, { once:true })"), 'map bootstrap needs a load-event fallback');
 assert.ok(map.includes("window.dispatchEvent(new CustomEvent('rain:map-ready'))"), 'successful deferred map init must announce readiness');
 
-assert.ok(boot.includes('const BOOT_TIMEOUT_MS = 8000'), 'startup watchdog timeout marker is missing');
+assert.ok(boot.includes('const BOOT_TIMEOUT_MS = 5000'), 'startup watchdog must detect a static-shell stall promptly');
 assert.ok(boot.includes('data-rain-boot-recovery'), 'startup watchdog must replace an indefinite static spinner with recovery UI');
+assert.ok(boot.includes("window.addEventListener('error'"), 'watchdog must observe frontend load errors');
+assert.ok(boot.includes('}, true);'), 'watchdog error listener must capture resource-load errors');
 assert.ok(boot.includes("navigator.serviceWorker.register('./service-worker.js'"), 'watchdog must refresh the service-worker registration independently of app.js');
 assert.ok(boot.includes("navigator.serviceWorker.getRegistration('./')"), 'recovery must target only this app service-worker scope');
 assert.ok(boot.includes('registration?.unregister?.()'), 'recovery must be able to remove a broken app service worker');
 assert.ok(boot.includes("name.startsWith(CACHE_PREFIX)"), 'recovery must clear only Rain-Track PWA caches');
 assert.ok(boot.includes("url.searchParams.set('_boot'"), 'recovery reload must bypass the stale navigation state');
 
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa29'/);
-assert.ok(sw.includes("'./js/boot-watchdog.js'"), 'boot watchdog must be in the atomic App Shell');
-assert.ok(sw.includes('await self.skipWaiting()'), 'new atomic shells must activate without waiting for a broken old page');
-assert.ok(!sw.includes('OPTIONAL_EXTERNAL'), 'service-worker installation must not wait for third-party Leaflet assets');
-assert.ok(sw.includes('const priorShells = keys.filter'), 'activation must detect version migrations');
-assert.ok(sw.includes("self.clients.matchAll({ type:'window', includeUncontrolled:true })"), 'version migration must find already-open windows');
-assert.ok(sw.includes('await client.navigate(client.url)'), 'version migration must reload open windows onto the new shell');
+assert.ok(smoke.includes("import './rain-home.js';"), 'Rain Home must remain a static critical import');
+assert.ok(smoke.includes("import './rain-home-shell.js';"), 'Rain Home shell cleanup must remain a static critical import');
+assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'map enhancements must be isolated best-effort imports');
+assert.ok(smoke.includes("'./rain-map-quickviews.js'"));
+assert.ok(smoke.includes("'./rain-map-area-summary.js'"));
 
-console.log('Frontend boot resilience + pwa29 self-heal gate PASS');
+assert.ok(existsSync('js/rain-map-mode-heavy.js'), 'the preserved full rain-map mode implementation is missing');
+assert.ok(mode.includes("import('./rain-map-mode-heavy.js')"), 'Rain Home map control facade must defer the heavy map graph');
+assert.ok(!mode.match(/^import\s/m), 'rain-map-mode facade must not have static imports');
+assert.ok(mode.includes('requestIdleCallback'), 'heavy map controls should warm only after the critical Home graph can execute');
+
+assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force a normal-startup reload');
+assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA controller reload must require explicit update application');
+
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa30'/);
+assert.ok(sw.includes('const CORE_SHELL = ['), 'pwa30 must separate the critical Rain Home core from the full feature inventory');
+for (const corePath of [
+  "'./js/boot-watchdog.js'",
+  "'./js/forecast-map-smoke.js'",
+  "'./js/rain-home.js'",
+  "'./js/rain-home-time.js'",
+  "'./js/rain-home-shell.js'",
+  "'./js/rain-map-mode.js'",
+  "'./js/api.js'",
+  "'./js/config.js'",
+  "'./js/state.js'",
+  "'./js/utils.js'"
+]) assert.ok(sw.includes(corePath), `critical core path missing from service worker source: ${corePath}`);
+assert.ok(sw.includes('for (const path of CORE_SHELL)'), 'service-worker install must gate only on the Rain Home core');
+assert.ok(sw.includes('await self.skipWaiting()'), 'a complete pwa30 core must be able to replace a stuck pwa29 shell');
+assert.ok(!sw.includes('client.navigate('), 'service-worker activation must not race application code with an automatic client navigation');
+assert.ok(!sw.includes('self.clients.matchAll('), 'service-worker activation must not run a second reload path');
+assert.ok(sw.includes('cache.put(request, response.clone()).catch(() => {})'), 'optional same-origin features must become cached progressively after use');
+assert.ok(sw.includes("'./js/rain-map-mode-heavy.js'"), 'heavy map implementation must remain in the full PWA dependency inventory');
+
+console.log('Frontend boot resilience + independent Rain Home core + pwa30 single-reload gate PASS');
