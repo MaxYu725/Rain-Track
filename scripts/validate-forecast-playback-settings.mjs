@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 
 const timeline = readFileSync('js/forecast-map-timeline.js', 'utf8');
 const timelineCore = readFileSync('js/forecast-map-timeline-core.js', 'utf8');
-const mode = readFileSync('js/rain-map-mode.js', 'utf8');
+const modeFacade = readFileSync('js/rain-map-mode.js', 'utf8');
+const mode = readFileSync('js/rain-map-mode-heavy.js', 'utf8');
 const serviceWorker = readFileSync('service-worker.js', 'utf8');
 
 for (const marker of [
@@ -39,6 +40,7 @@ for (const removedMarker of [
 
 assert.ok(!timeline.includes('radar-timeline'), 'forecast timeline wrapper must not alter radar timeline behavior');
 
+assert.ok(modeFacade.includes("import('./rain-map-mode-heavy.js')"), 'mode facade must lazily load the full map settings implementation');
 for (const marker of [
   'rain-radar-settings',
   'rain-forecast-settings',
@@ -61,6 +63,7 @@ assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
 assert.ok(Number(shellVersion[1]) >= 23, `PWA shell generation must be at least pwa23, got pwa${shellVersion[1]}`);
-assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell');
+assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
+assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + separated settings + map-first timeline gate PASS');
+console.log('Forecast playback + separated settings + lazy map-mode facade + map-first timeline gate PASS');
