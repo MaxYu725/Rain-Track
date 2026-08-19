@@ -27,10 +27,13 @@ jobs:
           node --check worker-phase3c-v2.js
           node --check swirls-point-sample.js
           node --check swirls-point-request.js
+          node --check swirls-point-series-request.js
           node --check scripts/smoke-worker-production.mjs
           node --check scripts/probe-swirls-point-production.mjs
+          node --check scripts/probe-swirls-point-series-production.mjs
           node scripts/validate-swirls-point-sample.mjs
           node scripts/validate-swirls-point-request.mjs
+          node scripts/validate-swirls-point-series-request.mjs
           node scripts/validate-phase3c-v2-worker.mjs
           node scripts/validate-worker-swirls-inline.mjs
 
@@ -50,3 +53,6 @@ jobs:
 
       - name: Smoke compact SWIRLS point endpoint
         run: node scripts/probe-swirls-point-production.mjs
+
+      - name: Smoke SWIRLS point-series endpoint
+        run: node scripts/probe-swirls-point-series-production.mjs
