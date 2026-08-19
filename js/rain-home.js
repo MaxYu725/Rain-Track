@@ -59,13 +59,21 @@ function injectStyles() {
     .rain-home-section-title{margin:0;color:#fff;font-size:1rem;font-weight:650}
     .rain-home-section-note{color:#818181;font-size:.73rem;text-align:right;line-height:1.4}
     .rain-home-chart-wrap{position:relative;padding:12px 0 2px}
-    .rain-home-chart{display:block;width:100%;height:auto;overflow:visible;color:var(--accent)}
+    .rain-home-chart{display:block;width:100%;height:auto;overflow:visible;color:var(--accent);touch-action:pan-y}
     .rain-home-grid{stroke:#262626;stroke-width:1;vector-effect:non-scaling-stroke}
     .rain-home-axis-label{fill:#757575;font-size:11px;font-family:"Segoe UI","Microsoft JhengHei",sans-serif}
     .rain-home-line{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
     .rain-home-area{fill:currentColor;opacity:.10}
-    .rain-home-dot{fill:#000;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}
-    .rain-home-chart-caption{display:flex;justify-content:space-between;gap:12px;margin-top:2px;color:#777;font-size:.72rem}
+    .rain-home-dot{fill:#000;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke;transition:r .12s,fill .12s,stroke-width .12s}
+    .rain-home-dot.selected{fill:currentColor;stroke-width:3;r:5}
+    .rain-home-hit{fill:transparent;stroke:transparent;stroke-width:1;cursor:pointer;outline:none}
+    .rain-home-hit:focus-visible{stroke:var(--cyan);stroke-width:2;fill:rgba(0,216,255,.08)}
+    .rain-home-chart-readout{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 18px;margin:10px 0 0;padding:12px 13px;border:1px solid #323b40;background:#090d0f;min-height:68px}
+    .rain-home-readout-time{color:#fff;font-size:.88rem;font-weight:650;line-height:1.35}
+    .rain-home-readout-window{margin-top:4px;color:#7f8a8f;font-size:.7rem;line-height:1.4}
+    .rain-home-readout-value{color:#dff5ff;font-size:1.16rem;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+    .rain-home-readout-unit{display:block;margin-top:2px;color:#71828a;font-size:.62rem;font-weight:400}
+    .rain-home-chart-caption{display:flex;justify-content:space-between;gap:12px;margin-top:7px;color:#777;font-size:.72rem}
     .rain-home-meta{display:flex;flex-wrap:wrap;gap:8px 14px;margin-top:18px;padding-top:13px;border-top:1px solid #252525;color:#777;font-size:.74rem;line-height:1.5}
     .rain-home-primary-action{display:flex;width:100%;min-height:52px;align-items:center;justify-content:space-between;gap:14px;margin-top:24px;padding:0 16px;border:1px solid #3f7893;background:#07131a;color:#fff;font-weight:650;text-align:left}
     .rain-home-primary-action span:last-child{color:var(--accent);font-size:1.25rem}
@@ -78,6 +86,7 @@ function injectStyles() {
       body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}
       .rain-home-location{padding-top:2px;padding-bottom:18px}.rain-home-summary{padding:22px 0 18px}
       .rain-home-section-head{align-items:flex-start;flex-direction:column;gap:5px}.rain-home-section-note{text-align:left}
+      .rain-home-chart-readout{grid-template-columns:minmax(0,1fr) auto;padding:10px 11px}.rain-home-readout-value{font-size:1.05rem}
       .rain-home-chart-caption{font-size:.68rem}.rain-home-back-map{top:10px;left:10px}
     }
   `;
@@ -255,6 +264,7 @@ function renderHome(content, point, data, { sourceMode, cached }) {
       ${mapActionMarkup()}
     </section>`;
   bindHomeActions(content);
+  bindChartExplorer(content, data.points);
   const subtitle = document.getElementById('mobile-title-sub');
   if (subtitle) subtitle.textContent = `${point.name} · ${analysis.shortLabel}`;
 }
@@ -290,6 +300,61 @@ function bindHomeActions(content) {
       if (label) label.textContent = '查看 2 小時雨區';
     }
   });
+}
+
+function bindChartExplorer(content, points) {
+  const chart = content.querySelector('.rain-home-chart');
+  const readout = content.querySelector('[data-rain-home-readout]');
+  const hits = [...content.querySelectorAll('[data-rain-home-point]')];
+  const dots = [...content.querySelectorAll('.rain-home-dot')];
+  if (!chart || !readout || hits.length !== points.length || dots.length !== points.length) return;
+
+  const selectPoint = (index, { focus = false } = {}) => {
+    const normalizedIndex = Math.max(0, Math.min(points.length - 1, Number(index) || 0));
+    const sample = points[normalizedIndex];
+    dots.forEach((dot, dotIndex) => dot.classList.toggle('selected', dotIndex === normalizedIndex));
+    hits.forEach((hit, hitIndex) => hit.setAttribute('aria-pressed', hitIndex === normalizedIndex ? 'true' : 'false'));
+    readout.innerHTML = chartReadoutMarkup(sample);
+    readout.dataset.selectedIndex = String(normalizedIndex);
+    if (focus) hits[normalizedIndex]?.focus();
+  };
+
+  chart.addEventListener('click', event => {
+    const hit = event.target.closest('[data-rain-home-point]');
+    if (!hit) return;
+    selectPoint(Number(hit.dataset.rainHomePoint));
+  });
+
+  chart.addEventListener('keydown', event => {
+    const hit = event.target.closest('[data-rain-home-point]');
+    if (!hit) return;
+    const index = Number(hit.dataset.rainHomePoint);
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectPoint(index);
+      return;
+    }
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      selectPoint(index + (event.key === 'ArrowLeft' ? -1 : 1), { focus:true });
+    }
+  });
+
+  const firstWetIndex = points.findIndex(point => Number(point.amountMm) >= RAIN_THRESHOLD_MM);
+  selectPoint(firstWetIndex >= 0 ? firstWetIndex : 0);
+}
+
+function chartReadoutMarkup(point) {
+  const validTime = formatClock(point?.validTime);
+  const windowStart = formatClock(point?.windowStart);
+  const windowEnd = formatClock(point?.windowEnd || point?.validTime);
+  const lead = Number.isFinite(Number(point?.leadMinutes)) ? `+${Number(point.leadMinutes)} 分` : '預報時段';
+  return `
+    <div>
+      <div class="rain-home-readout-time">有效時間 ${escapeHtml(validTime)} · ${escapeHtml(lead)}</div>
+      <div class="rain-home-readout-window">30 分鐘累積時窗 ${escapeHtml(windowStart)}–${escapeHtml(windowEnd)}</div>
+    </div>
+    <div class="rain-home-readout-value">${escapeHtml(formatRain(point?.amountMm))}<span class="rain-home-readout-unit">mm / 30 min</span></div>`;
 }
 
 function analyzeTrend(data) {
@@ -346,13 +411,18 @@ function chartMarkup(points) {
   const xIndexes = [0,5,10,15];
   const xLabels = xIndexes.map(index => `<text class="rain-home-axis-label" x="${x(index).toFixed(1)}" y="${height - 8}" text-anchor="${index === 0 ? 'start' : index === 15 ? 'end' : 'middle'}">${escapeHtml(formatClock(points[index]?.validTime))}</text>`).join('');
   const dots = points.map((point, index) => `<circle class="rain-home-dot" cx="${x(index).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="3"></circle>`).join('');
+  const hits = points.map((point, index) => {
+    const label = `有效時間 ${formatClock(point.validTime)}，${formatRain(point.amountMm)} mm / 30 min，預報 +${Number(point.leadMinutes)} 分鐘`;
+    return `<circle class="rain-home-hit" cx="${x(index).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="14" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(label)}" data-rain-home-point="${index}"></circle>`;
+  }).join('');
   const peak = Math.max(...values);
   return `
     <div class="rain-home-chart-wrap">
-      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="未來兩小時定位點雨量折線圖，最高 ${formatRain(peak)} 毫米每 30 分鐘">
-        ${ticks}<path class="rain-home-area" d="${area}"></path><path class="rain-home-line" d="${line}"></path>${dots}${xLabels}
+      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖，最高 ${formatRain(peak)} 毫米每 30 分鐘；可點選 16 個有效時間查看數值">
+        ${ticks}<path class="rain-home-area" d="${area}"></path><path class="rain-home-line" d="${line}"></path>${dots}${hits}${xLabels}
       </svg>
-      <div class="rain-home-chart-caption"><span>縱軸：mm / 30 min</span><span>16 個有效時間 · 6 分鐘 cadence</span></div>
+      <div class="rain-home-chart-readout" data-rain-home-readout aria-live="polite"></div>
+      <div class="rain-home-chart-caption"><span>縱軸：mm / 30 min</span><span>點選圓點查看 16 個有效時間</span></div>
     </div>`;
 }
 
