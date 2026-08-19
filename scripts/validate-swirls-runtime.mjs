@@ -76,6 +76,28 @@ assert.equal(compact.grid.cellCount, 14641);
 assert.equal(compact.wetCellCount > 0, true);
 assert.equal('values' in compact, false);
 
+// A 16-frame point-series batch must share exactly one parsed index snapshot.
+// This caps the external fetch plan at one index plus one MDL fetch per frame,
+// rather than repeating the index request for every frame.
+const batchCalls = [];
+const batchRuntime = createSwirlsRuntime({
+  fetchText: async (url, options) => {
+    batchCalls.push({ url, ...options });
+    if (url === SWIRLS_RAW_CONTRACT.indexUrl) return { body:indexA, cacheStatus:'MISS' };
+    return { body:mdlA, cacheStatus:'MISS' };
+  }
+});
+const batchFrames = await batchRuntime.loadFrames(
+  Array.from({ length:SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => frameIndex),
+  { concurrency:4 }
+);
+assert.equal(batchFrames.length, 16);
+assert.deepEqual(batchFrames.map(item => item.frameIndex), Array.from({ length:16 }, (_, i) => i));
+assert.equal(new Set(batchFrames.map(item => item.runTime)).size, 1);
+assert.equal(batchCalls.filter(call => call.kind === 'index').length, 1);
+assert.equal(batchCalls.filter(call => call.kind === 'mdl').length, 16);
+assert.equal(batchCalls.length, 17);
+
 const probe = await runtime.probe({ frameIndex: 0, includeLastFrame: true });
 assert.equal(probe.ok, true);
 assert.equal(probe.frameCount, 16);
@@ -108,5 +130,6 @@ assert.equal(recovered.validTime, '2026-08-14T02:36:00.000Z');
 
 await assert.rejects(() => runtime.loadFrame(-1), /0\.\.15/);
 await assert.rejects(() => runtime.loadFrame(16), /0\.\.15/);
+await assert.rejects(() => runtime.loadFrames([]), /at least one frame index/);
 
 console.log('SWIRLS live fetch runtime gate PASS');
