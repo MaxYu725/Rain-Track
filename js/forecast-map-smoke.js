@@ -1,7 +1,18 @@
-// Phase 2B5 live smoke entry is retained as a lightweight compatibility entry.
-// The production Forecast Map remains owned by rain-map-mode.js; Rain Home v2
-// adds the location-first 6-minute chart and map/home view switching.
+// Rain Home is the critical product surface and must not depend on the full
+// Forecast Map / Radar module graph being loadable. Keep only the small Home
+// modules static; map enhancements are isolated best-effort dynamic imports.
 import './rain-home.js';
 import './rain-home-shell.js';
-import './rain-map-quickviews.js';
-import './rain-map-area-summary.js';
+
+const OPTIONAL_MAP_MODULES = [
+  './rain-map-quickviews.js',
+  './rain-map-area-summary.js'
+];
+
+Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path))).then(results => {
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      console.warn(`Optional map module deferred (${OPTIONAL_MAP_MODULES[index]}):`, result.reason?.message || result.reason);
+    }
+  });
+});
