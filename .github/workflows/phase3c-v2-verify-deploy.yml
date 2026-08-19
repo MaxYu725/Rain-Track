@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: deploy-worker-production
@@ -143,4 +144,78 @@ jobs:
           except urllib.error.HTTPError as error:
               if error.code != 404:
                   print('Canary cleanup warning: HTTP', error.code)
+          PY
+
+      - name: Record successful production verification on PR 57
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          body = (
+              '✅ Phase 3C v2 production verification PASS\n\n'
+              f"- commit: `{os.environ['GH_SHA']}`\n"
+              f"- Actions run: `{os.environ['GH_RUN_ID']}`\n"
+              '- canary: legacy Stable Recovery smoke PASS\n'
+              '- canary: compact single-frame point smoke PASS\n'
+              '- production: legacy Stable Recovery smoke PASS\n'
+              '- production: compact point matches full-frame local interpolation PASS\n'
+              '- production Cron triggers: 0\n'
+              '- `SWIRLS_SNAPSHOTS` binding: absent\n'
+              '- temporary canary cleanup attempted\n'
+          )
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GH_REPOSITORY']}/issues/57/comments",
+              method='POST',
+              data=json.dumps({'body': body}).encode(),
+              headers={
+                  'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
+                  'Accept': 'application/vnd.github+json',
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'Rain-Track-phase3c-v2-verify/1.0',
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              assert response.status in (200, 201)
+          PY
+
+      - name: Record failed production verification on PR 57
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          body = (
+              '❌ Phase 3C v2 production verification FAILED\n\n'
+              f"- commit: `{os.environ['GH_SHA']}`\n"
+              f"- Actions run: `{os.environ['GH_RUN_ID']}`\n"
+              '- Do not merge or begin Android integration until the failed step is resolved.\n'
+          )
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['GH_REPOSITORY']}/issues/57/comments",
+              method='POST',
+              data=json.dumps({'body': body}).encode(),
+              headers={
+                  'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
+                  'Accept': 'application/vnd.github+json',
+                  'Content-Type': 'application/json',
+                  'User-Agent': 'Rain-Track-phase3c-v2-verify/1.0',
+              },
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              assert response.status in (200, 201)
           PY
