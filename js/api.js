@@ -39,6 +39,14 @@ export function fetchPointForecast(point, radiusKm, options = {}) {
   return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
 }
 
+export function fetchSwirlsPointFrame(point, frameIndex, options = {}) {
+  return api(`/api/rain/swirls/point?frame=${encodeURIComponent(frameIndex)}&lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`, options);
+}
+
+export function fetchSwirlsPointSeries(point, options = {}) {
+  return api(`/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`, { timeoutMs:30_000, ...options });
+}
+
 export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
 export function fetchHealth(options = {}) { return api('/health', options); }
 export function fetchRadarFrames(range, mode = 'live', height = 3, options = {}) {
