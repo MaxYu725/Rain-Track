@@ -2,6 +2,9 @@ name: Deploy Worker production
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - agent/stable-recovery-rain-track
 
 permissions:
   contents: read
@@ -18,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout main source
+      - name: Checkout Recovery source
         uses: actions/checkout@v6
 
       - name: Validate deployable Worker source
@@ -27,15 +30,15 @@ jobs:
           node --check scripts/smoke-worker-production.mjs
           node scripts/validate-worker-swirls-inline.mjs
 
-      - name: Dry run and deploy production Worker
+      - name: Deploy Recovery and remove experimental bindings/triggers
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.123.0'
           command: |
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars
+            deploy --config wrangler-recovery-cleanup.jsonc --keep-vars --dry-run
+            deploy --config wrangler-recovery-cleanup.jsonc --keep-vars
             deployments status --name radar --json
 
       - name: Smoke production Worker

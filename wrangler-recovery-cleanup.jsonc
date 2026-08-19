@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "radar",
+  "main": "worker.js",
+  "compatibility_date": "2026-08-05",
+  "kv_namespaces": [],
+  "triggers": {
+    "crons": []
+  }
+}
