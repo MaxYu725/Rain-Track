@@ -1,27 +1,90 @@
-# Rain-Track — 香港定點雨量與兩小時預報地圖
+# Rain-Track — 香港定位雨勢與兩小時預報地圖
 
-Rain-Track 是香港定點未來兩小時雨量、HKO 雷達觀測與 HKO SWIRLS 兩小時格點預報 PWA。獨立版現已進入 **stable / maintenance / Weather Metro integration-reference** 狀態。
+Rain-Track 是香港定位降雨預報、HKO 雷達觀測與 HKO SWIRLS 兩小時格點預報 PWA。2026-08-19 起 standalone 重新進入主動產品開發，核心分成兩個清楚問題：
 
-## Production baseline — 2026-08-14
+1. **首頁：我身處的位置會不會下雨？**
+2. **2 小時雨區：未來的雨主要在哪裡？**
 
-- Rain-Track main：`b762b27ac428b5369b53ba2b6c5ee7b7d65dfc9d`
+## Production baseline — 2026-08-19
+
+- Rain-Track main：`14b26e29a47bc4a01b9c701d6a3e92cfc5cb81a5`
 - App UI：`v1.6.4`
-- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa20`
-- Worker：`v2.5.0`
+- Rain Home：location-first 16-point SWIRLS trend
+- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa22`
+- Worker baseline：`v2.5.0` + Phase 3C compact SWIRLS point routes
 - Radar Contract：`v1.0`
 - Production Worker：`https://radar.max-yu.workers.dev`
 - Frontend：GitHub Pages from repository `main`
 
-## 已完成能力
+## 產品架構
 
-### 定點兩小時雨量
+### Rain Home — 定位預報
 
-- HKO gridded rainfall nowcast
-- 定點雙線性插值
-- 1 / 2 / 3 / 5 km 附近雨勢比較
-- 降雨開始時段、較強時段、總雨量、freshness / spatial quality
-- 定位、香港地區搜尋、儲存／分享位置
-- 最近成功預報 fallback
+首頁不再以地圖或 bottom sheet 作主要資訊層，而是直接回答目前定位的雨勢：
+
+- 自動使用目前定位／已選位置
+- 顯示一句主要降雨判斷
+- 顯示一句雨勢增強、峰值、減弱等趨勢說明
+- 以折線圖顯示 SWIRLS 定點未來變化
+- 16 個有效時間
+- 約 +30 → +120 分鐘
+- 每 6 分鐘一個**有效時間**
+- 每個點仍代表 **30 分鐘累積雨量**
+- 單位 `mm / 30 min`
+- 一鍵進入「查看 2 小時雨區」
+
+**6 分鐘是 Forecast valid-time cadence，不是 6 分鐘累積雨量。**
+
+Rain Home 不會把相鄰 30 分鐘 rolling accumulation 相減來偽造「6 分鐘雨量」。
+
+### SWIRLS compact point series
+
+Worker source 定義：
+
+```http
+GET /api/rain/swirls/point?frame=0..15&lat=22.3023&lon=114.1746
+GET /api/rain/swirls/point-series?lat=22.3023&lon=114.1746
+```
+
+`point-series` 回傳同一 SWIRLS run 的 16 個定位點樣本，並驗證：
+
+- frame 0 → 15
+- +30 → +120 分鐘
+- 6 分鐘 cadence
+- 30 分鐘 accumulation
+- 同一 forecast run
+- bilinear grid-centre interpolation
+
+前端會優先使用 compact `point-series`。如果 production Worker 尚未提供該 route，會暫時以既有 single-frame point endpoint 分 4-frame batch 組合 16 點序列，避免 frontend 與 Worker 必須同一時間部署。
+
+### 2 小時雨區 — Forecast Map
+
+2 小時頁面專門回答「雨區在哪裡」，而不是重複首頁的個人預報。
+
+- full-screen Forecast Map
+- 可自由 pan / zoom
+- 可觀察全香港、局部地區、深圳及南海附近雨帶
+- 16 個 SWIRLS forecast frame
+- 每 6 分鐘一個有效時間
+- 約 +30 → +120 分鐘
+- 每 frame 為 30 分鐘累積雨量
+- lazy frame loading
+- play / pause
+- 慢 / 標準 / 快播放速度
+- Forecast opacity 獨立保存
+- 手機 timeline 固定在 safe-area 上方
+- 不再有 bottom-sheet avoidance observer
+
+### Bottom sheet removal
+
+Rain Home 已移除 bottom-sheet 產品行為：
+
+- 移除 sheet handle / forecast toggle
+- 不再呈現 peek / half / full 模式
+- 舊 `hkRainSheetMode` / `hkRainSheetUserMode` localStorage 會被清理
+- compatibility code 即使重新寫入舊 sheet class，Rain Home shell 亦會移除
+
+舊 sheet helper 暫時仍存在於部分成熟 Radar compatibility code path，避免一次性大改雷達 runtime；但不能再形成可見或持久的 Rain Home bottom sheet。
 
 ### HKO Live Radar
 
@@ -34,31 +97,23 @@ Rain-Track 是香港定點未來兩小時雨量、HKO 雷達觀測與 HKO SWIRLS
 
 Radar 是**觀測／過去掃描**，不是未來預報。個別產品可能存在 HKO upstream blind sector / data void；Rain-Track 不自行合成回波填補。
 
-### SWIRLS 兩小時 Forecast Map
+### SWIRLS Forecast Map data
 
-Production Worker `v2.5.0` 提供：
+核心 Worker routes：
 
 ```http
 GET /probe/swirls
 GET /api/rain/swirls/frame?frame=0..15
 ```
 
-目前正式前端已接入：
+Grid contract：
 
-- 16 個 Forecast frame
-- 每 6 分鐘一個**有效時間**
+- 16 forecast frames
+- 6 分鐘 valid-time cadence
 - 約 +30 → +120 分鐘
-- 每個 frame 仍代表 **30 分鐘累積雨量**
-- 單位 `mm / 30 min`
-- 每個 frame `121 × 121 = 14,641` cells
-- lazy loading，不在進入模式時一次下載 16 frame
-- play / pause 自動播放
-- 慢 / 標準 / 快播放速度
-- Forecast opacity 獨立保存
-- Radar 與 Forecast 設定分離
-- mobile bottom-sheet / timeline 避讓
-
-**6 分鐘是 Forecast valid-time step，不是 6 分鐘累積雨量。**
+- `mm / 30 min`
+- `121 × 121 = 14,641` cells / frame
+- row-major north-to-south / west-to-east
 
 ### Nowcast fallback
 
@@ -72,7 +127,7 @@ GET /api/rain/nowcast
 +30 / +60 / +90 / +120 minutes
 ```
 
-如果 SWIRLS 暫時不可用，前端可退回這個 4-period Forecast Map，而不是令整個預報圖失效。
+如果 SWIRLS 暫時不可用，Forecast Map 可退回 4-period nowcast，而不是令整個預報圖失效。
 
 ## 重要 Forecast grid contract
 
@@ -94,18 +149,23 @@ SWIRLS frame 則使用 Worker 已驗證的固定 `121 × 121` grid contract。
 
 ```text
 GitHub Pages PWA
-  index.html
-  css/
-  js/
-  service-worker.js
+  Rain Home
+    └─ /api/rain/swirls/point-series
+       └─ fallback: 16 × /api/rain/swirls/point
+  2-hour Forecast Map
+    └─ /api/rain/swirls/frame?frame=0..15
+  Radar
+    └─ /api/radar/frames + /api/radar/image
         │
         ▼
-Cloudflare Worker v2.5.0
+Cloudflare Worker
   /api/capabilities
   /api/rain/point
   /api/rain/nowcast
   /probe/swirls
-  /api/rain/swirls/frame?frame=0..15
+  /api/rain/swirls/frame
+  /api/rain/swirls/point
+  /api/rain/swirls/point-series
   /api/radar/frames
   /api/radar/image
         │
@@ -117,7 +177,7 @@ Hong Kong Observatory public data / GIS radar / SWIRLS sources
 
 ### Frontend
 
-`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa20`。
+`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa22`。
 
 ### Worker
 
@@ -131,10 +191,12 @@ Actions → Deploy Worker production → Run workflow
 
 Workflow：
 
-1. syntax / parity validation
+1. syntax / SWIRLS contract / routing validation
 2. Wrangler dry-run
 3. deploy Worker `radar`
-4. production smoke
+4. stable production smoke
+5. compact single-frame SWIRLS point smoke
+6. 16-point SWIRLS point-series smoke
 
 需要 GitHub Secrets：
 
@@ -145,21 +207,6 @@ CLOUDFLARE_ACCOUNT_ID
 
 不要把 Cloudflare token 寫入 repository 或 app source。
 
-## Weather Metro integration
-
-下一個主要產品階段是把 Rain-Track 與 Storm-Track 的成熟能力整合到 `MaxYu725/Weather_Metro_App`。
-
-Integration 原則：
-
-- Weather Metro 維持 Kotlin + Jetpack Compose 原生架構
-- native client 直接消費 Rain Worker public API
-- 不以 WebView 嵌入 Rain-Track PWA
-- Rain / Storm backend 初期保持獨立
-- Weather Metro `tools` Pivot 成為兩個工具的 host
-- Rain-Track standalone 保留作 regression/reference implementation
-
-完整 contract：[`INTEGRATION.md`](INTEGRATION.md)
-
 ## CI
 
 PR / `main` validation 包括：
@@ -168,11 +215,15 @@ PR / `main` validation 包括：
 - atomic PWA app-shell validation
 - `/api/rain/nowcast` Forecast Map contract
 - SWIRLS raw feed / runtime / Worker inline parity
+- SWIRLS single-frame point contract
+- SWIRLS 16-point point-series contract
 - SWIRLS frontend 16-frame contract
-- Forecast autoplay + Radar/Forecast settings separation
-- production SWIRLS frontend live probe
+- Forecast playback + Radar/Forecast settings separation
+- Rain Home location-first integration
+- bottom-sheet removal / fixed Forecast timeline contract
+- live SWIRLS frontend probe
 
-Production Worker 另由 `scripts/smoke-worker-production.mjs` 驗證：
+Production Worker deployment另由 smoke scripts 驗證：
 
 - health / capabilities
 - SWIRLS probe + frame 0 / 15
@@ -180,15 +231,31 @@ Production Worker 另由 `scripts/smoke-worker-production.mjs` 驗證：
 - nowcast
 - 64/2、64/3、256/3 Radar
 - actual radar image proxy
+- compact SWIRLS single-frame point
+- compact SWIRLS 16-point series
 
-## Freeze rule
+## Weather Metro integration
 
-Rain-Track 現在視為 stable reference implementation。只在以下情況重新開 standalone runtime：
+Rain-Track 與 Storm-Track 的成熟能力仍可整合到 `MaxYu725/Weather_Metro_App`，但 Rain-Track standalone 現在同時保留為主動開發中的快速降雨產品與 regression/reference implementation。
 
-- HKO upstream schema / URL 改變
-- Worker API contract bug
-- PWA startup / atomic-update regression
-- 真雨測試發現 calculation / source-contract bug
-- Weather Metro integration 證明缺少必要 backend field
+Integration 原則：
 
-其他新產品 UX 優先在 `Weather_Metro_App` 實作。
+- Weather Metro 維持 Kotlin + Jetpack Compose 原生架構
+- native client 直接消費 Rain Worker public API
+- 不以 WebView 嵌入 Rain-Track PWA
+- Rain / Storm backend 初期保持獨立
+- Rain-Track standalone contract 保持可獨立驗證
+
+完整 contract：[`INTEGRATION.md`](INTEGRATION.md)
+
+## Current product rule
+
+Rain-Track standalone 可繼續開發，但產品層保持三個問題分離：
+
+| 模式 | 要回答的問題 | 主要資料 |
+| --- | --- | --- |
+| Rain Home | 我這裡會不會下雨？ | SWIRLS 定位 16-point series |
+| 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids |
+| Radar | 現在實際雨區在哪裡？ | HKO radar observation |
+
+不要重新把三者塞回同一個首頁 map + bottom sheet hierarchy。
