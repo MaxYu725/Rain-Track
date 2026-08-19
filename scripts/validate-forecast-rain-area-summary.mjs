@@ -66,9 +66,10 @@ for (const marker of [
 assert.ok(!ui.includes('fitBounds'), 'rain-area summary must not change map viewport');
 assert.ok(!ui.includes('setView'), 'rain-area summary must not recenter the map');
 assert.ok(!ui.includes('setForecastMapIndex'), 'rain-area summary must not control forecast playback/frame selection');
-assert.ok(smoke.includes("import './rain-map-area-summary.js';"), 'rain-area summary is not loaded by the app entry');
-assert.ok(sw.includes("'./js/forecast-map-spatial.js'"), 'spatial analyzer missing from PWA app shell');
-assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI missing from PWA app shell');
+assert.ok(smoke.includes("'./rain-map-area-summary.js'"), 'rain-area summary is not referenced by the app entry');
+assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'rain-area summary must be isolated from the Rain Home critical module graph');
+assert.ok(sw.includes("'./js/forecast-map-spatial.js'"), 'spatial analyzer missing from PWA app shell inventory');
+assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI missing from PWA app shell inventory');
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');

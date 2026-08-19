@@ -1,5 +1,5 @@
 (() => {
-  const BOOT_TIMEOUT_MS = 8000;
+  const BOOT_TIMEOUT_MS = 5000;
   const CACHE_PREFIX = 'point-rain-pwa-';
   let recoveryStarted = false;
   let lastBootError = '';
@@ -18,7 +18,15 @@
     lastBootError = String(value || '').trim().slice(0, 220);
   }
 
-  window.addEventListener('error', event => recordBootError(event?.message || event?.error?.message));
+  window.addEventListener('error', event => {
+    const target = event?.target;
+    if (target && target !== window) {
+      const source = target.src || target.href || target.tagName || 'resource';
+      recordBootError(`資源載入失敗：${source}`);
+      return;
+    }
+    recordBootError(event?.message || event?.error?.message);
+  }, true);
   window.addEventListener('unhandledrejection', event => recordBootError(event?.reason?.message || event?.reason));
 
   async function refreshServiceWorkerRegistration() {
@@ -29,7 +37,9 @@
         updateViaCache:'none'
       });
       await registration.update().catch(() => {});
-    } catch {}
+    } catch (error) {
+      recordBootError(`Service Worker：${error?.message || error}`);
+    }
   }
 
   function rainHomeReady() {
@@ -72,12 +82,12 @@
 
     const detail = lastBootError
       ? `<div class="error-message">啟動錯誤：${escapeHtml(lastBootError)}</div>`
-      : '<div class="error-message">可能仍在使用舊版離線快取，或部分前端模組未能載入。</div>';
+      : '<div class="error-message">Rain Home 核心模組未能接管畫面；可能仍在使用舊版快取或有前端資源未能載入。</div>';
 
     content.innerHTML = `
       <div class="empty-state" data-rain-boot-recovery role="alert">
         <div class="error-symbol" aria-hidden="true">!</div>
-        <strong>應用程式未完成啟動</strong>
+        <strong>Rain Home 未完成啟動</strong>
         ${detail}
         <button class="wide-btn retry-button" type="button" data-rain-boot-reload>重新載入新版</button>
       </div>`;
@@ -88,6 +98,7 @@
     return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char]));
   }
 
+  document.documentElement.dataset.rainBootWatchdog = 'active';
   clearBootQuery();
   refreshServiceWorkerRegistration();
   setTimeout(showBootRecovery, BOOT_TIMEOUT_MS);

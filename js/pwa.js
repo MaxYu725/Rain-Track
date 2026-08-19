@@ -65,8 +65,6 @@ export function initPwa() {
     return;
   }
 
-  const hadControllerAtStart = Boolean(navigator.serviceWorker.controller);
-
   navigator.serviceWorker.register('./service-worker.js', {
     scope:'./',
     updateViaCache:'none'
@@ -84,7 +82,9 @@ export function initPwa() {
   }).catch(error => updatePwaStatus(`離線快取啟動失敗：${error.message}`));
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadControllerAtStart && !updateInProgress) return;
+    // Do not interrupt normal startup merely because a background shell update
+    // became active. Reload only after the user explicitly chose to apply one.
+    if (!updateInProgress) return;
     reloadForNewController();
   });
 }
