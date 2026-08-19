@@ -1,8 +1,10 @@
 import stableWorker from './worker.js';
 import { createSwirlsPointRequestHandler, SwirlsPointRequestError } from './swirls-point-request.js';
+import { createSwirlsPointSeriesRequestHandler } from './swirls-point-series-request.js';
 import { createSwirlsRuntime, SWIRLS_FETCH_POLICY } from './swirls-worker-runtime.js';
 
 const POINT_PATH = '/api/rain/swirls/point';
+const POINT_SERIES_PATH = '/api/rain/swirls/point-series';
 const ACCEPT = 'text/plain,*/*';
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,8 +22,8 @@ function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {}) {
     const cacheKey = new Request(url, { headers: { Accept: ACCEPT } });
 
     // Reuse the exact URL + Accept cache key used by Stable Recovery worker.js.
-    // Current point enhancement and the explicit 2-hour forecast therefore share
-    // already-fetched SWIRLS index/MDL responses instead of creating snapshots.
+    // Point sampling and point-series requests share already-fetched SWIRLS
+    // index/MDL responses instead of creating a second snapshot layer.
     if (!bypassCache && cache) {
       const cached = await cache.match(cacheKey);
       if (cached) {
@@ -44,7 +46,7 @@ function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {}) {
         headers: {
           Accept: ACCEPT,
           'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache',
-          'User-Agent': 'Rain-Track-SWIRLS-Point/2.0'
+          'User-Agent': 'Rain-Track-SWIRLS-Point/2.1'
         },
         signal: controller.signal,
         cf: bypassCache
@@ -84,29 +86,36 @@ const pointRequestHandler = createSwirlsPointRequestHandler({
   loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex)
 });
 
+const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({
+  loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex),
+  concurrency: 4
+});
+
 export function createPhase3Cv2Worker({
   baseWorker = stableWorker,
-  handlePoint = pointRequestHandler
+  handlePoint = pointRequestHandler,
+  handlePointSeries = pointSeriesRequestHandler
 } = {}) {
   if (!baseWorker || typeof baseWorker.fetch !== 'function') {
     throw new Error('Phase 3C v2 entry requires the Stable Recovery Worker');
   }
-  if (typeof handlePoint !== 'function') {
-    throw new Error('Phase 3C v2 entry requires a point handler');
+  if (typeof handlePoint !== 'function' || typeof handlePointSeries !== 'function') {
+    throw new Error('Phase 3C v2 entry requires point handlers');
   }
 
   return {
     async fetch(request) {
       const url = new URL(request.url);
 
-      // Only the new compact GET route is intercepted. OPTIONS, non-GET
+      // Only compact SWIRLS point routes are intercepted. OPTIONS, non-GET
       // requests and every legacy route continue through Stable Recovery.
-      if (request.method !== 'GET' || url.pathname !== POINT_PATH) {
+      if (request.method !== 'GET' || (url.pathname !== POINT_PATH && url.pathname !== POINT_SERIES_PATH)) {
         return baseWorker.fetch(request);
       }
 
       try {
-        const payload = await handlePoint(url);
+        const handler = url.pathname === POINT_SERIES_PATH ? handlePointSeries : handlePoint;
+        const payload = await handler(url);
         return json({
           ...payload,
           generatedAt: new Date().toISOString()
