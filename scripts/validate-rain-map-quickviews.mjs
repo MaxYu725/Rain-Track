@@ -30,7 +30,10 @@ assert.ok(!quick.includes('rain:forecast-playback-change'), 'forecast playback m
 assert.ok(!quick.includes('setInterval('), 'quick views must not poll or repeatedly recenter');
 assert.ok(!quick.includes('setTimeout('), 'quick views must not schedule delayed recentering');
 assert.ok(smoke.includes("import './rain-map-quickviews.js';"), 'quick views are not loaded by the app entry');
-assert.ok(serviceWorker.includes("point-rain-pwa-v1.6.4-pwa23"), 'PWA shell was not bumped to pwa23');
+
+const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+assert.ok(shellVersion, 'PWA shell version marker is missing');
+assert.ok(Number(shellVersion[1]) >= 23, `quick views require PWA generation at least pwa23, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell');
 
 console.log('Forecast map quick-view validation passed');
