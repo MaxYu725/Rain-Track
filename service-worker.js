@@ -1,7 +1,10 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa29';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa30';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
+
+// Full local dependency inventory. CI validates that every local entry/import
+// remains represented here, but only CORE_SHELL is required for installation.
 const APP_SHELL = [
   './',
   './index.html',
@@ -26,16 +29,41 @@ const APP_SHELL = [
   './js/rain-home.js',
   './js/rain-home-time.js',
   './js/rain-home-shell.js',
+  './js/rain-map-mode.js',
+  './js/rain-map-mode-heavy.js',
   './js/rain-map-quickviews.js',
   './js/rain-map-area-summary.js',
   './js/location.js',
   './js/map.js',
   './js/pwa.js',
   './js/radar.js',
-  './js/rain-map-mode.js',
   './js/settings-segmented.js',
   './js/state.js',
   './js/ui.js',
+  './js/utils.js',
+  './manifest.webmanifest',
+  './offline.html',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-512.png'
+];
+
+// Rain Home must be able to start even when optional map/radar modules are
+// unavailable. Keep this dependency set deliberately small and atomic.
+const CORE_SHELL = [
+  './',
+  './index.html',
+  './css/app.css',
+  './css/settings-phase1a.css',
+  './js/boot-watchdog.js',
+  './js/forecast-map-smoke.js',
+  './js/rain-home.js',
+  './js/rain-home-time.js',
+  './js/rain-home-shell.js',
+  './js/rain-map-mode.js',
+  './js/api.js',
+  './js/config.js',
+  './js/state.js',
   './js/utils.js',
   './manifest.webmanifest',
   './offline.html',
@@ -48,16 +76,18 @@ self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(APP_CACHE);
 
-    for (const path of APP_SHELL) {
+    for (const path of CORE_SHELL) {
       const url = new URL(path, self.location.href).href;
       const request = new Request(url, { cache:'reload' });
       const response = await fetch(request);
-      if (!response?.ok) throw new Error(`Unable to precache ${path}`);
+      if (!response?.ok) throw new Error(`Unable to precache core shell ${path}`);
       await cache.put(new Request(url), response.clone());
     }
 
-    // The core shell must never wait for third-party map assets. Leaflet is
-    // runtime-only and Rain Home can boot without it.
+    // pwa29 may be stuck on its static loader. Activate pwa30 as soon as the
+    // independent Rain Home core is complete; the previous client will perform
+    // at most one controllerchange reload. The service worker itself never
+    // navigates clients during activation.
     await self.skipWaiting();
   })());
 });
@@ -66,19 +96,10 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keep = new Set([APP_CACHE, RUNTIME_CACHE, TILE_CACHE]);
     const keys = await caches.keys();
-    const priorShells = keys.filter(key => key.startsWith('point-rain-pwa-') && !keep.has(key));
-    await Promise.all(priorShells.map(key => caches.delete(key)));
+    await Promise.all(keys
+      .filter(key => key.startsWith('point-rain-pwa-') && !keep.has(key))
+      .map(key => caches.delete(key)));
     await self.clients.claim();
-
-    // A version migration should not leave an already-open tab pinned to the
-    // previous cached index. Reload existing windows once onto the new atomic
-    // shell. First installs have no prior shell and therefore do not reload.
-    if (priorShells.length) {
-      const windows = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
-      for (const client of windows) {
-        try { await client.navigate(client.url); } catch {}
-      }
-    }
   })());
 });
 
@@ -134,7 +155,12 @@ async function currentShellAsset(request) {
 
   try {
     const response = await fetch(request, { cache:'no-store' });
-    if (response?.ok) return response;
+    if (response?.ok) {
+      // Optional map/radar modules become offline-capable after first use,
+      // without being allowed to block installation of the Rain Home core.
+      cache.put(request, response.clone()).catch(() => {});
+      return response;
+    }
   } catch {}
 
   return Response.error();
