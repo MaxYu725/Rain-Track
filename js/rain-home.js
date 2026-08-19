@@ -72,6 +72,7 @@ function injectStyles() {
     .rain-home-chart{display:block;width:100%;height:auto;overflow:visible;color:var(--accent);touch-action:pan-y;cursor:crosshair}
     .rain-home-grid{stroke:#242c30;stroke-width:1;vector-effect:non-scaling-stroke}
     .rain-home-axis-label{fill:#717c81;font-size:11px;font-family:"Segoe UI","Microsoft JhengHei",sans-serif}
+    .rain-home-axis-clock{fill:#a6b0b5;font-size:10px;font-variant-numeric:tabular-nums}
     .rain-home-line{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
     .rain-home-area{fill:currentColor;opacity:.09}
     .rain-home-selection-guide{stroke:currentColor;stroke-width:1;stroke-dasharray:4 4;opacity:.38;vector-effect:non-scaling-stroke;pointer-events:none}
@@ -469,8 +470,8 @@ function analyzeTrend(data) {
 
 function chartMarkup(points) {
   const width = 700;
-  const height = 250;
-  const pad = { left:42, right:12, top:12, bottom:34 };
+  const height = 266;
+  const pad = { left:42, right:12, top:12, bottom:50 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const values = points.map(point => Number(point.amountMm) || 0);
@@ -490,7 +491,14 @@ function chartMarkup(points) {
     return `<line class="rain-home-grid" x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${width - pad.right}" y2="${yy.toFixed(1)}"></line><text class="rain-home-axis-label" x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end">${formatAxis(value)}</text>`;
   }).join('');
   const xLeads = [0,30,60,90,120];
-  const xLabels = xLeads.map(lead => `<text class="rain-home-axis-label" x="${xLead(lead).toFixed(1)}" y="${height - 8}" text-anchor="${lead === 0 ? 'start' : lead === 120 ? 'end' : 'middle'}">${lead === 0 ? '現在' : `+${lead}`}</text>`).join('');
+  const xLabels = xLeads.map(lead => {
+    const x = xLead(lead).toFixed(1);
+    const anchor = lead === 0 ? 'start' : lead === 120 ? 'end' : 'middle';
+    if (lead === 0) return `<text class="rain-home-axis-label" x="${x}" y="${height - 16}" text-anchor="${anchor}">現在</text>`;
+    const axisPoint = points.find(point => Number(point.leadMinutes) === lead);
+    const clock = formatClock(axisPoint?.validTime);
+    return `<text class="rain-home-axis-label" x="${x}" y="${height - 29}" text-anchor="${anchor}"><tspan x="${x}">+${lead}</tspan><tspan class="rain-home-axis-clock" x="${x}" dy="13">${escapeHtml(clock)}</tspan></text>`;
+  }).join('');
   const dots = points.map(point => `<circle class="rain-home-dot" cx="${xLead(point.leadMinutes).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="3" data-lead-minutes="${Number(point.leadMinutes)}"></circle>`).join('');
   const hits = points.map((point, index) => {
     const label = `有效時間 ${formatClock(point.validTime)}，${formatRain(point.amountMm)} mm / 30 min，預報 +${Number(point.leadMinutes)} 分鐘`;
@@ -499,11 +507,11 @@ function chartMarkup(points) {
   const peak = Math.max(...values);
   return `
     <div class="rain-home-chart-wrap">
-      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖；時間軸由預報基準 +0 到 +120 分鐘，首個 SWIRLS 有效時間在 +30 分鐘；最高 ${formatRain(peak)} 毫米每 30 分鐘；可點選 16 個有效時間查看數值" data-plot-left="${pad.left}" data-plot-width="${plotW}" data-horizon-minutes="${RAIN_HOME_HORIZON_MINUTES}">
+      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖；時間軸由預報基準 +0 到 +120 分鐘，並顯示各主要 lead 的香港有效時間；首個 SWIRLS 有效時間在 +30 分鐘；最高 ${formatRain(peak)} 毫米每 30 分鐘；可點選 16 個有效時間查看數值" data-plot-left="${pad.left}" data-plot-width="${plotW}" data-horizon-minutes="${RAIN_HOME_HORIZON_MINUTES}">
         ${ticks}<line class="rain-home-selection-guide" x1="${firstX.toFixed(1)}" y1="${pad.top}" x2="${firstX.toFixed(1)}" y2="${(pad.top + plotH).toFixed(1)}" data-rain-home-guide></line><path class="rain-home-area" d="${area}"></path><path class="rain-home-line" d="${line}"></path>${dots}${hits}${xLabels}
       </svg>
       <div class="rain-home-chart-readout" data-rain-home-readout aria-live="polite"></div>
-      <div class="rain-home-chart-caption"><span>現在 → +120 分鐘 · 首個資料 +30</span><span>mm / 30 min</span></div>
+      <div class="rain-home-chart-caption"><span>橫軸：預報 lead + 香港有效時間 · 首個資料 +30</span><span>mm / 30 min</span></div>
       <div class="rain-home-chart-help">點按圖表任何位置可查看最近的 6 分鐘有效時間；鍵盤可用左右方向鍵逐點移動。</div>
     </div>`;
 }
