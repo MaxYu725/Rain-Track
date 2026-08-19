@@ -11,19 +11,21 @@ assert.ok(pointSeriesVersion, 'Unable to derive point-series Worker version from
 const EXPECTED_VERSION = process.env.EXPECTED_WORKER_VERSION || sourceVersion;
 const REQUEST_TIMEOUT_MS = Number(process.env.SMOKE_TIMEOUT_MS || 30_000);
 
-async function request(path, { expectJson = true } = {}) {
+async function request(path, { expectJson = true, allowedStatuses = [200] } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS);
   try {
+    const started = Date.now();
     const response = await fetch(`${BASE}${path}`, {
       redirect: 'follow',
       headers: { 'User-Agent': 'Rain-Track-production-smoke/1.0' },
       signal: controller.signal
     });
-    assert.ok(response.ok, `${path} returned HTTP ${response.status}`);
+    const elapsedMs = Date.now() - started;
+    assert.ok(allowedStatuses.includes(response.status), `${path} returned HTTP ${response.status}`);
     if (!expectJson) return response;
     const data = await response.json();
-    return { response, data };
+    return { response, data, elapsedMs };
   } finally {
     clearTimeout(timer);
   }
@@ -80,10 +82,36 @@ async function smokeSwirlsFrame(frameIndex) {
   console.log(`PASS SWIRLS frame ${frameIndex} valid=${data.validTime}`);
 }
 
+async function smokeSwirlsSnapshotProbe() {
+  const { data, elapsedMs } = await request('/probe/swirls-snapshot', { allowedStatuses: [200, 503] });
+  assert.equal(data.version, pointSeriesVersion, 'SWIRLS snapshot probe entry version mismatch');
+  assert.ok(elapsedMs < 5_000, `SWIRLS snapshot probe must return quickly, took ${elapsedMs}ms`);
+  if (data.ok) {
+    assert.equal(data.snapshot?.frameCount, 16, 'ready snapshot must contain 16 frames');
+    assert.equal(data.snapshot?.fresh, true, 'ready snapshot must be fresh');
+    console.log(`PASS SWIRLS snapshot ready age=${data.snapshot.ageMinutes}m`);
+  } else {
+    console.log('PASS SWIRLS snapshot not ready yet; fallback remains non-blocking');
+  }
+}
+
 async function smokeSwirlsPointSeries() {
-  const { response, data } = await request('/api/rain/swirls/point-series?lat=22.3023&lon=114.1746');
-  assert.equal(data.ok, true, 'SWIRLS point series must be ok');
+  const { response, data, elapsedMs } = await request(
+    '/api/rain/swirls/point-series?lat=22.3023&lon=114.1746',
+    { allowedStatuses: [200, 503] },
+  );
   assert.equal(data.version, pointSeriesVersion, 'SWIRLS point-series Worker entry version mismatch');
+  assert.ok(elapsedMs < 5_000, `point-series endpoint must never wait for 16 live frames, took ${elapsedMs}ms`);
+
+  if (response.status === 503) {
+    assert.equal(data.ok, false, 'unready snapshot response must fail closed');
+    assert.equal(data.fallbackEndpoint, '/api/rain/point', 'unready snapshot must advertise fast fallback');
+    assert.match(response.headers.get('retry-after') || '', /^\d+$/, 'unready snapshot should provide retry guidance');
+    console.log(`PASS SWIRLS point series fast fallback ${elapsedMs}ms`);
+    return;
+  }
+
+  assert.equal(data.ok, true, 'ready SWIRLS point series must be ok');
   assert.equal(data.sampleCount, 16, 'SWIRLS point series sample count mismatch');
   assert.equal(data.cadenceMinutes, 6, 'SWIRLS point series cadence mismatch');
   assert.equal(data.accumulationMinutes, 30, 'SWIRLS point series accumulation mismatch');
@@ -95,8 +123,8 @@ async function smokeSwirlsPointSeries() {
   assert.equal(data.grid, undefined, 'compact endpoint must not return full grid');
   const payloadBytes = new TextEncoder().encode(JSON.stringify(data)).byteLength;
   assert.ok(payloadBytes < 12_000, `compact endpoint payload unexpectedly large: ${payloadBytes} bytes`);
-  assert.match(response.headers.get('cache-control') || '', /max-age=/, 'SWIRLS point series should be cacheable');
-  console.log(`PASS SWIRLS point series samples=${data.sampleCount} payload=${payloadBytes}B`);
+  assert.match(response.headers.get('cache-control') || '', /max-age=/, 'ready point series should be cacheable');
+  console.log(`PASS SWIRLS snapshot point series samples=${data.sampleCount} payload=${payloadBytes}B`);
 }
 
 async function smokePoint() {
@@ -146,6 +174,7 @@ await smokeCapabilities();
 await smokeSwirlsProbe();
 await smokeSwirlsFrame(0);
 await smokeSwirlsFrame(15);
+await smokeSwirlsSnapshotProbe();
 await smokeSwirlsPointSeries();
 await smokePoint();
 await smokeNowcast();
