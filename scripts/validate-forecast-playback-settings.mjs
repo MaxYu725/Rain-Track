@@ -52,7 +52,7 @@ assert.ok(mode.includes("selectedMode !== 'radar'"), 'radar settings are not mod
 assert.ok(mode.includes("selectedMode !== 'forecast'"), 'forecast settings are not mode-gated');
 assert.ok(mode.includes("legacyObserver.observe(radarPanel, { childList:true })"), 'radar dynamic controls are not observed safely');
 assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the whole subtree and self-loop on UI text changes');
-assert.ok(serviceWorker.includes("point-rain-pwa-v1.6.4-pwa20"), 'PWA shell version was not bumped to pwa20');
+assert.ok(serviceWorker.includes("point-rain-pwa-v1.6.4-pwa21"), 'PWA shell version was not bumped to pwa21');
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell');
 
 console.log('Forecast playback + separated settings + sheet avoidance gate PASS');
