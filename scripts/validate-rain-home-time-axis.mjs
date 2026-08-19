@@ -50,16 +50,24 @@ assert.equal(firstWet.transitionEndValidTime, '2026-08-19T14:30:00.000Z');
 assert.equal(findFirstWetSignalTransition(points.map(point => ({ ...point, amountMm:0 }))), null);
 
 const home = readFileSync('js/rain-home.js', 'utf8');
+const sw = readFileSync('service-worker.js', 'utf8');
 assert.ok(home.includes("from './rain-home-time.js'"));
 assert.ok(home.includes('const xLeads = [0,30,60,90,120]'));
 assert.ok(home.includes('xLead(point.leadMinutes)'));
-assert.ok(home.includes("lead === 0 ? '現在'"));
-assert.ok(home.includes('現在 → +120 分鐘 · 首個資料 +30'));
-assert.ok(home.includes('時間軸由預報基準 +0 到 +120 分鐘'));
+assert.ok(home.includes("lead === 0) return `<text class=\"rain-home-axis-label\""));
+assert.ok(home.includes('const axisPoint = points.find(point => Number(point.leadMinutes) === lead)'));
+assert.ok(home.includes('const clock = formatClock(axisPoint?.validTime)'));
+assert.ok(home.includes('rain-home-axis-clock'));
+assert.ok(home.includes('橫軸：預報 lead + 香港有效時間 · 首個資料 +30'));
+assert.ok(home.includes('各主要 lead 的香港有效時間'));
 assert.ok(home.includes('formatClock(firstWet.transitionStartValidTime)'));
 assert.ok(home.includes('formatClock(firstWet.transitionEndValidTime)'));
 assert.ok(home.includes('Number(point.leadMinutes) !== expectedLead'));
 assert.ok(!home.includes('index / Math.max(1, points.length - 1)'), 'chart must not space samples by array index');
 assert.ok(!home.includes('firstWindowStart'), 'onset wording must not reuse the 30-minute rolling accumulation window');
 
-console.log('Rain Home true time-axis + onset transition gate PASS');
+const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+assert.ok(shellVersion, 'PWA shell version marker is missing');
+assert.ok(Number(shellVersion[1]) >= 28, `x-axis clock labels require PWA generation at least pwa28, got pwa${shellVersion[1]}`);
+
+console.log('Rain Home true time-axis + clock labels + onset transition gate PASS');
