@@ -31,6 +31,7 @@ jobs:
             node --check "$file"
           done
           node --check scripts/validate-app-shell.mjs
+          node --check scripts/validate-boot-resilience.mjs
           node --check scripts/validate-forecast-map-contract.mjs
           node --check scripts/validate-swirls-contract.mjs
           node --check scripts/validate-swirls-point-sample.mjs
@@ -51,6 +52,8 @@ jobs:
           node --check scripts/validate-forecast-rain-area-summary.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
+      - name: Validate frontend boot resilience
+        run: node scripts/validate-boot-resilience.mjs
       - name: Validate forecast map contract
         run: node scripts/validate-forecast-map-contract.mjs
       - name: Validate SWIRLS raw feed contract
