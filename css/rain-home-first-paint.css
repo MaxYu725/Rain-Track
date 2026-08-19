@@ -1,0 +1,51 @@
+/* Critical first-paint shell for Rain Home.
+   This file is render-blocking by design: the first browser paint must already
+   match the location-first Home layout before any module executes. */
+body.rain-home-v2:not(.rain-map-view) .pivot-content-wrapper{overflow:auto!important;background:#000}
+body.rain-home-v2:not(.rain-map-view) #map-container{height:auto!important;min-height:100%;overflow:visible!important;background:#000}
+body.rain-home-v2:not(.rain-map-view) #rain-map{visibility:hidden!important;pointer-events:none!important}
+body.rain-home-v2:not(.rain-map-view) .source-badges,
+body.rain-home-v2:not(.rain-map-view) .map-hint,
+body.rain-home-v2:not(.rain-map-view) #coordinate-readout,
+body.rain-home-v2:not(.rain-map-view) #mobile-status,
+body.rain-home-v2:not(.rain-map-view) #radar-timeline,
+body.rain-home-v2:not(.rain-map-view) #desktop-drawer-button{display:none!important}
+body.rain-home-v2:not(.rain-map-view) #forecast-panel{
+  position:relative!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
+  width:min(760px,100%)!important;max-width:none!important;max-height:none!important;height:auto!important;
+  margin:0 auto!important;border:0!important;background:#000!important;box-shadow:none!important;overflow:visible!important;
+  transform:none!important;transition:none!important
+}
+body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:18px 20px calc(30px + var(--safe-bottom))!important}
+
+.rain-home-first-paint{max-width:720px;margin:0 auto;padding:6px 0 28px}
+.rain-home-first-paint-location{padding:6px 0 20px;border-bottom:1px solid #252525}
+.rain-home-first-paint-kicker{display:block;margin:0 0 6px;color:#929ca1;font-size:.72rem;font-weight:650;letter-spacing:.08em;text-transform:uppercase}
+.rain-home-first-paint-title{display:block;color:#fff;font-size:clamp(1.55rem,5vw,2.35rem);font-weight:480;letter-spacing:-.03em;line-height:1.12}
+.rain-home-first-paint .rain-home-loading{display:flex;min-height:330px;flex-direction:column;justify-content:center;gap:16px;color:#929ca1}
+.rain-home-first-paint .rain-home-loading-head{display:flex;align-items:center;gap:11px}
+.rain-home-first-paint .rain-home-loading-head strong{color:#d6dde0;font-size:.9rem}
+.rain-home-first-paint .rain-home-loading-head span:last-child{display:block;margin-top:2px;color:#707a7f;font-size:.7rem}
+.rain-home-first-paint .rain-home-loading-spinner{flex:0 0 auto;width:26px;height:26px;border:2px solid #313a3e;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.rain-home-first-paint .rain-home-skeleton{display:grid;gap:10px;padding:16px;border:1px solid #20282c;background:#06090a;overflow:hidden}
+.rain-home-first-paint .rain-home-skeleton-line,
+.rain-home-first-paint .rain-home-skeleton-chart{position:relative;overflow:hidden;background:#11171a}
+.rain-home-first-paint .rain-home-skeleton-line::after,
+.rain-home-first-paint .rain-home-skeleton-chart::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(255,255,255,.055),transparent);animation:rain-home-first-paint-shimmer 1.35s infinite}
+.rain-home-first-paint .rain-home-skeleton-line{height:13px}
+.rain-home-first-paint .rain-home-skeleton-line.short{width:56%}
+.rain-home-first-paint .rain-home-skeleton-line.medium{width:78%}
+.rain-home-first-paint .rain-home-skeleton-chart{height:126px;margin-top:5px}
+@keyframes rain-home-first-paint-shimmer{100%{transform:translateX(100%)}}
+
+@media(max-width:700px){
+  body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}
+  .rain-home-first-paint{padding-top:2px}
+  .rain-home-first-paint-location{padding-top:2px;padding-bottom:17px}
+  .rain-home-first-paint .rain-home-loading{min-height:300px}
+}
+@media(prefers-reduced-motion:reduce){
+  .rain-home-first-paint .rain-home-loading-spinner,
+  .rain-home-first-paint .rain-home-skeleton-line::after,
+  .rain-home-first-paint .rain-home-skeleton-chart::after{animation:none!important}
+}

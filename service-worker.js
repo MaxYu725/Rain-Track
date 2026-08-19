@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa30';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa31';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -10,6 +10,7 @@ const APP_SHELL = [
   './index.html',
   './css/app.css',
   './css/settings-phase1a.css',
+  './css/rain-home-first-paint.css',
   './js/boot-watchdog.js',
   './js/app.js',
   './js/api.js',
@@ -55,6 +56,7 @@ const CORE_SHELL = [
   './index.html',
   './css/app.css',
   './css/settings-phase1a.css',
+  './css/rain-home-first-paint.css',
   './js/boot-watchdog.js',
   './js/forecast-map-smoke.js',
   './js/rain-home.js',
@@ -84,10 +86,8 @@ self.addEventListener('install', event => {
       await cache.put(new Request(url), response.clone());
     }
 
-    // pwa29 may be stuck on its static loader. Activate pwa30 as soon as the
-    // independent Rain Home core is complete; the previous client will perform
-    // at most one controllerchange reload. The service worker itself never
-    // navigates clients during activation.
+    // pwa30 still painted the legacy static map/sheet before Rain Home takeover.
+    // Activate pwa31 as soon as the complete Rain Home first-paint core is cached.
     await self.skipWaiting();
   })());
 });

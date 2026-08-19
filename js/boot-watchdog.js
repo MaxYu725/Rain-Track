@@ -43,9 +43,11 @@
   }
 
   function rainHomeReady() {
+    const root = document.querySelector('.rain-home-root');
     return Boolean(
       document.body?.classList.contains('rain-home-v2') &&
-      document.querySelector('.rain-home-root')
+      root &&
+      !root.hasAttribute('data-rain-home-first-paint')
     );
   }
 
