@@ -29,11 +29,12 @@ for (const marker of [
 assert.ok(!quick.includes('rain:forecast-playback-change'), 'forecast playback must not auto-recenter the map');
 assert.ok(!quick.includes('setInterval('), 'quick views must not poll or repeatedly recenter');
 assert.ok(!quick.includes('setTimeout('), 'quick views must not schedule delayed recentering');
-assert.ok(smoke.includes("import './rain-map-quickviews.js';"), 'quick views are not loaded by the app entry');
+assert.ok(smoke.includes("'./rain-map-quickviews.js'"), 'quick views are not referenced by the app entry');
+assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'optional map modules must load independently of the Rain Home critical graph');
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
 assert.ok(Number(shellVersion[1]) >= 23, `quick views require PWA generation at least pwa23, got pwa${shellVersion[1]}`);
-assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell');
+assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell inventory');
 
 console.log('Forecast map quick-view validation passed');
