@@ -1,16 +1,13 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa28';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa29';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
-const OPTIONAL_EXTERNAL = [
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-];
 const APP_SHELL = [
   './',
   './index.html',
   './css/app.css',
   './css/settings-phase1a.css',
+  './js/boot-watchdog.js',
   './js/app.js',
   './js/api.js',
   './js/config.js',
@@ -59,11 +56,9 @@ self.addEventListener('install', event => {
       await cache.put(new Request(url), response.clone());
     }
 
-    await Promise.allSettled(OPTIONAL_EXTERNAL.map(async url => {
-      const request = new Request(url, { mode:'no-cors', cache:'reload' });
-      const response = await fetch(request);
-      if (response) await cache.put(request, response.clone());
-    }));
+    // The core shell must never wait for third-party map assets. Leaflet is
+    // runtime-only and Rain Home can boot without it.
+    await self.skipWaiting();
   })());
 });
 
@@ -71,10 +66,19 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keep = new Set([APP_CACHE, RUNTIME_CACHE, TILE_CACHE]);
     const keys = await caches.keys();
-    await Promise.all(keys
-      .filter(key => key.startsWith('point-rain-pwa-') && !keep.has(key))
-      .map(key => caches.delete(key)));
+    const priorShells = keys.filter(key => key.startsWith('point-rain-pwa-') && !keep.has(key));
+    await Promise.all(priorShells.map(key => caches.delete(key)));
     await self.clients.claim();
+
+    // A version migration should not leave an already-open tab pinned to the
+    // previous cached index. Reload existing windows once onto the new atomic
+    // shell. First installs have no prior shell and therefore do not reload.
+    if (priorShells.length) {
+      const windows = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
+      for (const client of windows) {
+        try { await client.navigate(client.url); } catch {}
+      }
+    }
   })());
 });
 
