@@ -7,11 +7,11 @@ Rain-Track 是香港定位降雨預報、HKO 雷達觀測與 HKO SWIRLS 兩小�
 
 ## Production baseline — 2026-08-19
 
-- Rain-Track main：`0e770c088932680c6df4176e467d04f5ab50e1dd`
+- Rain-Track main：`ba71d7c07b949bc501db88b6b353702e6feea1ad`
 - App UI：`v1.6.4`
 - Rain Home：location-first 16-point SWIRLS trend + interactive point explorer
-- Forecast Map：free pan / zoom + 香港／深圳／南面海域／全域／定位 quick views
-- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa24`
+- Forecast Map：free pan / zoom + 香港／深圳／南面海域／全域／定位 quick views + selected-frame rain-area summary
+- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa25`
 - Worker baseline：`v2.5.0` + Phase 3C compact SWIRLS point routes
 - Radar Contract：`v1.0`
 - Production Worker：`https://radar.max-yu.workers.dev`
@@ -102,6 +102,31 @@ Forecast 模式提供使用者主動觸發的快速視野：
 
 這些按鈕只在使用者點擊時改變 viewport。其後可繼續自由拖曳、縮放；forecast playback、timer 或資料更新不會自動把地圖拉回預設位置。
 
+#### 雨區空間摘要
+
+Forecast Map 會對**目前選中的預報 frame**做輕量本地空間分析，協助快速判斷雨區主要位置。分析不增加 API request，也不會代替地圖本身。
+
+可能顯示：
+
+- 香港大部分地區有雨
+- 香港以局部雨區為主
+- 香港有局部降雨訊號
+- 深圳附近雨區較明顯
+- 雨區較集中在香港以南海域
+- 雨區在香港周邊較分散
+- 附近雨區不明顯
+
+空間摘要規則：
+
+- 分析門檻：`>= 0.2 mm / 30 min`
+- 顯示香港、深圳、南面海域各自達門檻的格點覆蓋比例
+- 例如「香港 32%」代表該粗略香港產品區域中約 32% 格點達門檻
+- **百分比是 wet-grid coverage，不是降雨機率**
+- 香港／深圳／南面海域只是快速產品分區，不代表精確行政邊界
+- 同一套分析亦可套用到 30 分鐘 nowcast fallback frame
+- 摘要只在所選 frame render 後更新
+- 摘要不能 pan / zoom、不能切 frame、不能控制 playback
+
 ### Bottom sheet removal
 
 Rain Home 已移除 bottom-sheet 產品行為：
@@ -182,7 +207,8 @@ GitHub Pages PWA
        └─ interactive 16-point chart explorer
   2-hour Forecast Map
     └─ /api/rain/swirls/frame?frame=0..15
-       └─ user-controlled quick views: HK / Shenzhen / South Sea / Coverage / Location
+       ├─ user-controlled quick views: HK / Shenzhen / South Sea / Coverage / Location
+       └─ selected-frame local spatial summary
   Radar
     └─ /api/radar/frames + /api/radar/image
         │
@@ -206,7 +232,7 @@ Hong Kong Observatory public data / GIS radar / SWIRLS sources
 
 ### Frontend
 
-`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa24`。
+`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa25`。
 
 ### Worker
 
@@ -252,6 +278,8 @@ PR / `main` validation 包括：
 - Rain Home 16-point explorer / keyboard / semantic guardrail
 - bottom-sheet removal / fixed Forecast timeline contract
 - Forecast Map quick-view contract：只由使用者觸發，不與 playback / timer 綁定
+- Forecast Map spatial-summary synthetic cases：dry / HK widespread / HK local / Shenzhen / south sea
+- spatial-summary read-only guardrail：不能移動地圖、不能切 frame、不能控制 playback
 - live SWIRLS frontend probe
 
 Production Worker deployment 另由 smoke scripts 驗證：
@@ -286,7 +314,7 @@ Rain-Track standalone 可繼續開發，但產品層保持三個問題分離：
 | 模式 | 要回答的問題 | 主要資料 |
 | --- | --- | --- |
 | Rain Home | 我這裡會不會下雨？ | SWIRLS 定位 16-point series + point explorer |
-| 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids + user-controlled map views |
+| 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids + user-controlled map views + selected-frame spatial summary |
 | Radar | 現在實際雨區在哪裡？ | HKO radar observation |
 
 不要重新把三者塞回同一個首頁 map + bottom sheet hierarchy。
