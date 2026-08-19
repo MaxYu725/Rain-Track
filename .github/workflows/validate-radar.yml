@@ -49,3 +49,49 @@ jobs:
         run: node scripts/validate-forecast-playback-settings.mjs
       - name: Probe live SWIRLS frontend contract
         run: node scripts/probe-swirls-frontend-live.mjs
+      - name: Verify Recovery production endpoints
+        env:
+          WORKER_BASE_URL: https://radar.max-yu.workers.dev
+        run: |
+          node scripts/smoke-worker-production.mjs
+          status="$(curl --silent --show-error --output /tmp/point-series-response.txt --write-out '%{http_code}' 'https://radar.max-yu.workers.dev/api/rain/swirls/point-series?lat=22.3023&lon=114.1746')"
+          test "$status" = "404"
+      - name: Verify Recovery Cloudflare bindings and Cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          account = os.environ['CLOUDFLARE_ACCOUNT_ID']
+          token = os.environ['CLOUDFLARE_API_TOKEN']
+          base = f'https://api.cloudflare.com/client/v4/accounts/{account}/workers/scripts/radar'
+
+          def get(path):
+              request = urllib.request.Request(
+                  base + path,
+                  headers={'Authorization': f'Bearer {token}', 'User-Agent': 'Rain-Track-recovery-verify/1.0'},
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  payload = json.load(response)
+              assert payload.get('success') is True, payload.get('errors')
+              return payload.get('result')
+
+          schedule_result = get('/schedules')
+          if isinstance(schedule_result, dict):
+              schedules = schedule_result.get('schedules', [])
+          else:
+              schedules = schedule_result or []
+          assert schedules == [], f'Expected no Worker Cron triggers, got {schedules!r}'
+
+          settings = get('/settings') or {}
+          bindings = settings.get('bindings', []) if isinstance(settings, dict) else []
+          binding_names = sorted(binding.get('name') for binding in bindings if isinstance(binding, dict) and binding.get('name'))
+          assert 'SWIRLS_SNAPSHOTS' not in binding_names, f'Experimental KV binding still attached: {binding_names!r}'
+          print('PASS production Cron triggers: 0')
+          print('PASS SWIRLS_SNAPSHOTS binding absent')
+          print('Current binding names:', ', '.join(binding_names) if binding_names else '(none)')
+          PY
