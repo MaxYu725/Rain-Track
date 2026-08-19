@@ -1,9 +1,13 @@
 import legacyWorker from './worker.js';
-import { SWIRLS_RAW_CONTRACT } from './swirls-data.js';
-import { SWIRLS_FETCH_POLICY, createSwirlsRuntime } from './swirls-worker-runtime.js';
+import {
+  SWIRLS_RAW_CONTRACT,
+  bindSwirlsMdlFrame,
+  parseSwirlsIndex,
+} from './swirls-data.js';
+import { SWIRLS_FETCH_POLICY } from './swirls-worker-runtime.js';
 import { loadSwirlsPointSeries } from './swirls-point-series.js';
 
-const VERSION = '2.6.0';
+const VERSION = '2.6.1';
 const POINT_SERIES_CACHE_SECONDS = 120;
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,11 +19,6 @@ const jsonHeaders = {
   ...corsHeaders,
   'Content-Type': 'application/json; charset=utf-8',
 };
-
-const swirlsRuntime = createSwirlsRuntime({
-  fetchText: createWorkerSwirlsFetchText(),
-  policy: SWIRLS_FETCH_POLICY,
-});
 
 export default {
   async fetch(request, env, ctx) {
@@ -65,8 +64,12 @@ async function handleSwirlsPointSeries(request, url, ctx) {
   if (cached) return cached;
 
   try {
+    // A compact request gets its own runtime so all 16 frame loads share one
+    // parsed index. Source responses rely on Cloudflare fetch caching rather
+    // than an additional Cache API match/put for every MDL. This keeps a cold
+    // request comfortably below the Worker subrequest limit.
     const series = await loadSwirlsPointSeries({
-      runtime: swirlsRuntime,
+      runtime: createCompactPointSeriesRuntime(),
       latitude,
       longitude,
       maxConcurrent: 4,
@@ -93,63 +96,88 @@ async function handleSwirlsPointSeries(request, url, ctx) {
   }
 }
 
-function createWorkerSwirlsFetchText() {
-  return async function fetchSwirlsText(url, options = {}) {
-    const ttlSeconds = Math.max(1, Number(options.ttlSeconds) || SWIRLS_FETCH_POLICY.indexTtlSeconds);
-    const timeoutMs = Math.max(1, Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
-    const bypassCache = options.bypassCache === true;
-    const accept = 'text/plain,*/*';
-    const cache = caches.default;
-    const cacheKey = new Request(url, { headers: { Accept: accept } });
+function createCompactPointSeriesRuntime() {
+  let normalIndexPromise = null;
+  let bypassIndexPromise = null;
 
-    if (!bypassCache) {
-      const cached = await cache.match(cacheKey);
-      if (cached) {
-        const body = await cached.text();
-        return {
-          body,
-          bytes: new TextEncoder().encode(body).byteLength,
-          updatedAt: cached.headers.get('last-modified'),
-          cacheStatus: 'worker-hit',
-        };
-      }
-    }
+  async function loadIndex(bypassCache) {
+    const existing = bypassCache ? bypassIndexPromise : normalIndexPromise;
+    if (existing) return existing;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
-    try {
-      const upstream = await fetch(url, {
-        redirect: 'follow',
-        cache: bypassCache ? 'no-store' : 'no-cache',
-        headers: {
-          Accept: accept,
-          'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache',
-          'User-Agent': 'Weather-Metro-SWIRLS-Point-Series/1.0',
-        },
-        cf: bypassCache
-          ? { cacheEverything: false, cacheTtl: 0 }
-          : { cacheEverything: true, cacheTtl: ttlSeconds },
-        signal: controller.signal,
+    const pending = loadCompactIndex({ bypassCache });
+    if (bypassCache) bypassIndexPromise = pending;
+    else normalIndexPromise = pending;
+    return pending;
+  }
+
+  return Object.freeze({
+    async loadFrame(frameIndex, { bypassCache = false } = {}) {
+      const indexData = await loadIndex(bypassCache);
+      const descriptor = indexData.frames.find(frame => frame.frameIndex === Number(frameIndex));
+      if (!descriptor) throw new Error(`SWIRLS frame ${frameIndex} is not present in the current index`);
+
+      const text = await fetchCompactSwirlsText(descriptor.mdlUrl, {
+        ttlSeconds: SWIRLS_FETCH_POLICY.mdlTtlSeconds,
+        timeoutMs: SWIRLS_FETCH_POLICY.timeoutMs,
+        bypassCache,
       });
-      if (!upstream.ok) throw new Error(`SWIRLS upstream HTTP ${upstream.status}`);
-      const body = await upstream.text();
-      const updatedAt = upstream.headers.get('last-modified');
-      const upstreamCacheStatus = upstream.headers.get('cf-cache-status') || null;
-      if (!bypassCache) {
-        const headers = new Headers(upstream.headers);
-        headers.set('Cache-Control', `public, max-age=${ttlSeconds}`);
-        await cache.put(cacheKey, new Response(body, { status: 200, headers }));
-      }
+      const frame = bindSwirlsMdlFrame(indexData, frameIndex, text.body);
       return {
-        body,
-        bytes: new TextEncoder().encode(body).byteLength,
-        updatedAt,
-        cacheStatus: upstreamCacheStatus || (bypassCache ? 'bypass' : 'worker-miss'),
+        ...frame,
+        sourceBytes: text.bytes,
+        sourceUpdatedAt: text.updatedAt,
+        cacheStatus: text.cacheStatus,
       };
-    } finally {
-      clearTimeout(timer);
-    }
+    },
+  });
+}
+
+async function loadCompactIndex({ bypassCache = false } = {}) {
+  const text = await fetchCompactSwirlsText(SWIRLS_RAW_CONTRACT.indexUrl, {
+    ttlSeconds: SWIRLS_FETCH_POLICY.indexTtlSeconds,
+    timeoutMs: SWIRLS_FETCH_POLICY.timeoutMs,
+    bypassCache,
+  });
+  const parsed = parseSwirlsIndex(text.body);
+  return {
+    ...parsed,
+    sourceBytes: text.bytes,
+    sourceUpdatedAt: text.updatedAt,
+    cacheStatus: text.cacheStatus,
   };
+}
+
+async function fetchCompactSwirlsText(url, options = {}) {
+  const ttlSeconds = Math.max(1, Number(options.ttlSeconds) || SWIRLS_FETCH_POLICY.indexTtlSeconds);
+  const timeoutMs = Math.max(1, Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
+  const bypassCache = options.bypassCache === true;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+  try {
+    const upstream = await fetch(url, {
+      redirect: 'follow',
+      cache: bypassCache ? 'no-store' : 'no-cache',
+      headers: {
+        Accept: 'text/plain,*/*',
+        'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache',
+        'User-Agent': 'Weather-Metro-SWIRLS-Point-Series/1.1',
+      },
+      cf: bypassCache
+        ? { cacheEverything: false, cacheTtl: 0 }
+        : { cacheEverything: true, cacheTtl: ttlSeconds },
+      signal: controller.signal,
+    });
+    if (!upstream.ok) throw new Error(`SWIRLS upstream HTTP ${upstream.status}`);
+    const body = await upstream.text();
+    return {
+      body,
+      bytes: new TextEncoder().encode(body).byteLength,
+      updatedAt: upstream.headers.get('last-modified'),
+      cacheStatus: upstream.headers.get('cf-cache-status') || (bypassCache ? 'bypass' : 'edge-fetch'),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function normalizedPointSeriesCacheUrl(rawUrl, latitude, longitude) {
