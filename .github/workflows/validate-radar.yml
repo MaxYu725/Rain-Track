@@ -36,6 +36,7 @@ jobs:
           node --check scripts/validate-swirls-frontend.mjs
           node --check scripts/probe-swirls-frontend-live.mjs
           node --check scripts/probe-production-point-series.mjs
+          node --check scripts/probe-production-frame-fanout.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
@@ -55,6 +56,10 @@ jobs:
         run: node scripts/validate-forecast-playback-settings.mjs
       - name: Probe live SWIRLS frontend contract
         run: node scripts/probe-swirls-frontend-live.mjs
+      - name: Measure production frame fan-out
+        env:
+          WORKER_BASE_URL: https://radar.max-yu.workers.dev
+        run: node scripts/probe-production-frame-fanout.mjs
       - name: Verify production compact point-series 2.6.2
         env:
           WORKER_BASE_URL: https://radar.max-yu.workers.dev
