@@ -57,7 +57,10 @@ assert.ok(mode.includes("selectedMode !== 'radar'"), 'radar settings are not mod
 assert.ok(mode.includes("selectedMode !== 'forecast'"), 'forecast settings are not mode-gated');
 assert.ok(mode.includes("legacyObserver.observe(radarPanel, { childList:true })"), 'radar dynamic controls are not observed safely');
 assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the whole subtree and self-loop on UI text changes');
-assert.ok(serviceWorker.includes("point-rain-pwa-v1.6.4-pwa22"), 'PWA shell version was not bumped to pwa22');
+
+const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+assert.ok(shellVersion, 'PWA shell version marker is missing');
+assert.ok(Number(shellVersion[1]) >= 23, `PWA shell generation must be at least pwa23, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell');
 
 console.log('Forecast playback + separated settings + map-first timeline gate PASS');

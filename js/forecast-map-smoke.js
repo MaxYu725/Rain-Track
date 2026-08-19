@@ -3,3 +3,4 @@
 // adds the location-first 6-minute chart and map/home view switching.
 import './rain-home.js';
 import './rain-home-shell.js';
+import './rain-map-quickviews.js';
