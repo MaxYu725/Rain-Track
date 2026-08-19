@@ -24,7 +24,14 @@ jobs:
       - name: Validate deployable Worker source
         run: |
           node --check worker.js
+          node --check worker-phase3c-v2.js
+          node --check swirls-point-sample.js
+          node --check swirls-point-request.js
           node --check scripts/smoke-worker-production.mjs
+          node --check scripts/probe-swirls-point-production.mjs
+          node scripts/validate-swirls-point-sample.mjs
+          node scripts/validate-swirls-point-request.mjs
+          node scripts/validate-phase3c-v2-worker.mjs
           node scripts/validate-worker-swirls-inline.mjs
 
       - name: Dry run and deploy production Worker
@@ -34,9 +41,12 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.123.0'
           command: |
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
-            deploy worker.js --name radar --compatibility-date 2026-08-05 --keep-vars
+            deploy worker-phase3c-v2.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
+            deploy worker-phase3c-v2.js --name radar --compatibility-date 2026-08-05 --keep-vars
             deployments status --name radar --json
 
-      - name: Smoke production Worker
+      - name: Smoke stable production routes
         run: node scripts/smoke-worker-production.mjs
+
+      - name: Smoke compact SWIRLS point endpoint
+        run: node scripts/probe-swirls-point-production.mjs
