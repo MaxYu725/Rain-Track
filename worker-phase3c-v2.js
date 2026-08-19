@@ -87,7 +87,7 @@ const pointRequestHandler = createSwirlsPointRequestHandler({
 });
 
 const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({
-  loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex),
+  loadFrames: (frameIndexes, options) => pointRuntime.loadFrames(frameIndexes, options),
   concurrency: 4
 });
 
