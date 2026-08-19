@@ -15,10 +15,18 @@ assert.match(home, /FRAME_COUNT\s*=\s*16/);
 assert.match(home, /RAIN_HOME_CADENCE_MINUTES/);
 assert.match(home, /accumulationMinutes\)\s*!==\s*30/);
 assert.match(home, /expectedRainHomeLeadMinutes/);
-assert.match(home, /每 6 分鐘一點/);
-assert.match(home, /每點代表該時刻前 30 分鐘累積雨量/);
+assert.match(home, /每 6 分鐘預測/);
+assert.match(home, /數值代表 30 分鐘預測雨量/);
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
+assert.match(home, /data-rain-home-retry/);
+assert.match(home, /rain-home-skeleton-chart/);
+assert.match(home, /prefers-reduced-motion:reduce/);
+assert.match(
+  home,
+  /const mode = await setRainMapMode\('forecast'\);\s*button\.disabled = false;\s*if \(label\) label\.textContent = '查看 2 小時雨區';/,
+  'rain-map CTA must reset after the async mode transition so it is usable after returning home'
+);
 assert.match(time, /RAIN_HOME_FIRST_LEAD_MINUTES\s*=\s*30/);
 assert.match(time, /RAIN_HOME_CADENCE_MINUTES\s*=\s*6/);
 assert.match(time, /RAIN_HOME_HORIZON_MINUTES\s*=\s*120/);
@@ -43,6 +51,6 @@ assert.match(sw, /'\.\/js\/rain-home-shell\.js'/);
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 26, `Rain Home time helpers require PWA generation at least pwa26, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 27, `Rain Home UI polish requires PWA generation at least pwa27, got pwa${shellVersion[1]}`);
 
-console.log('Rain Home v2 integration + true-time helper + bottom-sheet removal validation passed');
+console.log('Rain Home v2 integration + UI polish + true-time helper + bottom-sheet removal validation passed');
