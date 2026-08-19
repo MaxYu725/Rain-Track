@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa21';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa22';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -26,6 +26,7 @@ const APP_SHELL = [
   './js/forecast-map-timeline-core.js',
   './js/forecast-map-smoke.js',
   './js/rain-home.js',
+  './js/rain-home-shell.js',
   './js/location.js',
   './js/map.js',
   './js/pwa.js',
@@ -161,5 +162,5 @@ async function trimCache(name, maxEntries) {
   const cache = await caches.open(name);
   const keys = await cache.keys();
   if (keys.length <= maxEntries) return;
-  await Promise.all(keys.slice(0, keys.length - maxEntries).map(key => cache.delete(key)));
+  await Promise.all(keys.slice(0, keys.length - maxEntries).map(key => caches.delete(key)));
 }
