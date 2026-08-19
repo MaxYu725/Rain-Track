@@ -2,12 +2,40 @@ import { DEFAULT_POINT, SUPPORTED_BOUNDS } from './config.js';
 import { state } from './state.js';
 import { formatLatLon, isMobileLayout } from './utils.js';
 
+let pendingMapInit = null;
+let leafletRetryBound = false;
+
 function leaflet() {
   if (!window.L) throw new Error('Leaflet 地圖程式未能載入');
   return window.L;
 }
 
-export function initMap({ onSelect }) {
+function queueLeafletInit(options) {
+  pendingMapInit = options;
+  if (leafletRetryBound) return;
+  leafletRetryBound = true;
+
+  const retry = () => {
+    if (state.map || !window.L || !pendingMapInit) return;
+    const next = pendingMapInit;
+    pendingMapInit = null;
+    initMap(next);
+  };
+
+  window.addEventListener('rain:leaflet-ready', retry);
+  window.addEventListener('load', retry, { once:true });
+  setTimeout(retry, 1500);
+  setTimeout(retry, 5000);
+}
+
+export function initMap({ onSelect } = {}) {
+  if (state.map) return state.map;
+  if (!window.L) {
+    queueLeafletInit({ onSelect });
+    return null;
+  }
+
+  pendingMapInit = null;
   const L = leaflet();
   state.map = L.map('rain-map', {
     zoomControl:true,
@@ -42,6 +70,7 @@ export function initMap({ onSelect }) {
     if (readout) readout.textContent = '—';
   });
   renderPointLayers();
+  window.dispatchEvent(new CustomEvent('rain:map-ready'));
   return state.map;
 }
 
