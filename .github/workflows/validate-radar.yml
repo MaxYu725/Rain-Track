@@ -55,3 +55,7 @@ jobs:
         run: node scripts/validate-forecast-playback-settings.mjs
       - name: Probe live SWIRLS frontend contract
         run: node scripts/probe-swirls-frontend-live.mjs
+      - name: Verify production compact point-series 2.6.2
+        env:
+          WORKER_BASE_URL: https://radar.max-yu.workers.dev
+        run: node scripts/probe-production-point-series.mjs
