@@ -347,11 +347,9 @@ function bindHomeActions(content) {
     if (label) label.textContent = '正在開啟 2 小時雨區…';
     setMapView(true);
     const mode = await setRainMapMode('forecast');
-    if (mode !== 'forecast') {
-      setMapView(false);
-      button.disabled = false;
-      if (label) label.textContent = '查看 2 小時雨區';
-    }
+    button.disabled = false;
+    if (label) label.textContent = '查看 2 小時雨區';
+    if (mode !== 'forecast') setMapView(false);
   });
 }
 
