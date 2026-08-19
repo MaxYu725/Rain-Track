@@ -14,7 +14,7 @@ for (const marker of [
   "event.key === 'Enter'",
   "event.key === 'ArrowLeft'",
   "event.key === 'ArrowRight'",
-  'firstWetIndex',
+  'findFirstWetSignalTransition(points)',
   '30 分鐘累積時窗',
   'mm / 30 min',
   '有效時間',

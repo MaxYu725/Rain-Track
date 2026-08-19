@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const api = readFileSync(new URL('../js/api.js', import.meta.url), 'utf8');
 const home = readFileSync(new URL('../js/rain-home.js', import.meta.url), 'utf8');
+const time = readFileSync(new URL('../js/rain-home-time.js', import.meta.url), 'utf8');
 const shell = readFileSync(new URL('../js/rain-home-shell.js', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../js/forecast-map-smoke.js', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8');
@@ -11,12 +12,16 @@ assert.match(api, /fetchSwirlsPointSeries/);
 assert.match(api, /\/api\/rain\/swirls\/point-series/);
 assert.match(api, /fetchSwirlsPointFrame/);
 assert.match(home, /FRAME_COUNT\s*=\s*16/);
-assert.match(home, /cadenceMinutes\)\s*!==\s*6/);
+assert.match(home, /RAIN_HOME_CADENCE_MINUTES/);
 assert.match(home, /accumulationMinutes\)\s*!==\s*30/);
+assert.match(home, /expectedRainHomeLeadMinutes/);
 assert.match(home, /每 6 分鐘一點/);
 assert.match(home, /每點代表該時刻前 30 分鐘累積雨量/);
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
+assert.match(time, /RAIN_HOME_FIRST_LEAD_MINUTES\s*=\s*30/);
+assert.match(time, /RAIN_HOME_CADENCE_MINUTES\s*=\s*6/);
+assert.match(time, /RAIN_HOME_HORIZON_MINUTES\s*=\s*120/);
 
 for (const marker of [
   "localStorage.removeItem('hkRainSheetMode')",
@@ -33,10 +38,11 @@ for (const marker of [
 assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 assert.match(sw, /'\.\/js\/rain-home\.js'/);
+assert.match(sw, /'\.\/js\/rain-home-time\.js'/);
 assert.match(sw, /'\.\/js\/rain-home-shell\.js'/);
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 23, `Rain Home requires PWA generation at least pwa23, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 26, `Rain Home time helpers require PWA generation at least pwa26, got pwa${shellVersion[1]}`);
 
-console.log('Rain Home v2 integration + bottom-sheet removal validation passed');
+console.log('Rain Home v2 integration + true-time helper + bottom-sheet removal validation passed');
