@@ -17,18 +17,27 @@ export async function loadSwirlsPointSeries({
   assertInsideCoverage(lat, lon);
 
   let lastError = null;
+  let bypassCache = false;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const frames = await loadFrames(
         runtime,
         SWIRLS_RAW_CONTRACT.frameCount,
         Math.max(1, Math.min(8, Number(maxConcurrent) || DEFAULT_MAX_CONCURRENT)),
-        attempt > 0,
+        bypassCache,
       );
       return buildSwirlsPointSeries({ frames, latitude: lat, longitude: lon });
     } catch (error) {
       lastError = error;
-      if (!/mixed SWIRLS run|run changed|run time mismatch/i.test(String(error?.message || error))) throw error;
+      const message = String(error?.message || error);
+      const rollover = /mixed SWIRLS run|run changed|run time mismatch/i.test(message);
+      const transient = /timeout|SWIRLS upstream HTTP (?:408|429|5\d\d)/i.test(message);
+      if (!rollover && !transient) throw error;
+
+      // A publication rollover must bypass the 45-second source cache so the
+      // index and all MDLs come from one run. A plain network timeout/5xx is
+      // retried through the normal edge-cached path instead.
+      bypassCache = rollover;
     }
   }
   throw lastError || new Error('Unable to build SWIRLS point series');
