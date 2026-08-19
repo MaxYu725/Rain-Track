@@ -24,6 +24,7 @@ jobs:
           node --check swirls-point-sample.js
           node --check swirls-point-request.js
           node --check swirls-point-series-request.js
+          node --check swirls-point-series-batch.js
           node --check swirls-worker-runtime.js
           node --check service-worker.js
           for file in js/*.js; do
