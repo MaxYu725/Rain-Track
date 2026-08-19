@@ -18,8 +18,9 @@
   <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""></noscript>
   <link rel="stylesheet" href="./css/app.css">
   <link rel="stylesheet" href="./css/settings-phase1a.css">
+  <link rel="stylesheet" href="./css/rain-home-first-paint.css">
 </head>
-<body>
+<body class="rain-home-v2">
   <div id="app-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="loading-line" class="hidden" aria-hidden="true"></div>
 
@@ -73,12 +74,26 @@
           <button id="location-permission-action" class="compact-action" type="button">顯示附近雨量</button>
         </section>
 
-        <section id="forecast-panel" class="forecast-panel map-hud" data-sheet="half" aria-labelledby="forecast-heading">
+        <section id="forecast-panel" class="forecast-panel map-hud" aria-labelledby="forecast-heading">
           <h2 id="forecast-heading" class="visually-hidden">定點雨量預報</h2>
-          <div id="sheet-handle" class="sheet-handle" role="button" tabindex="0" aria-expanded="true" aria-label="拖曳或使用上下方向鍵調整預報面板高度"></div>
-          <button id="forecast-toggle" class="forecast-toggle" type="button" title="收合預報" aria-expanded="true">⌄</button>
           <div id="forecast-content" class="panel-inner">
-            <div class="empty-state"><div class="spinner" aria-hidden="true"></div><div>正在讀取定點雨量預報…</div></div>
+            <section class="rain-home-root rain-home-first-paint" data-rain-home-first-paint>
+              <div class="rain-home-first-paint-location" aria-hidden="true">
+                <span class="rain-home-first-paint-kicker">目前位置</span>
+                <span class="rain-home-first-paint-title">正在準備定位預報</span>
+              </div>
+              <div class="rain-home-loading" role="status" aria-live="polite">
+                <div class="rain-home-loading-head">
+                  <span class="rain-home-loading-spinner" aria-hidden="true"></span>
+                  <div><strong>正在整理未來兩小時雨勢</strong><span>準備讀取 16 個 SWIRLS 定位有效時間…</span></div>
+                </div>
+                <div class="rain-home-skeleton" aria-hidden="true">
+                  <div class="rain-home-skeleton-line short"></div>
+                  <div class="rain-home-skeleton-line medium"></div>
+                  <div class="rain-home-skeleton-chart"></div>
+                </div>
+              </div>
+            </section>
           </div>
         </section>
 
