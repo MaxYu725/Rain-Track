@@ -34,6 +34,9 @@ assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 assert.match(sw, /'\.\/js\/rain-home\.js'/);
 assert.match(sw, /'\.\/js\/rain-home-shell\.js'/);
-assert.match(sw, /point-rain-pwa-v1\.6\.4-pwa22/);
+
+const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+assert.ok(shellVersion, 'PWA shell version marker is missing');
+assert.ok(Number(shellVersion[1]) >= 23, `Rain Home requires PWA generation at least pwa23, got pwa${shellVersion[1]}`);
 
 console.log('Rain Home v2 integration + bottom-sheet removal validation passed');
