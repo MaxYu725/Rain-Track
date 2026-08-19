@@ -2,9 +2,6 @@ name: Deploy Worker production
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - agent/stable-recovery-rain-track
 
 permissions:
   contents: read
