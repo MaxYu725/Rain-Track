@@ -22,6 +22,11 @@ assert.match(home, /查看 2 小時雨區/);
 assert.match(home, /data-rain-home-retry/);
 assert.match(home, /rain-home-skeleton-chart/);
 assert.match(home, /prefers-reduced-motion:reduce/);
+assert.match(
+  home,
+  /const mode = await setRainMapMode\('forecast'\);\s*button\.disabled = false;\s*if \(label\) label\.textContent = '查看 2 小時雨區';/,
+  'rain-map CTA must reset after the async mode transition so it is usable after returning home'
+);
 assert.match(time, /RAIN_HOME_FIRST_LEAD_MINUTES\s*=\s*30/);
 assert.match(time, /RAIN_HOME_CADENCE_MINUTES\s*=\s*6/);
 assert.match(time, /RAIN_HOME_HORIZON_MINUTES\s*=\s*120/);
