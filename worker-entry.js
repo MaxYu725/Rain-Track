@@ -7,7 +7,7 @@ import {
 import { SWIRLS_FETCH_POLICY } from './swirls-worker-runtime.js';
 import { loadSwirlsPointSeries } from './swirls-point-series.js';
 
-const VERSION = '2.6.1';
+const VERSION = '2.6.2';
 const POINT_SERIES_CACHE_SECONDS = 120;
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -64,10 +64,6 @@ async function handleSwirlsPointSeries(request, url, ctx) {
   if (cached) return cached;
 
   try {
-    // A compact request gets its own runtime so all 16 frame loads share one
-    // parsed index. Source responses rely on Cloudflare fetch caching rather
-    // than an additional Cache API match/put for every MDL. This keeps a cold
-    // request comfortably below the Worker subrequest limit.
     const series = await loadSwirlsPointSeries({
       runtime: createCompactPointSeriesRuntime(),
       latitude,
@@ -154,19 +150,28 @@ async function fetchCompactSwirlsText(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
   try {
-    const upstream = await fetch(url, {
+    const headers = {
+      Accept: 'text/plain,*/*',
+      'User-Agent': 'Weather-Metro-SWIRLS-Point-Series/1.2',
+    };
+    if (bypassCache) headers['Cache-Control'] = 'no-cache, no-store, max-age=0';
+
+    const fetchOptions = {
       redirect: 'follow',
-      cache: bypassCache ? 'no-store' : 'no-cache',
-      headers: {
-        Accept: 'text/plain,*/*',
-        'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache',
-        'User-Agent': 'Weather-Metro-SWIRLS-Point-Series/1.1',
-      },
-      cf: bypassCache
-        ? { cacheEverything: false, cacheTtl: 0 }
-        : { cacheEverything: true, cacheTtl: ttlSeconds },
+      headers,
       signal: controller.signal,
-    });
+    };
+    if (bypassCache) {
+      // Cloudflare rejects `cache: no-store` when cf.cacheTtl is supplied,
+      // even when cacheTtl is zero. Omit the cf cache policy entirely here.
+      fetchOptions.cache = 'no-store';
+    } else {
+      // Let the edge cache absorb repeated MDL reads. Do not send a normal
+      // request-side `no-cache` directive, which would defeat this path.
+      fetchOptions.cf = { cacheEverything: true, cacheTtl: ttlSeconds };
+    }
+
+    const upstream = await fetch(url, fetchOptions);
     if (!upstream.ok) throw new Error(`SWIRLS upstream HTTP ${upstream.status}`);
     const body = await upstream.text();
     return {

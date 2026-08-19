@@ -41,6 +41,51 @@ assert.equal(loaded.sampleCount, 16);
 assert.equal(calls.length, 16, 'normal load should fetch each frame once');
 assert.ok(calls.every(call => !call.bypassCache));
 
+let transientFailed = false;
+const transientCalls = [];
+const transientRuntime = {
+  async loadFrame(index, options) {
+    const bypassCache = options?.bypassCache === true;
+    transientCalls.push({ index, bypassCache });
+    if (!transientFailed && index === 5) {
+      transientFailed = true;
+      throw new Error('timeout');
+    }
+    return frames[index];
+  },
+};
+const afterTransient = await loadSwirlsPointSeries({
+  runtime: transientRuntime,
+  latitude: 22,
+  longitude: 114,
+  maxConcurrent: 4,
+});
+assert.equal(afterTransient.sampleCount, 16);
+assert.ok(transientCalls.length > 16, 'transient failure should retry the batch once');
+assert.ok(transientCalls.every(call => !call.bypassCache), 'plain timeout retry should retain normal edge caching');
+
+let rolloverFailed = false;
+const rolloverCalls = [];
+const rolloverRuntime = {
+  async loadFrame(index, options) {
+    const bypassCache = options?.bypassCache === true;
+    rolloverCalls.push({ index, bypassCache });
+    if (!rolloverFailed && index === 5) {
+      rolloverFailed = true;
+      throw new Error('SWIRLS run time mismatch: cached index and MDL disagree');
+    }
+    return frames[index];
+  },
+};
+const afterRollover = await loadSwirlsPointSeries({
+  runtime: rolloverRuntime,
+  latitude: 22,
+  longitude: 114,
+  maxConcurrent: 4,
+});
+assert.equal(afterRollover.sampleCount, 16);
+assert.ok(rolloverCalls.some(call => call.bypassCache), 'rollover retry should bypass source cache');
+
 const mixed = frames.map(frame => ({ ...frame }));
 mixed[15] = { ...mixed[15], runTime: '2026-08-19T00:06:00.000Z' };
 assert.throws(
