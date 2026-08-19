@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "radar",
+  "main": "worker-entry.js",
+  "compatibility_date": "2026-08-05",
+  "kv_namespaces": [
+    {
+      "binding": "SWIRLS_SNAPSHOTS"
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  }
+}
