@@ -5,6 +5,7 @@ import { assertSwirlsFrameCompatible, buildSwirlsForecast, normalizeSwirlsFrameP
 import { renderForecastFrameToCanvas } from './forecast-map-browser-canvas.js';
 import { forecastWindow } from './forecast-map-renderer.js';
 import { removeForecastOverlay, setForecastOverlayOpacity, upsertForecastOverlay } from './forecast-map-leaflet.js';
+import { summarizeForecastRainArea } from './forecast-map-spatial.js';
 
 const DEFAULT_OPACITY = 0.72;
 // Worker SWIRLS rollover recovery can perform index + MDL twice, with each
@@ -91,8 +92,14 @@ export function getForecastMapRuntimeSnapshot() {
       bounds:forecast.grid.bounds,
       orientation:forecast.grid.orientation
     } : null,
+    spatialSummary:lastRender?.spatialSummary || null,
     lastRender
   };
+}
+
+function notifyFrameChange(snapshot) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent('rain:forecast-map-frame-change', { detail:{ snapshot } }));
 }
 
 function renderForecastMapFrame(frameIndex) {
@@ -116,9 +123,12 @@ function renderForecastMapFrame(frameIndex) {
     height:rendered.height,
     wetCellCount:rendered.wetCellCount,
     dryCellCount:rendered.dryCellCount,
-    maxMm:rendered.maxMm
+    maxMm:rendered.maxMm,
+    spatialSummary:summarizeForecastRainArea(frame, forecast.grid)
   };
-  return getForecastMapRuntimeSnapshot();
+  const snapshot = getForecastMapRuntimeSnapshot();
+  notifyFrameChange(snapshot);
+  return snapshot;
 }
 
 export function showForecastMap(frameIndex = index) {

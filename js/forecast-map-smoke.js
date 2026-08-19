@@ -4,3 +4,4 @@
 import './rain-home.js';
 import './rain-home-shell.js';
 import './rain-map-quickviews.js';
+import './rain-map-area-summary.js';
