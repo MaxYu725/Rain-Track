@@ -28,7 +28,7 @@ export async function loadSwirlsPointSeries({
       return buildSwirlsPointSeries({ frames, latitude: lat, longitude: lon });
     } catch (error) {
       lastError = error;
-      if (!/mixed SWIRLS run|run changed/i.test(String(error?.message || error))) throw error;
+      if (!/mixed SWIRLS run|run changed|run time mismatch/i.test(String(error?.message || error))) throw error;
     }
   }
   throw lastError || new Error('Unable to build SWIRLS point series');
