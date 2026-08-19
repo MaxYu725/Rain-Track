@@ -51,8 +51,11 @@ export function normalizeCompleteSnapshot(frames, builtAt = new Date()) {
       throw new Error(`SWIRLS snapshot frame ${index} lead mismatch`);
     }
     if (frame.unit !== SWIRLS_RAW_CONTRACT.unit) throw new Error(`SWIRLS snapshot frame ${index} unit mismatch`);
-    if (!Array.isArray(frame.values) || frame.values.length !== grid.rows * grid.cols) {
+    if (!Array.isArray(frame.values) || frame.values.length !== SWIRLS_RAW_CONTRACT.cellCount) {
       throw new Error(`SWIRLS snapshot frame ${index} grid payload mismatch`);
+    }
+    if (frame.values.some(value => !Number.isFinite(Number(value)) || Number(value) < 0)) {
+      throw new Error(`SWIRLS snapshot frame ${index} contains invalid rainfall values`);
     }
     return {
       frameIndex: index,
@@ -127,12 +130,21 @@ function assertSnapshotShape(snapshot) {
     throw new Error('SWIRLS snapshot schema mismatch');
   }
   if (!snapshot.runTime || !snapshot.builtAt) throw new Error('SWIRLS snapshot metadata is incomplete');
+  if (snapshot.contractVersion !== SWIRLS_RAW_CONTRACT.version) throw new Error('SWIRLS snapshot contract mismatch');
   if (snapshot.cadenceMinutes !== SWIRLS_RAW_CONTRACT.cadenceMinutes) throw new Error('SWIRLS snapshot cadence mismatch');
   if (snapshot.accumulationMinutes !== SWIRLS_RAW_CONTRACT.accumulationMinutes) {
     throw new Error('SWIRLS snapshot accumulation mismatch');
   }
   if (snapshot.unit !== SWIRLS_RAW_CONTRACT.unit) throw new Error('SWIRLS snapshot unit mismatch');
-  if (!snapshot.grid || !Array.isArray(snapshot.grid.latitudes) || !Array.isArray(snapshot.grid.longitudes)) {
+  if (
+    !snapshot.grid ||
+    snapshot.grid.rows !== SWIRLS_RAW_CONTRACT.rows ||
+    snapshot.grid.cols !== SWIRLS_RAW_CONTRACT.cols ||
+    !Array.isArray(snapshot.grid.latitudes) ||
+    snapshot.grid.latitudes.length !== SWIRLS_RAW_CONTRACT.rows ||
+    !Array.isArray(snapshot.grid.longitudes) ||
+    snapshot.grid.longitudes.length !== SWIRLS_RAW_CONTRACT.cols
+  ) {
     throw new Error('SWIRLS snapshot grid is invalid');
   }
   if (!Array.isArray(snapshot.frames) || snapshot.frames.length !== SWIRLS_RAW_CONTRACT.frameCount) {
@@ -141,7 +153,9 @@ function assertSnapshotShape(snapshot) {
 }
 
 function cloneGrid(grid) {
-  if (!Number.isInteger(grid.rows) || !Number.isInteger(grid.cols)) throw new Error('SWIRLS snapshot grid shape is invalid');
+  if (grid.rows !== SWIRLS_RAW_CONTRACT.rows || grid.cols !== SWIRLS_RAW_CONTRACT.cols) {
+    throw new Error('SWIRLS snapshot grid shape does not match public contract');
+  }
   if (!Array.isArray(grid.latitudes) || grid.latitudes.length !== grid.rows) throw new Error('SWIRLS snapshot latitude axis mismatch');
   if (!Array.isArray(grid.longitudes) || grid.longitudes.length !== grid.cols) throw new Error('SWIRLS snapshot longitude axis mismatch');
   return {
