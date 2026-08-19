@@ -1,10 +1,18 @@
 import { fetchSwirlsPointFrame, fetchSwirlsPointSeries } from './api.js';
 import { setRainMapMode } from './rain-map-mode.js';
+import {
+  RAIN_HOME_CADENCE_MINUTES,
+  RAIN_HOME_FIRST_LEAD_MINUTES,
+  RAIN_HOME_HORIZON_MINUTES,
+  RAIN_HOME_RAIN_THRESHOLD_MM,
+  expectedRainHomeLeadMinutes,
+  findFirstWetSignalTransition,
+  rainHomeLeadRatio
+} from './rain-home-time.js';
 import { state } from './state.js';
 
 const SERIES_CACHE_MS = 4 * 60 * 1000;
 const FRAME_COUNT = 16;
-const RAIN_THRESHOLD_MM = 0.2;
 const seriesCache = new Map();
 
 let observer = null;
@@ -208,9 +216,16 @@ async function loadSeriesViaFrames(point, signal) {
 function normalizeSeries(data) {
   const points = Array.isArray(data?.points) ? [...data.points].sort((a,b) => Number(a.frameIndex) - Number(b.frameIndex)) : [];
   if (data?.ok !== true || points.length !== FRAME_COUNT) throw new Error('兩小時 6 分鐘預報資料不完整');
-  if (Number(data.cadenceMinutes) !== 6 || Number(data.accumulationMinutes) !== 30) throw new Error('兩小時預報時間規格不符');
+  if (Number(data.cadenceMinutes) !== RAIN_HOME_CADENCE_MINUTES || Number(data.accumulationMinutes) !== 30) throw new Error('兩小時預報時間規格不符');
   points.forEach((point, index) => {
-    if (Number(point.frameIndex) !== index || !Number.isFinite(Number(point.amountMm)) || Number(point.amountMm) < 0 || !Date.parse(point.validTime || '')) {
+    const expectedLead = expectedRainHomeLeadMinutes(index);
+    if (
+      Number(point.frameIndex) !== index ||
+      Number(point.leadMinutes) !== expectedLead ||
+      !Number.isFinite(Number(point.amountMm)) ||
+      Number(point.amountMm) < 0 ||
+      !Date.parse(point.validTime || '')
+    ) {
       throw new Error('兩小時預報含無效資料點');
     }
   });
@@ -340,8 +355,8 @@ function bindChartExplorer(content, points) {
     }
   });
 
-  const firstWetIndex = points.findIndex(point => Number(point.amountMm) >= RAIN_THRESHOLD_MM);
-  selectPoint(firstWetIndex >= 0 ? firstWetIndex : 0);
+  const firstWet = findFirstWetSignalTransition(points);
+  selectPoint(firstWet?.index ?? 0);
 }
 
 function chartReadoutMarkup(point) {
@@ -359,8 +374,8 @@ function chartReadoutMarkup(point) {
 
 function analyzeTrend(data) {
   const points = data.points;
-  const wet = points.filter(point => Number(point.amountMm) >= RAIN_THRESHOLD_MM);
-  if (!wet.length) {
+  const firstWet = findFirstWetSignalTransition(points, RAIN_HOME_RAIN_THRESHOLD_MM);
+  if (!firstWet) {
     return {
       title:'未來 2 小時暫無明顯降雨',
       detail:'目前定位點的 6 分鐘預報曲線維持接近 0 mm。可打開雨區地圖查看香港、深圳及南海附近是否有雨帶。',
@@ -368,15 +383,13 @@ function analyzeTrend(data) {
     };
   }
 
-  const first = wet[0];
+  const first = firstWet.first;
   const peak = points.reduce((best, point) => Number(point.amountMm) > Number(best.amountMm) ? point : best, points[0]);
   const last = points.at(-1);
-  const firstWindowStart = formatClock(first.windowStart);
-  const firstWindowEnd = formatClock(first.validTime);
   const peakTime = formatClock(peak.validTime);
-  const startTitle = first.frameIndex === 0
+  const startTitle = firstWet.index === 0
     ? '未來 30 分鐘內可能有雨'
-    : `約 ${firstWindowStart}–${firstWindowEnd} 開始見到降雨訊號`;
+    : `約 ${formatClock(firstWet.transitionStartValidTime)}–${formatClock(firstWet.transitionEndValidTime)} 開始見到降雨訊號`;
 
   const peakValue = formatRain(peak.amountMm);
   let direction = '之後雨勢變化不大。';
@@ -387,7 +400,7 @@ function analyzeTrend(data) {
   return {
     title:startTitle,
     detail:`較強的 30 分鐘累積雨量時窗約在 ${peakTime} 前後，最高約 ${peakValue} mm / 30 min。${direction}`,
-    shortLabel:first.frameIndex === 0 ? '30 分鐘內可能有雨' : '稍後可能有雨'
+    shortLabel:firstWet.index === 0 ? '30 分鐘內可能有雨' : '稍後可能有雨'
   };
 }
 
@@ -399,29 +412,35 @@ function chartMarkup(points) {
   const plotH = height - pad.top - pad.bottom;
   const values = points.map(point => Number(point.amountMm) || 0);
   const yMax = niceCeiling(Math.max(...values));
-  const x = index => pad.left + plotW * (index / Math.max(1, points.length - 1));
+  const xLead = leadMinutes => {
+    const ratio = rainHomeLeadRatio(leadMinutes, RAIN_HOME_HORIZON_MINUTES);
+    return pad.left + plotW * (ratio ?? 0);
+  };
   const y = value => pad.top + plotH * (1 - Math.min(yMax, Math.max(0, value)) / yMax);
-  const line = points.map((point, index) => `${index ? 'L' : 'M'} ${x(index).toFixed(1)} ${y(point.amountMm).toFixed(1)}`).join(' ');
-  const area = `${line} L ${x(points.length - 1).toFixed(1)} ${(pad.top + plotH).toFixed(1)} L ${x(0).toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
+  const line = points.map((point, index) => `${index ? 'L' : 'M'} ${xLead(point.leadMinutes).toFixed(1)} ${y(point.amountMm).toFixed(1)}`).join(' ');
+  const firstX = xLead(points[0]?.leadMinutes ?? RAIN_HOME_FIRST_LEAD_MINUTES);
+  const lastX = xLead(points.at(-1)?.leadMinutes ?? RAIN_HOME_HORIZON_MINUTES);
+  const area = `${line} L ${lastX.toFixed(1)} ${(pad.top + plotH).toFixed(1)} L ${firstX.toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z`;
   const ticks = [0, .25, .5, .75, 1].map(ratio => {
     const yy = pad.top + plotH * (1 - ratio);
     const value = yMax * ratio;
     return `<line class="rain-home-grid" x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${width - pad.right}" y2="${yy.toFixed(1)}"></line><text class="rain-home-axis-label" x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end">${formatAxis(value)}</text>`;
   }).join('');
-  const xIndexes = [0,5,10,15];
-  const xLabels = xIndexes.map(index => `<text class="rain-home-axis-label" x="${x(index).toFixed(1)}" y="${height - 8}" text-anchor="${index === 0 ? 'start' : index === 15 ? 'end' : 'middle'}">${escapeHtml(formatClock(points[index]?.validTime))}</text>`).join('');
-  const dots = points.map((point, index) => `<circle class="rain-home-dot" cx="${x(index).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="3"></circle>`).join('');
+  const xLeads = [0,30,60,90,120];
+  const xLabels = xLeads.map(lead => `<text class="rain-home-axis-label" x="${xLead(lead).toFixed(1)}" y="${height - 8}" text-anchor="${lead === 0 ? 'start' : lead === 120 ? 'end' : 'middle'}">+${lead}</text>`).join('');
+  const dots = points.map(point => `<circle class="rain-home-dot" cx="${xLead(point.leadMinutes).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="3" data-lead-minutes="${Number(point.leadMinutes)}"></circle>`).join('');
   const hits = points.map((point, index) => {
     const label = `有效時間 ${formatClock(point.validTime)}，${formatRain(point.amountMm)} mm / 30 min，預報 +${Number(point.leadMinutes)} 分鐘`;
-    return `<circle class="rain-home-hit" cx="${x(index).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="14" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(label)}" data-rain-home-point="${index}"></circle>`;
+    return `<circle class="rain-home-hit" cx="${xLead(point.leadMinutes).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="14" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(label)}" data-rain-home-point="${index}" data-lead-minutes="${Number(point.leadMinutes)}"></circle>`;
   }).join('');
   const peak = Math.max(...values);
   return `
     <div class="rain-home-chart-wrap">
-      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖，最高 ${formatRain(peak)} 毫米每 30 分鐘；可點選 16 個有效時間查看數值">
+      <svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖；時間軸由預報基準 +0 到 +120 分鐘，首個 SWIRLS 有效時間在 +30 分鐘；最高 ${formatRain(peak)} 毫米每 30 分鐘；可點選 16 個有效時間查看數值">
         ${ticks}<path class="rain-home-area" d="${area}"></path><path class="rain-home-line" d="${line}"></path>${dots}${hits}${xLabels}
       </svg>
       <div class="rain-home-chart-readout" data-rain-home-readout aria-live="polite"></div>
+      <div class="rain-home-chart-caption"><span>橫軸：預報基準 +0 → +120 分鐘</span><span>首個 SWIRLS 點：+30 分鐘</span></div>
       <div class="rain-home-chart-caption"><span>縱軸：mm / 30 min</span><span>點選圓點查看 16 個有效時間</span></div>
     </div>`;
 }
