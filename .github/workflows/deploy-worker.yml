@@ -7,13 +7,15 @@ on:
       - main
     paths:
       - '.github/workflows/deploy-worker.yml'
+      - 'wrangler.jsonc'
       - 'worker.js'
       - 'worker-entry.js'
       - 'swirls-data.js'
       - 'swirls-worker-runtime.js'
       - 'swirls-point-series.js'
+      - 'swirls-snapshot.js'
       - 'scripts/smoke-worker-production.mjs'
-      - 'scripts/probe-production-point-series.mjs'
+      - 'scripts/validate-swirls-snapshot.mjs'
 
 permissions:
   contents: read
@@ -38,24 +40,23 @@ jobs:
           node --check worker.js
           node --check worker-entry.js
           node --check swirls-point-series.js
+          node --check swirls-snapshot.js
           node --check scripts/smoke-worker-production.mjs
-          node --check scripts/probe-production-point-series.mjs
+          node --check scripts/validate-swirls-snapshot.mjs
           node scripts/validate-worker-swirls-inline.mjs
           node scripts/validate-swirls-point-series.mjs
+          node scripts/validate-swirls-snapshot.mjs
 
-      - name: Dry run and deploy production Worker
+      - name: Deploy production Worker with snapshot KV and cron
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.123.0'
           command: |
-            deploy worker-entry.js --name radar --compatibility-date 2026-08-05 --keep-vars --dry-run
-            deploy worker-entry.js --name radar --compatibility-date 2026-08-05 --keep-vars
+            deploy --config wrangler.jsonc --keep-vars --dry-run
+            deploy --config wrangler.jsonc --keep-vars
             deployments status --name radar --json
 
       - name: Smoke production Worker
         run: node scripts/smoke-worker-production.mjs
-
-      - name: Stress compact point-series cold paths
-        run: node scripts/probe-production-point-series.mjs
