@@ -69,6 +69,7 @@ export function normalizeCompleteSnapshot(frames, builtAt = new Date()) {
 
   const built = builtAt instanceof Date ? builtAt : new Date(builtAt);
   if (!Number.isFinite(built.getTime())) throw new Error('SWIRLS snapshot builtAt is invalid');
+  if (!Number.isFinite(Date.parse(first.runTime || ''))) throw new Error('SWIRLS snapshot runTime is invalid');
 
   return {
     schemaVersion: SWIRLS_SNAPSHOT_SCHEMA_VERSION,
@@ -94,10 +95,23 @@ export function buildPointSeriesFromSnapshot(snapshot, latitude, longitude) {
   return buildSwirlsPointSeries({ frames, latitude, longitude });
 }
 
+export function snapshotBuildAgeMinutes(snapshot, nowEpochMs = Date.now()) {
+  return ageMinutesFromIso(snapshot?.builtAt, nowEpochMs);
+}
+
+export function snapshotSourceAgeMinutes(snapshot, nowEpochMs = Date.now()) {
+  return ageMinutesFromIso(snapshot?.runTime, nowEpochMs);
+}
+
+/**
+ * Effective snapshot age is the older of backend build time and source model
+ * run time. A Cron rebuild must not make an unchanged/stale HKO run look fresh.
+ */
 export function snapshotAgeMinutes(snapshot, nowEpochMs = Date.now()) {
-  const builtAt = Date.parse(snapshot?.builtAt || '');
-  if (!Number.isFinite(builtAt)) return Infinity;
-  return Math.max(0, (Number(nowEpochMs) - builtAt) / 60_000);
+  return Math.max(
+    snapshotBuildAgeMinutes(snapshot, nowEpochMs),
+    snapshotSourceAgeMinutes(snapshot, nowEpochMs),
+  );
 }
 
 export function snapshotIsFresh(
@@ -120,6 +134,8 @@ export function snapshotMetadata(snapshot, nowEpochMs = Date.now()) {
     runTime: snapshot.runTime || null,
     builtAt: snapshot.builtAt || null,
     ageMinutes: Number(snapshotAgeMinutes(snapshot, nowEpochMs).toFixed(2)),
+    sourceAgeMinutes: Number(snapshotSourceAgeMinutes(snapshot, nowEpochMs).toFixed(2)),
+    buildAgeMinutes: Number(snapshotBuildAgeMinutes(snapshot, nowEpochMs).toFixed(2)),
     frameCount: Array.isArray(snapshot.frames) ? snapshot.frames.length : 0,
     fresh: snapshotIsFresh(snapshot, nowEpochMs),
   };
@@ -130,6 +146,9 @@ function assertSnapshotShape(snapshot) {
     throw new Error('SWIRLS snapshot schema mismatch');
   }
   if (!snapshot.runTime || !snapshot.builtAt) throw new Error('SWIRLS snapshot metadata is incomplete');
+  if (!Number.isFinite(Date.parse(snapshot.runTime)) || !Number.isFinite(Date.parse(snapshot.builtAt))) {
+    throw new Error('SWIRLS snapshot timestamps are invalid');
+  }
   if (snapshot.contractVersion !== SWIRLS_RAW_CONTRACT.version) throw new Error('SWIRLS snapshot contract mismatch');
   if (snapshot.cadenceMinutes !== SWIRLS_RAW_CONTRACT.cadenceMinutes) throw new Error('SWIRLS snapshot cadence mismatch');
   if (snapshot.accumulationMinutes !== SWIRLS_RAW_CONTRACT.accumulationMinutes) {
@@ -186,4 +205,10 @@ function sameAxis(first, second) {
     if (Math.abs(Number(first[index]) - Number(second[index])) > 1e-9) return false;
   }
   return true;
+}
+
+function ageMinutesFromIso(value, nowEpochMs) {
+  const timestamp = Date.parse(value || '');
+  if (!Number.isFinite(timestamp)) return Infinity;
+  return Math.max(0, (Number(nowEpochMs) - timestamp) / 60_000);
 }

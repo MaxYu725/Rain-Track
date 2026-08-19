@@ -3,7 +3,9 @@ import {
   SWIRLS_SNAPSHOT_MAX_AGE_MINUTES,
   buildCompleteSwirlsSnapshot,
   buildPointSeriesFromSnapshot,
+  snapshotBuildAgeMinutes,
   snapshotIsFresh,
+  snapshotSourceAgeMinutes,
 } from '../swirls-snapshot.js';
 import { SWIRLS_RAW_CONTRACT } from '../swirls-data.js';
 
@@ -46,9 +48,24 @@ assert.deepEqual(series.samples.map(sample => sample.leadMinutes), Array.from({ 
 assert.equal(series.samples[0].accumulationMm, 0);
 assert.equal(series.samples[15].accumulationMm, 1.5);
 
-assert.equal(snapshotIsFresh(snapshot, builtAt.getTime() + 17 * 60_000), true);
-assert.equal(snapshotIsFresh(snapshot, builtAt.getTime() + SWIRLS_SNAPSHOT_MAX_AGE_MINUTES * 60_000), true);
-assert.equal(snapshotIsFresh(snapshot, builtAt.getTime() + 19 * 60_000), false);
+const sourcePlus17 = Date.parse(runTime) + 17 * 60_000;
+const sourcePlus18 = Date.parse(runTime) + SWIRLS_SNAPSHOT_MAX_AGE_MINUTES * 60_000;
+const sourcePlus19 = Date.parse(runTime) + 19 * 60_000;
+assert.equal(snapshotIsFresh(snapshot, sourcePlus17), true);
+assert.equal(snapshotIsFresh(snapshot, sourcePlus18), true);
+assert.equal(snapshotIsFresh(snapshot, sourcePlus19), false);
+assert.equal(snapshotSourceAgeMinutes(snapshot, sourcePlus17), 17);
+assert.equal(snapshotBuildAgeMinutes(snapshot, sourcePlus17), 12);
+
+// Rebuilding an unchanged old HKO run must not reset its freshness clock.
+const rebuiltOldRun = await buildCompleteSwirlsSnapshot({
+  runtime,
+  maxConcurrent: 3,
+  now: () => new Date('2026-08-19T02:00:00.000Z'),
+});
+assert.equal(snapshotIsFresh(rebuiltOldRun, Date.parse('2026-08-19T02:00:00.000Z')), false);
+assert.equal(snapshotBuildAgeMinutes(rebuiltOldRun, Date.parse('2026-08-19T02:00:00.000Z')), 0);
+assert.equal(snapshotSourceAgeMinutes(rebuiltOldRun, Date.parse('2026-08-19T02:00:00.000Z')), 60);
 
 await assert.rejects(
   buildCompleteSwirlsSnapshot({
