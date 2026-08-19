@@ -7,11 +7,11 @@ Rain-Track 是香港定位降雨預報、HKO 雷達觀測與 HKO SWIRLS 兩小�
 
 ## Production baseline — 2026-08-19
 
-- Rain-Track main：`3136103366feb80bedccb3ef4bea5b23d3a4bf33`
+- Rain-Track main：`0e770c088932680c6df4176e467d04f5ab50e1dd`
 - App UI：`v1.6.4`
-- Rain Home：location-first 16-point SWIRLS trend
+- Rain Home：location-first 16-point SWIRLS trend + interactive point explorer
 - Forecast Map：free pan / zoom + 香港／深圳／南面海域／全域／定位 quick views
-- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa23`
+- PWA App Shell generation：`point-rain-pwa-v1.6.4-pwa24`
 - Worker baseline：`v2.5.0` + Phase 3C compact SWIRLS point routes
 - Radar Contract：`v1.0`
 - Production Worker：`https://radar.max-yu.workers.dev`
@@ -37,6 +37,20 @@ Rain-Track 是香港定位降雨預報、HKO 雷達觀測與 HKO SWIRLS 兩小�
 **6 分鐘是 Forecast valid-time cadence，不是 6 分鐘累積雨量。**
 
 Rain Home 不會把相鄰 30 分鐘 rolling accumulation 相減來偽造「6 分鐘雨量」。
+
+#### 16-point explorer
+
+折線圖的 16 個點都可直接檢視：
+
+- touch / click 每個預報點
+- 28 px touch target，不改變實際 plotted value
+- 顯示有效時間與 lead time
+- 顯示該點對應的 30 分鐘累積時窗
+- 顯示 `mm / 30 min` 數值
+- 鍵盤支援 Enter / Space / ArrowLeft / ArrowRight
+- 有雨時預設選第一個明顯降雨訊號；全乾時預設選 +30 分鐘
+
+這個 explorer 只提高「每 6 分鐘有效時間」的可讀性，不會把資料重新解釋為 6 分鐘累積雨量。
 
 ### SWIRLS compact point series
 
@@ -165,6 +179,7 @@ GitHub Pages PWA
   Rain Home
     └─ /api/rain/swirls/point-series
        └─ fallback: 16 × /api/rain/swirls/point
+       └─ interactive 16-point chart explorer
   2-hour Forecast Map
     └─ /api/rain/swirls/frame?frame=0..15
        └─ user-controlled quick views: HK / Shenzhen / South Sea / Coverage / Location
@@ -191,7 +206,7 @@ Hong Kong Observatory public data / GIS radar / SWIRLS sources
 
 ### Frontend
 
-`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa23`。
+`main` push 由 GitHub Pages 部署。PWA 使用 atomic App Shell generation；目前 generation 為 `pwa24`。
 
 ### Worker
 
@@ -234,6 +249,7 @@ PR / `main` validation 包括：
 - SWIRLS frontend 16-frame contract
 - Forecast playback + Radar/Forecast settings separation
 - Rain Home location-first integration
+- Rain Home 16-point explorer / keyboard / semantic guardrail
 - bottom-sheet removal / fixed Forecast timeline contract
 - Forecast Map quick-view contract：只由使用者觸發，不與 playback / timer 綁定
 - live SWIRLS frontend probe
@@ -269,7 +285,7 @@ Rain-Track standalone 可繼續開發，但產品層保持三個問題分離：
 
 | 模式 | 要回答的問題 | 主要資料 |
 | --- | --- | --- |
-| Rain Home | 我這裡會不會下雨？ | SWIRLS 定位 16-point series |
+| Rain Home | 我這裡會不會下雨？ | SWIRLS 定位 16-point series + point explorer |
 | 2 小時雨區 | 未來雨區在哪裡？ | SWIRLS forecast grids + user-controlled map views |
 | Radar | 現在實際雨區在哪裡？ | HKO radar observation |
 
