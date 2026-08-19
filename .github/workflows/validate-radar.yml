@@ -32,6 +32,7 @@ jobs:
           done
           node --check scripts/validate-app-shell.mjs
           node --check scripts/validate-boot-resilience.mjs
+          node --check scripts/validate-rain-home-first-paint.mjs
           node --check scripts/validate-forecast-map-contract.mjs
           node --check scripts/validate-swirls-contract.mjs
           node --check scripts/validate-swirls-point-sample.mjs
@@ -54,6 +55,8 @@ jobs:
         run: node scripts/validate-app-shell.mjs
       - name: Validate frontend boot resilience
         run: node scripts/validate-boot-resilience.mjs
+      - name: Validate Rain Home first paint
+        run: node scripts/validate-rain-home-first-paint.mjs
       - name: Validate forecast map contract
         run: node scripts/validate-forecast-map-contract.mjs
       - name: Validate SWIRLS raw feed contract
