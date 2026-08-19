@@ -23,6 +23,7 @@ jobs:
           node --check swirls-data.js
           node --check swirls-point-sample.js
           node --check swirls-point-request.js
+          node --check swirls-point-series-request.js
           node --check swirls-worker-runtime.js
           node --check service-worker.js
           for file in js/*.js; do
@@ -33,13 +34,16 @@ jobs:
           node --check scripts/validate-swirls-contract.mjs
           node --check scripts/validate-swirls-point-sample.mjs
           node --check scripts/validate-swirls-point-request.mjs
+          node --check scripts/validate-swirls-point-series-request.mjs
           node --check scripts/validate-phase3c-v2-worker.mjs
           node --check scripts/validate-swirls-runtime.mjs
           node --check scripts/validate-worker-swirls-inline.mjs
           node --check scripts/validate-swirls-frontend.mjs
           node --check scripts/probe-swirls-frontend-live.mjs
           node --check scripts/probe-swirls-point-production.mjs
+          node --check scripts/probe-swirls-point-series-production.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
+          node --check scripts/validate-rain-home.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
       - name: Validate forecast map contract
@@ -50,7 +54,9 @@ jobs:
         run: node scripts/validate-swirls-point-sample.mjs
       - name: Validate SWIRLS single-frame point request
         run: node scripts/validate-swirls-point-request.mjs
-      - name: Validate isolated Phase 3C v2 Worker entry
+      - name: Validate SWIRLS 16-point series request
+        run: node scripts/validate-swirls-point-series-request.mjs
+      - name: Validate compact SWIRLS Worker entry
         run: node scripts/validate-phase3c-v2-worker.mjs
       - name: Validate SWIRLS live fetch runtime
         run: node scripts/validate-swirls-runtime.mjs
@@ -60,5 +66,7 @@ jobs:
         run: node scripts/validate-swirls-frontend.mjs
       - name: Validate forecast playback and separated settings
         run: node scripts/validate-forecast-playback-settings.mjs
+      - name: Validate Rain Home location-first UI
+        run: node scripts/validate-rain-home.mjs
       - name: Probe live SWIRLS frontend contract
         run: node scripts/probe-swirls-frontend-live.mjs
