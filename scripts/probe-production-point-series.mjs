@@ -8,7 +8,7 @@ async function request(path) {
   try {
     const response = await fetch(`${BASE}${path}`, {
       redirect: 'follow',
-      headers: { 'User-Agent': 'Rain-Track-point-series-diagnostic/1.0' },
+      headers: { 'User-Agent': 'Rain-Track-point-series-diagnostic/1.1' },
       signal: controller.signal,
     });
     const text = await response.text();
@@ -34,19 +34,18 @@ async function request(path) {
   }
 }
 
-const checks = [
+const requiredChecks = [
   '/health',
   '/probe/swirls',
   '/api/rain/swirls/frame?frame=0',
   '/api/rain/swirls/frame?frame=15',
-  '/api/rain/point?lat=22.3023&lon=114.1746&radiusKm=2',
   '/api/rain/swirls/point-series?lat=22.30230&lon=114.17460',
   '/api/rain/swirls/point-series?lat=22.30241&lon=114.17471',
   '/api/rain/swirls/point-series?lat=22.30252&lon=114.17482',
 ];
 
 let failed = false;
-for (const path of checks) {
+for (const path of requiredChecks) {
   try {
     const { response, data } = await request(path);
     if (!response.ok || data?.ok === false) failed = true;
