@@ -45,6 +45,7 @@ jobs:
           node --check scripts/validate-forecast-playback-settings.mjs
           node --check scripts/validate-rain-home.mjs
           node --check scripts/validate-rain-map-quickviews.mjs
+          node --check scripts/validate-rain-home-point-explorer.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
       - name: Validate forecast map contract
@@ -71,5 +72,7 @@ jobs:
         run: node scripts/validate-rain-home.mjs
       - name: Validate forecast map quick views
         run: node scripts/validate-rain-map-quickviews.mjs
+      - name: Validate Rain Home 16-point explorer
+        run: node scripts/validate-rain-home-point-explorer.mjs
       - name: Probe live SWIRLS frontend contract
         run: node scripts/probe-swirls-frontend-live.mjs
