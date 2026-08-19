@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa22';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa23';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -27,6 +27,7 @@ const APP_SHELL = [
   './js/forecast-map-smoke.js',
   './js/rain-home.js',
   './js/rain-home-shell.js',
+  './js/rain-map-quickviews.js',
   './js/location.js',
   './js/map.js',
   './js/pwa.js',
