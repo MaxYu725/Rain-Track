@@ -38,6 +38,7 @@ jobs:
           node --check scripts/validate-worker-swirls-inline.mjs
           node --check scripts/validate-swirls-frontend.mjs
           node --check scripts/probe-swirls-frontend-live.mjs
+          node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
       - name: Validate PWA app shell
         run: node scripts/validate-app-shell.mjs
