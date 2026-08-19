@@ -1,3 +1,4 @@
-// Phase 2B5 live smoke entry retained as a no-op for App Shell compatibility.
-// The production Forecast Map is now available through the formal rain map mode UI.
-// `?forecastMapSmoke=1` intentionally has no effect after Phase 2B7 closure.
+// Phase 2B5 live smoke entry is retained as a lightweight compatibility entry.
+// The production Forecast Map remains owned by rain-map-mode.js; Rain Home v2
+// adds the location-first 6-minute chart and map/home view switching.
+import './rain-home.js';
