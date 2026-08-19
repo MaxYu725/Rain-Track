@@ -185,6 +185,7 @@ function normalizedPointSeriesCacheUrl(rawUrl, latitude, longitude) {
   url.search = '';
   url.searchParams.set('lat', Number(latitude).toFixed(5));
   url.searchParams.set('lon', Number(longitude).toFixed(5));
+  url.searchParams.set('v', VERSION);
   return url.toString();
 }
 
