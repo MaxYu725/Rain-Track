@@ -28,6 +28,7 @@ jobs:
           node --check swirls-point-sample.js
           node --check swirls-point-request.js
           node --check swirls-point-series-request.js
+          node --check swirls-point-series-batch.js
           node --check scripts/smoke-worker-production.mjs
           node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/probe-swirls-point-series-production.mjs
