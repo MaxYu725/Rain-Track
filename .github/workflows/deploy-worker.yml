@@ -7,6 +7,13 @@ on:
       - main
     paths:
       - '.github/workflows/deploy-worker.yml'
+      - 'worker.js'
+      - 'worker-entry.js'
+      - 'swirls-data.js'
+      - 'swirls-worker-runtime.js'
+      - 'swirls-point-series.js'
+      - 'scripts/smoke-worker-production.mjs'
+      - 'scripts/probe-production-point-series.mjs'
 
 permissions:
   contents: read
@@ -32,6 +39,7 @@ jobs:
           node --check worker-entry.js
           node --check swirls-point-series.js
           node --check scripts/smoke-worker-production.mjs
+          node --check scripts/probe-production-point-series.mjs
           node scripts/validate-worker-swirls-inline.mjs
           node scripts/validate-swirls-point-series.mjs
 
@@ -48,3 +56,6 @@ jobs:
 
       - name: Smoke production Worker
         run: node scripts/smoke-worker-production.mjs
+
+      - name: Stress compact point-series cold paths
+        run: node scripts/probe-production-point-series.mjs
