@@ -20,6 +20,8 @@ jobs:
         run: |
           node --check worker.js
           node --check swirls-data.js
+          node --check swirls-point-sample.js
+          node --check swirls-point-request.js
           node --check swirls-worker-runtime.js
           node --check service-worker.js
           for file in js/*.js; do
@@ -28,6 +30,8 @@ jobs:
           node --check scripts/validate-app-shell.mjs
           node --check scripts/validate-forecast-map-contract.mjs
           node --check scripts/validate-swirls-contract.mjs
+          node --check scripts/validate-swirls-point-sample.mjs
+          node --check scripts/validate-swirls-point-request.mjs
           node --check scripts/validate-swirls-runtime.mjs
           node --check scripts/validate-worker-swirls-inline.mjs
           node --check scripts/validate-swirls-frontend.mjs
@@ -39,6 +43,10 @@ jobs:
         run: node scripts/validate-forecast-map-contract.mjs
       - name: Validate SWIRLS raw feed contract
         run: node scripts/validate-swirls-contract.mjs
+      - name: Validate SWIRLS single-frame point sample
+        run: node scripts/validate-swirls-point-sample.mjs
+      - name: Validate SWIRLS single-frame point request
+        run: node scripts/validate-swirls-point-request.mjs
       - name: Validate SWIRLS live fetch runtime
         run: node scripts/validate-swirls-runtime.mjs
       - name: Validate inline SWIRLS Worker parity
