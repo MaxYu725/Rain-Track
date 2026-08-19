@@ -4,9 +4,13 @@ import { SwirlsPointRequestError } from './swirls-point-request.js';
 
 const DEFAULT_CONCURRENCY = 4;
 
-export function createSwirlsPointSeriesRequestHandler({ loadFrame, concurrency = DEFAULT_CONCURRENCY }) {
-  if (typeof loadFrame !== 'function') {
-    throw new Error('SWIRLS point-series request handler requires loadFrame(frameIndex)');
+export function createSwirlsPointSeriesRequestHandler({
+  loadFrame,
+  loadFrames,
+  concurrency = DEFAULT_CONCURRENCY
+}) {
+  if (typeof loadFrame !== 'function' && typeof loadFrames !== 'function') {
+    throw new Error('SWIRLS point-series request handler requires loadFrame(frameIndex) or loadFrames(frameIndexes)');
   }
   const parallelism = Math.max(1, Math.min(SWIRLS_RAW_CONTRACT.frameCount, Math.floor(Number(concurrency) || DEFAULT_CONCURRENCY)));
 
@@ -15,11 +19,11 @@ export function createSwirlsPointSeriesRequestHandler({ loadFrame, concurrency =
     const lon = parseCoordinate(url.searchParams.get('lon'), 'lon');
     assertSupportedCoverage(lat, lon);
 
-    const samples = await mapWithConcurrency(
-      Array.from({ length:SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => frameIndex),
-      parallelism,
-      async frameIndex => sampleSwirlsPoint(await loadFrame(frameIndex), lat, lon)
-    );
+    const frameIndexes = Array.from({ length:SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => frameIndex);
+    const frames = typeof loadFrames === 'function'
+      ? await loadFrames(frameIndexes, { concurrency:parallelism })
+      : await mapWithConcurrency(frameIndexes, parallelism, frameIndex => loadFrame(frameIndex));
+    const samples = frames.map(frame => sampleSwirlsPoint(frame, lat, lon));
 
     validateSeries(samples);
     const first = samples[0];

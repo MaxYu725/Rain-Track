@@ -1,6 +1,7 @@
 import stableWorker from './worker.js';
 import { createSwirlsPointRequestHandler, SwirlsPointRequestError } from './swirls-point-request.js';
 import { createSwirlsPointSeriesRequestHandler } from './swirls-point-series-request.js';
+import { createSwirlsPointSeriesBatchLoader } from './swirls-point-series-batch.js';
 import { createSwirlsRuntime, SWIRLS_FETCH_POLICY } from './swirls-worker-runtime.js';
 
 const POINT_PATH = '/api/rain/swirls/point';
@@ -77,8 +78,14 @@ function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {}) {
   };
 }
 
+const pointFetchText = createWorkerSwirlsFetchText();
 const pointRuntime = createSwirlsRuntime({
-  fetchText: createWorkerSwirlsFetchText(),
+  fetchText: pointFetchText,
+  policy: SWIRLS_FETCH_POLICY
+});
+const pointSeriesBatchLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: options => pointRuntime.loadIndex(options),
+  fetchText: pointFetchText,
   policy: SWIRLS_FETCH_POLICY
 });
 
@@ -87,7 +94,7 @@ const pointRequestHandler = createSwirlsPointRequestHandler({
 });
 
 const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({
-  loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex),
+  loadFrames: pointSeriesBatchLoader,
   concurrency: 4
 });
 
