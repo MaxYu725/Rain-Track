@@ -116,10 +116,10 @@ assert.ok(!/\.scrollLeft\s*=/.test(scaleSource), 'chart scale polish must never 
 assert.ok(smoke.includes("'./rain-home-chart-scale-polish.js'"), 'chart scale polish must load as a best-effort optional Home enhancement');
 assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
 assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'Y-axis gutter must load as a best-effort optional Home enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa59'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa60'/);
 assert.ok(sw.includes("'./js/rain-home-chart-scale.js'"), 'chart scale model must be included in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/rain-home-chart-scale-polish.js'"), 'chart scale polish must be included in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'chart intensity must be included in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'Y-axis gutter must be included in the PWA dependency inventory');
 
-console.log('Rain Home nice dynamic scale + fixed intensity bands + horizontal chart + Y-axis gutter v2 + pwa59 regression gate PASS');
+console.log('Rain Home nice dynamic scale + fixed intensity bands + horizontal chart + Y-axis gutter v2 + pwa60 regression gate PASS');
