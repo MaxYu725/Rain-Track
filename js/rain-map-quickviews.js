@@ -10,25 +10,25 @@ const PRESETS = Object.freeze([
   {
     id:'hong-kong',
     label:'香港',
-    aria:'查看全香港雨區',
+    aria:'查看及分析全香港雨區',
     bounds:[[22.14, 113.82], [22.58, 114.50]]
   },
   {
     id:'shenzhen',
     label:'深圳',
-    aria:'查看深圳附近雨區',
+    aria:'查看及分析深圳附近雨區',
     bounds:[[22.42, 113.72], [22.90, 114.65]]
   },
   {
     id:'south-sea',
     label:'南海',
-    aria:'查看香港以南海域雨區',
+    aria:'查看及分析香港以南海域雨區',
     bounds:[[21.35, 113.10], [22.22, 115.20]]
   }
 ]);
 
 let activeMode = 'off';
-let mapMoveHandler = null;
+let activeScope = 'regional';
 
 function ensureStyles() {
   if (document.getElementById('rain-map-quickviews-style')) return;
@@ -63,11 +63,11 @@ function ensureControls() {
   controls.id = 'rain-map-quickviews';
   controls.className = 'rain-map-quickviews';
   controls.setAttribute('role', 'group');
-  controls.setAttribute('aria-label', '雨區快速視野');
+  controls.setAttribute('aria-label', '雨區分析範圍');
   controls.innerHTML = `
-    <span class="rain-map-quickviews-label">雨區視野</span>
+    <span class="rain-map-quickviews-label">分析範圍</span>
     ${PRESETS.map(preset => `<button class="rain-map-quickview-btn" type="button" data-rain-map-view="${preset.id}" aria-label="${preset.aria}">${preset.label}</button>`).join('')}
-    <button class="rain-map-quickview-btn" type="button" data-rain-map-view="location" aria-label="查看目前定位附近">附近</button>`;
+    <button class="rain-map-quickview-btn" type="button" data-rain-map-view="location" aria-label="查看及分析目前定位附近">附近</button>`;
 
   controls.addEventListener('click', event => {
     const button = event.target.closest('[data-rain-map-view]');
@@ -78,19 +78,8 @@ function ensureControls() {
   });
 
   mapContainer.append(controls);
-  bindMapMoveClear();
   syncVisibility();
   return controls;
-}
-
-function bindMapMoveClear() {
-  if (!state.map || mapMoveHandler) return;
-  mapMoveHandler = event => {
-    if (!event?.originalEvent) return;
-    clearActive();
-  };
-  state.map.on?.('movestart', mapMoveHandler);
-  state.map.on?.('zoomstart', mapMoveHandler);
 }
 
 function clearActive() {
@@ -103,6 +92,14 @@ function markActive(button) {
   button?.classList.add('active');
 }
 
+function notifyAnalysisScope(scope) {
+  activeScope = scope;
+  if (typeof window?.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+  window.dispatchEvent(new CustomEvent('rain:forecast-analysis-scope-change', {
+    detail:{ scope }
+  }));
+}
+
 function applyView(id, button, { animate = true } = {}) {
   const map = state.map;
   if (!map) return;
@@ -113,6 +110,7 @@ function applyView(id, button, { animate = true } = {}) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     map.setView([lat, lon], Math.max(12, Number(map.getZoom?.()) || 12), { animate });
     markActive(button);
+    notifyAnalysisScope('location');
     return;
   }
 
@@ -124,6 +122,7 @@ function applyView(id, button, { animate = true } = {}) {
     paddingBottomRight:[20, 150]
   });
   markActive(button);
+  notifyAnalysisScope(id);
 }
 
 function applyDefaultRegionalView(controls) {
@@ -151,9 +150,15 @@ function syncVisibility() {
   syncBackButton(visible);
   if (!visible) {
     clearActive();
+    activeScope = 'regional';
     return;
   }
-  bindMapMoveClear();
+  const activeButton = controls.querySelector(`[data-rain-map-view="${activeScope}"]`);
+  if (activeButton && activeScope !== 'regional') {
+    markActive(activeButton);
+    notifyAnalysisScope(activeScope);
+    return;
+  }
   applyDefaultRegionalView(controls);
 }
 

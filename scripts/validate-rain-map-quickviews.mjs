@@ -17,14 +17,16 @@ for (const marker of [
   '21.65, 113.68',
   '22.80, 114.68',
   "data-rain-map-view=\"location\"",
-  '查看目前定位附近',
+  '查看及分析目前定位附近',
   'map.fitBounds',
   'map.setView',
   "activeMode === 'forecast'",
   "state.map?.invalidateSize?.({ pan:false, animate:false })",
   "applyView('regional', button, { animate:false })",
-  "state.map.on?.('movestart'",
-  "state.map.on?.('zoomstart'",
+  "rain:forecast-analysis-scope-change",
+  "notifyAnalysisScope('location')",
+  'notifyAnalysisScope(id)',
+  "activeScope = 'regional'",
   'body.rain-home-v2.rain-map-view .radius-label{display:none!important}',
   "button.textContent = '← 預報'",
   'max-width:calc(100% - 96px)'
@@ -33,6 +35,8 @@ for (const marker of [
 }
 
 assert.ok(!quick.includes("label:'全域'"), 'product quick views should prefer a regional orientation view over an engineering full-grid preset');
+assert.ok(!quick.includes("state.map.on?.('movestart'"), 'manual map pan must not clear the selected analysis scope');
+assert.ok(!quick.includes("state.map.on?.('zoomstart'"), 'manual map zoom must not clear the selected analysis scope');
 assert.ok(!quick.includes('rain:forecast-playback-change'), 'forecast playback must not auto-recenter the map');
 assert.ok(!quick.includes('setInterval('), 'quick views must not poll or repeatedly recenter');
 assert.ok(!quick.includes('setTimeout('), 'quick views must not schedule delayed recentering');
@@ -41,7 +45,8 @@ assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => im
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 41, `Forecast Map HUD disclosure requires PWA generation at least pwa41, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 46, `Context-aware Forecast Map requires PWA generation at least pwa46, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell inventory');
+assert.ok(serviceWorker.includes("'./js/forecast-map-context-analysis.js'"), 'context analyzer is missing from the PWA app shell inventory');
 
-console.log('Forecast Map compact regional quick-view validation passed');
+console.log('Forecast Map context-aware quick-view validation passed');
