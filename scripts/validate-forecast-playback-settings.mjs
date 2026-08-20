@@ -15,6 +15,9 @@ for (const marker of [
   "hkRainForecastSpeed",
   "document.visibilityState === 'hidden'",
   'await setFrame(nextIndex, { fromPlayback:true })',
+  'const nextIndex = snapshot.index >= snapshot.frameCount - 1 ? 0 : snapshot.index + 1',
+  'const linger = nextIndex === snapshot.frameCount - 1 ? Math.round(playbackDelay * 1.5) : playbackDelay',
+  'schedulePlaybackStep(generation, linger)',
   'export function initForecastTimeline()',
   "document.readyState === 'loading'",
   'initForecastTimeline();'
@@ -37,20 +40,25 @@ for (const marker of [
   "range?.addEventListener('change'",
   'target.click()',
   'stopForecastPlayback()',
+  'is-previewing',
+  "content:'預覽 '",
   "#forecast-map-timeline .forecast-frame-buttons{display:none!important}",
   "state.map?.invalidateSize?.({ pan:false, animate:false })",
   'forecast-map-info-button',
   'forecast-map-info-note',
   'INFO_HIDE_MS = 4500',
   'setTimeout(hideForecastInfo, INFO_HIDE_MS)',
-  '時間點相隔 6 分鐘',
-  '30 分鐘累積預測雨量',
+  '每 6 分鐘一個預報時間',
+  '30 分鐘累積預測',
   'forecast-map-product-meta',
   "meta.textContent = `${source} · 基準 ${timeText(snapshot?.issueTime)}`",
   'sanitizeFrameButtonLabels',
   'button.title = label',
   "button.setAttribute('aria-label', label)",
-  'requestAnimationFrame(() => syncForecastHud(getForecastMapRuntimeSnapshot()))'
+  'requestAnimationFrame(() => syncForecastHud(getForecastMapRuntimeSnapshot()))',
+  'bindMapInfoDismiss',
+  "mapContainer.addEventListener('pointerdown'",
+  'hideForecastInfo()'
 ]) {
   assert.ok(timeline.includes(marker), `map-first forecast timeline marker missing: ${marker}`);
 }
@@ -72,8 +80,13 @@ assert.ok(!timeline.match(/button\.title\s*=\s*[^\n]*30 分鐘/), 'desktop frame
 
 const inputHandler = timeline.match(/range\?\.addEventListener\('input',[\s\S]*?\n  \}\);/)?.[0] || '';
 assert.ok(inputHandler, 'mobile scrubber input handler missing');
+assert.ok(inputHandler.includes('stopForecastPlayback()'), 'scrubber drag must stop autoplay immediately');
+assert.ok(inputHandler.includes("root.classList.add('is-previewing')"), 'scrubber drag must be visibly marked as a preview until a frame commits');
 assert.ok(!inputHandler.includes('target.click()'), 'scrubber input must not trigger frame fetches while the user is dragging');
 assert.ok(!inputHandler.includes('setForecastMapIndex'), 'scrubber input must not call the frame loader while dragging');
+const changeHandler = timeline.match(/range\?\.addEventListener\('change',[\s\S]*?\n  \}\);/)?.[0] || '';
+assert.ok(changeHandler.includes('target.click()'), 'scrubber change must be the commit point for the selected frame');
+assert.ok(timeline.includes("root.classList.remove('is-previewing')"), 'committed frame events must clear the preview state');
 assert.ok(!timeline.includes('height:100%!important;overflow:hidden!important;visibility:visible'), 'timeline polish must not reintroduce the overflowing 100%-height flex child pattern');
 
 for (const removedMarker of [
@@ -111,9 +124,9 @@ assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the 
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 41, `Forecast Map disclosure polish requires PWA generation at least pwa41, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 42, `Forecast Map playback polish requires PWA generation at least pwa42, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline.js'"), 'forecast timeline wrapper is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + fullscreen viewport + explicit on-demand data-note validation passed');
+console.log('Forecast playback synchronization + preview scrubber + on-demand note validation passed');
