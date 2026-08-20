@@ -7,6 +7,7 @@ const home = readFileSync('js/rain-home.js', 'utf8');
 const map = readFileSync('js/map.js', 'utf8');
 const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
 const mode = readFileSync('js/rain-map-mode.js', 'utf8');
+const radarEntry = readFileSync('js/radar-entry.js', 'utf8');
 const pwa = readFileSync('js/pwa.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
@@ -54,19 +55,31 @@ assert.ok(!boot.includes('caches.keys()'), 'boot watchdog must not migrate cache
 assert.ok(!boot.includes('registration?.unregister?.()'), 'boot watchdog must not unregister service workers');
 
 assert.ok(smoke.includes("import './rain-home.js';"), 'Forecast Map smoke may reuse Rain Home');
+assert.ok(smoke.includes("'./radar-entry.js'"), 'direct Radar entry must remain an optional map enhancement');
 assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'map enhancements must remain best-effort');
 assert.ok(existsSync('js/rain-map-mode-heavy.js'), 'full rain-map mode implementation is missing');
 assert.ok(mode.includes("import('./rain-map-mode-heavy.js')"), 'Rain Home map facade must defer the heavy map graph');
 assert.ok(!mode.match(/^import\s/m), 'rain-map-mode facade must not have static imports');
 
+for (const marker of [
+  "id = 'radar-entry-button'",
+  "entryButton.textContent = '雷達'",
+  "getRainMapMode() === 'radar' ? 'off' : 'radar'",
+  'await setRainMapMode(requested)',
+  "window.addEventListener('rain:map-mode-change'"
+]) assert.ok(radarEntry.includes(marker), `Radar entry marker missing: ${marker}`);
+assert.ok(!radarEntry.includes("from './radar.js'"), 'Radar entry must use the shared rain-map mode controller instead of creating a second Radar state path');
+assert.ok(!radarEntry.includes('fetchRadarFrames'), 'Radar entry must not become a second Radar data loader');
+
 assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force reload');
 assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA reload must require explicit update application');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa49'/);
-assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa49 must remain zero-prefetch');
-assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa49 install must remain zero-prefetch');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa50'/);
+assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa50 must remain zero-prefetch');
+assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa50 install must remain zero-prefetch');
 assert.ok(sw.includes('navigationNetworkFirst(request)'), 'navigation must prefer the live network');
 assert.ok(sw.includes('shellAssetNetworkFirst(request)'), 'same-origin assets must prefer the live network');
 assert.ok(sw.includes("fetch(request, { cache:'no-store' })"), 'shell network fetches must bypass stale HTTP cache');
 assert.ok(sw.includes("'./js/rain-map-mode-heavy.js'"), 'heavy map module must stay in dependency inventory');
+assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must stay in the PWA dependency inventory');
 
-console.log('Boot watchdog isolation + pwa49 resilience PASS');
+console.log('Boot isolation + direct Radar entry + pwa50 resilience PASS');
