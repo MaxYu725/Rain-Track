@@ -45,6 +45,7 @@ jobs:
           node --check scripts/probe-swirls-frontend-live.mjs
           node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/probe-swirls-point-series-production.mjs
+          node --check scripts/benchmark-swirls-series.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
           node --check scripts/validate-rain-home.mjs
           node --check scripts/validate-rain-map-quickviews.mjs
@@ -87,6 +88,10 @@ jobs:
         run: node scripts/validate-rain-home-time-axis.mjs
       - name: Validate forecast rain-area summary
         run: node scripts/validate-forecast-rain-area-summary.mjs
+      - name: Benchmark SWIRLS zero-base series path
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: node scripts/benchmark-swirls-series.mjs
       # This checks the already-deployed Worker, not the PR under test. Keep it
       # informational on main; deploy-worker.yml owns blocking production smoke.
       - name: Probe current production SWIRLS frontend contract
