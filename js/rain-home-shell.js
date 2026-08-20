@@ -9,18 +9,44 @@ const LEGACY_SHEET_CLASSES = Object.freeze([
 let panelObserver = null;
 let bodyObserver = null;
 
+function panelHasLegacySheetState(panel) {
+  if (!panel) return false;
+  return LEGACY_SHEET_CLASSES.some(className => panel.classList.contains(className))
+    || panel.hasAttribute('data-sheet')
+    || Boolean(panel.style.getPropertyValue('height'));
+}
+
+function bodyHasLegacySheetState() {
+  return document.body.classList.contains('sheet-peek-active')
+    || document.body.classList.contains('sheet-expanded-active');
+}
+
 function stripLegacySheetState() {
-  document.getElementById('sheet-handle')?.remove();
-  document.getElementById('forecast-toggle')?.remove();
+  const handle = document.getElementById('sheet-handle');
+  if (handle) handle.remove();
+  const toggle = document.getElementById('forecast-toggle');
+  if (toggle) toggle.remove();
 
   const panel = document.getElementById('forecast-panel');
-  if (panel) {
-    LEGACY_SHEET_CLASSES.forEach(className => panel.classList.remove(className));
-    panel.removeAttribute('data-sheet');
-    panel.style.removeProperty('height');
+  if (panel && panelHasLegacySheetState(panel)) {
+    const staleClasses = LEGACY_SHEET_CLASSES.filter(className => panel.classList.contains(className));
+    if (staleClasses.length) panel.classList.remove(...staleClasses);
+    if (panel.hasAttribute('data-sheet')) panel.removeAttribute('data-sheet');
+    if (panel.style.getPropertyValue('height')) panel.style.removeProperty('height');
   }
 
-  document.body.classList.remove('sheet-peek-active', 'sheet-expanded-active');
+  if (bodyHasLegacySheetState()) {
+    document.body.classList.remove('sheet-peek-active', 'sheet-expanded-active');
+  }
+}
+
+function restorePanelIfNeeded() {
+  const panel = document.getElementById('forecast-panel');
+  if (panelHasLegacySheetState(panel)) stripLegacySheetState();
+}
+
+function restoreBodyIfNeeded() {
+  if (bodyHasLegacySheetState()) stripLegacySheetState();
 }
 
 function migrateLegacySheetStorage() {
@@ -34,14 +60,14 @@ function initRainHomeShell() {
 
   const panel = document.getElementById('forecast-panel');
   if (panel) {
-    panelObserver = new MutationObserver(stripLegacySheetState);
+    panelObserver = new MutationObserver(restorePanelIfNeeded);
     panelObserver.observe(panel, {
       attributes:true,
       attributeFilter:['class', 'style', 'data-sheet']
     });
   }
 
-  bodyObserver = new MutationObserver(stripLegacySheetState);
+  bodyObserver = new MutationObserver(restoreBodyIfNeeded);
   bodyObserver.observe(document.body, {
     attributes:true,
     attributeFilter:['class']
