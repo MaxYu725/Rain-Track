@@ -15,8 +15,12 @@ function finite(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, finite(value)));
+}
+
 function percentage(value) {
-  return `${Math.round(Math.max(0, Math.min(1, finite(value))) * 100)}%`;
+  return `${Math.round(clamp01(value) * 100)}%`;
 }
 
 function scopeZones(summary, scope) {
@@ -130,43 +134,82 @@ function trendIsContinuous(points, direction) {
   return meaningful >= 2 && aligned / meaningful >= TREND_RATIO;
 }
 
-function scopedDevelopment(frames, scope) {
-  const keys = new Set();
-  frames.forEach(frame => scopeZones(frame.spatialSummary, scope).forEach(zone => keys.add(zone.key)));
-  const candidates = [];
-  keys.forEach(key => {
-    const points = frames.map(frame => {
-      const zone = scope === 'location'
-        ? frame.spatialSummary?.nearby
-        : frame.spatialSummary?.productZones?.[key];
-      return zone ? { index:frame.index, share:finite(zone.wetShare), label:zone.label } : null;
-    }).filter(Boolean);
-    if (points.length < 3) return;
-    const groupSize = Math.min(3, Math.max(1, Math.floor(points.length / 3)));
-    const early = points.slice(0, groupSize).reduce((sum, point) => sum + point.share, 0) / groupSize;
-    const late = points.slice(-groupSize).reduce((sum, point) => sum + point.share, 0) / groupSize;
-    const delta = late - early;
-    const direction = delta >= SHARE_DELTA && late >= ACTIVE_SHARE
-      ? 'increasing'
-      : delta <= -SHARE_DELTA && early >= ACTIVE_SHARE
-        ? 'decreasing'
-        : null;
-    if (!direction) return;
-    candidates.push({ key, label:points[0].label, delta, direction, points });
-  });
-  candidates.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-  const strongest = candidates[0];
-  if (!strongest) return null;
-  const continuous = trendIsContinuous(strongest.points, strongest.direction);
-  const verb = strongest.direction === 'increasing' ? '增多' : '減少';
+function developmentForKey(frames, scope, key) {
+  const points = frames.map(frame => {
+    const zone = scope === 'location'
+      ? frame.spatialSummary?.nearby
+      : frame.spatialSummary?.productZones?.[key];
+    return zone ? { index:frame.index, share:finite(zone.wetShare), label:zone.label || '附近' } : null;
+  }).filter(Boolean);
+  if (points.length < MIN_MOTION_FRAMES) return null;
+
+  const groupSize = Math.min(3, Math.max(1, Math.floor(points.length / 3)));
+  const early = points.slice(0, groupSize).reduce((sum, point) => sum + point.share, 0) / groupSize;
+  const late = points.slice(-groupSize).reduce((sum, point) => sum + point.share, 0) / groupSize;
+  const delta = late - early;
+  const direction = delta >= SHARE_DELTA && late >= ACTIVE_SHARE
+    ? 'increasing'
+    : delta <= -SHARE_DELTA && early >= ACTIVE_SHARE
+      ? 'decreasing'
+      : null;
+  if (!direction) return null;
+
+  const continuous = trendIsContinuous(points, direction);
+  const verb = direction === 'increasing' ? '增多' : '減少';
+  const magnitude = Math.min(1, Math.abs(delta) / 0.30);
+  const sampleScore = Math.min(1, points.length / 8);
+  const confidence = clamp01(0.35 + magnitude * 0.30 + sampleScore * 0.15 + (continuous ? 0.20 : 0.08));
   return {
-    ...strongest,
+    key,
+    label:points[0].label,
+    delta,
+    direction,
+    points,
     continuous,
-    text:`${strongest.label}雨區${continuous ? '逐步' : '較早段'}${verb}`
+    confidence,
+    text:`${points[0].label}雨區${continuous ? '逐步' : '較早段'}${verb}`
   };
 }
 
-export function summarizeForecastRainContextMotion(frameSummaries, { frameCount, scope = 'regional', selected } = {}) {
+function scopedDevelopment(frames, scope, currentSummary) {
+  const keys = new Set();
+  frames.forEach(frame => scopeZones(frame.spatialSummary, scope).forEach(zone => zone?.key && keys.add(zone.key)));
+  const currentMetric = scopedMetric(currentSummary || frames.at(-1)?.spatialSummary, scope);
+  const primaryZone = currentMetric.wetZones[0] || currentMetric.zones[0] || null;
+  const candidates = [...keys]
+    .map(key => developmentForKey(frames, scope, key))
+    .filter(Boolean)
+    .map(candidate => {
+      const currentZone = currentMetric.zones.find(zone => zone?.key === candidate.key);
+      const relevance = Math.max(clamp01(currentZone?.wetShare), Math.min(1, finite(currentZone?.sumMm) / Math.max(1, currentMetric.activity)));
+      return { ...candidate, relevance, score:candidate.confidence * (0.65 + relevance * 0.35) };
+    })
+    .sort((a, b) => b.score - a.score || Math.abs(b.delta) - Math.abs(a.delta));
+
+  const primaryDevelopment = primaryZone ? candidates.find(candidate => candidate.key === primaryZone.key) || null : null;
+  const selectedDevelopment = primaryDevelopment || candidates[0] || null;
+  if (!selectedDevelopment) return { primaryZone, selected:null, primaryDevelopment:null };
+
+  const isPrimary = Boolean(primaryZone && selectedDevelopment.key === primaryZone.key);
+  const contextText = isPrimary || !primaryZone || finite(primaryZone.wetShare) < ACTIVE_SHARE
+    ? selectedDevelopment.text
+    : `${primaryZone.label}目前較明顯，${selectedDevelopment.text}`;
+  return {
+    primaryZone,
+    primaryDevelopment,
+    selected:{ ...selectedDevelopment, isPrimary, contextText }
+  };
+}
+
+function motionConfidence(activityRatio, wetCellRatio, development) {
+  const ratioEvidence = Math.max(
+    activityRatio > 0 ? Math.min(1, Math.abs(Math.log(activityRatio)) / Math.log(2.5)) : 1,
+    wetCellRatio > 0 ? Math.min(1, Math.abs(Math.log(wetCellRatio)) / Math.log(2.5)) : 1
+  );
+  return clamp01(0.45 + ratioEvidence * 0.35 + finite(development?.confidence) * 0.20);
+}
+
+export function summarizeForecastRainContextMotion(frameSummaries, { frameCount, scope = 'regional', selected, currentSummary } = {}) {
   const frames = (Array.isArray(frameSummaries) ? frameSummaries : [])
     .filter(frame => frame?.loaded && frame?.spatialSummary)
     .sort((a, b) => finite(a.index) - finite(b.index));
@@ -174,7 +217,7 @@ export function summarizeForecastRainContextMotion(frameSummaries, { frameCount,
   const complete = Boolean(totalFrameCount && frames.length >= totalFrameCount);
   const base = { loadedFrameCount:frames.length, frameCount:totalFrameCount, complete };
   if (scope === 'regional') return { ...base, ready:false, status:'regional-delegated', label:'' };
-  if (frames.length < MIN_MOTION_FRAMES) return { ...base, ready:false, status:'observing', label:'正在觀察雨區變化' };
+  if (frames.length < MIN_MOTION_FRAMES) return { ...base, ready:false, status:'observing', label:'正在觀察雨區變化', confidence:0 };
 
   const metrics = frames.map(frame => ({ index:frame.index, ...scopedMetric(frame.spatialSummary, scope) }));
   const groupSize = Math.min(3, Math.max(1, Math.floor(metrics.length / 3)));
@@ -188,16 +231,59 @@ export function summarizeForecastRainContextMotion(frameSummaries, { frameCount,
   const activityRatio = earlyActivity > 0 ? lateActivity / earlyActivity : (lateActivity > 0 ? Infinity : 1);
   const wetCellRatio = earlyWetCells > 0 ? lateWetCells / earlyWetCells : (lateWetCells > 0 ? Infinity : 1);
   const name = scopedName(scope, selected);
-  const development = scopedDevelopment(frames, scope);
+  const developmentState = scopedDevelopment(frames, scope, currentSummary);
+  const primaryDevelopment = developmentState.primaryDevelopment;
+  const selectedDevelopment = developmentState.selected;
 
   if (earlyActivity > 0 && activityRatio <= 0.55 && wetCellRatio <= 0.72) {
-    const fallback = scope === 'location' ? `${name}雨區逐步減弱` : `${name}雨區逐步減弱`;
-    return { ...base, ready:true, status:'weakening', label:development?.direction === 'decreasing' ? development.text : fallback, development };
+    const label = primaryDevelopment?.direction === 'decreasing'
+      ? primaryDevelopment.text
+      : `${name}雨區逐步減弱`;
+    return {
+      ...base,
+      ready:true,
+      status:'weakening',
+      label,
+      confidence:motionConfidence(activityRatio, wetCellRatio, primaryDevelopment),
+      focus:primaryDevelopment ? 'primary-zone' : 'scope-total',
+      development:primaryDevelopment || selectedDevelopment
+    };
   }
+
   if ((earlyActivity <= 0 && lateActivity > 0) || (Number.isFinite(activityRatio) && activityRatio >= 1.7 && wetCellRatio >= 1.3)) {
-    const fallback = scope === 'location' ? `${name}雨區逐步增強` : `${name}雨區逐步增強`;
-    return { ...base, ready:true, status:'strengthening', label:development?.direction === 'increasing' ? development.text : fallback, development };
+    const label = primaryDevelopment?.direction === 'increasing'
+      ? primaryDevelopment.text
+      : `${name}雨區逐步增強`;
+    return {
+      ...base,
+      ready:true,
+      status:'strengthening',
+      label,
+      confidence:motionConfidence(activityRatio, wetCellRatio, primaryDevelopment),
+      focus:primaryDevelopment ? 'primary-zone' : 'scope-total',
+      development:primaryDevelopment || selectedDevelopment
+    };
   }
-  if (development) return { ...base, ready:true, status:'developing', label:development.text, development };
-  return { ...base, ready:true, status:'steady', label:`${name}雨區變化不大`, development:null };
+
+  if (selectedDevelopment) {
+    return {
+      ...base,
+      ready:true,
+      status:'developing',
+      label:selectedDevelopment.contextText,
+      confidence:selectedDevelopment.confidence,
+      focus:selectedDevelopment.isPrimary ? 'primary-zone' : 'secondary-zone',
+      development:selectedDevelopment
+    };
+  }
+
+  return {
+    ...base,
+    ready:true,
+    status:'steady',
+    label:`${name}雨區變化不大`,
+    confidence:0.55,
+    focus:'scope-total',
+    development:null
+  };
 }
