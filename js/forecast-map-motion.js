@@ -4,6 +4,8 @@ const APPROACH_KM = 12;
 const AWAY_KM = 15;
 const MOVE_KM = 15;
 const STEADY_KM = 10;
+const REGIONAL_SHARE_DELTA = 0.08;
+const REGIONAL_ACTIVE_SHARE = 0.12;
 
 function finite(value, fallback = 0) {
   const number = Number(value);
@@ -13,13 +15,6 @@ function finite(value, fallback = 0) {
 function totalWetMm(summary) {
   if (Number.isFinite(Number(summary?.totalWetMm))) return Number(summary.totalWetMm);
   return Object.values(summary?.zones || {}).reduce((sum, zone) => sum + finite(zone?.sumMm), 0);
-}
-
-function dominantZone(summary) {
-  return ['hongKong', 'shenzhen', 'southSea']
-    .map(key => summary?.zones?.[key])
-    .filter(Boolean)
-    .sort((a, b) => finite(b?.score) - finite(a?.score))[0]?.key || null;
 }
 
 function haversineKm(a, b) {
@@ -48,6 +43,7 @@ function groupSummary(frames) {
   let weightedLat = 0;
   let weightedLon = 0;
   const zoneScores = { hongKong:0, shenzhen:0, southSea:0 };
+  const productAggregate = {};
 
   summaries.forEach(summary => {
     const frameActivity = Math.max(0, totalWetMm(summary));
@@ -55,6 +51,21 @@ function groupSummary(frames) {
     wetCells += Math.max(0, finite(summary?.totalWetCellCount));
     hkShare += Math.max(0, finite(summary?.zones?.hongKong?.wetShare));
     Object.keys(zoneScores).forEach(key => { zoneScores[key] += Math.max(0, finite(summary?.zones?.[key]?.score)); });
+
+    Object.values(summary?.productZones || {}).forEach(zone => {
+      if (!zone?.key) return;
+      if (!productAggregate[zone.key]) {
+        productAggregate[zone.key] = {
+          key:zone.key,
+          label:zone.label,
+          parent:zone.parent,
+          wetShare:0,
+          score:0
+        };
+      }
+      productAggregate[zone.key].wetShare += Math.max(0, finite(zone.wetShare));
+      productAggregate[zone.key].score += Math.max(0, finite(zone.score));
+    });
 
     const lat = Number(summary?.centroid?.lat);
     const lon = Number(summary?.centroid?.lon);
@@ -71,13 +82,52 @@ function groupSummary(frames) {
     ? { lat:weightedLat / centroidWeight, lon:weightedLon / centroidWeight }
     : null;
   const dominant = Object.entries(zoneScores).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+  const productZones = Object.fromEntries(Object.entries(productAggregate).map(([key, zone]) => [key, {
+    ...zone,
+    wetShare:zone.wetShare / count,
+    score:zone.score / count
+  }]));
+  const dominantProduct = Object.values(productZones).sort((a, b) => b.score - a.score)[0] || null;
 
   return {
     activity:activity / count,
     wetCells:wetCells / count,
     hkShare:hkShare / count,
     centroid,
-    dominant
+    dominant,
+    dominantProduct,
+    productZones
+  };
+}
+
+function regionalDevelopment(early, late) {
+  const keys = new Set([...Object.keys(early?.productZones || {}), ...Object.keys(late?.productZones || {})]);
+  const candidates = [...keys].map(key => {
+    const earlyZone = early?.productZones?.[key];
+    const lateZone = late?.productZones?.[key];
+    const earlyShare = finite(earlyZone?.wetShare);
+    const lateShare = finite(lateZone?.wetShare);
+    return {
+      key,
+      label:lateZone?.label || earlyZone?.label || key,
+      parent:lateZone?.parent || earlyZone?.parent || null,
+      earlyShare,
+      lateShare,
+      delta:lateShare - earlyShare
+    };
+  }).filter(item => {
+    if (item.delta >= REGIONAL_SHARE_DELTA) return item.lateShare >= REGIONAL_ACTIVE_SHARE;
+    if (item.delta <= -REGIONAL_SHARE_DELTA) return item.earlyShare >= REGIONAL_ACTIVE_SHARE;
+    return false;
+  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+
+  const strongest = candidates[0];
+  if (!strongest) return null;
+  const increasing = strongest.delta > 0;
+  return {
+    ...strongest,
+    direction:increasing ? 'increasing' : 'decreasing',
+    text:`${strongest.label}雨區逐步${increasing ? '增多' : '減少'}`
   };
 }
 
@@ -104,6 +154,19 @@ function resultBase(frames, frameCount) {
   };
 }
 
+function withDevelopment(label, development) {
+  return development ? `${label}，${development.text}` : label;
+}
+
+function sourceApproachLabel(early) {
+  const product = early?.dominantProduct;
+  if (product?.parent === 'southSea') return `${product.label}雨區正向香港靠近`;
+  if (product?.parent === 'shenzhen') return `${product.label}雨區正向香港靠近`;
+  if (early?.dominant === 'southSea') return '雨帶正由南面海域向香港靠近';
+  if (early?.dominant === 'shenzhen') return '深圳方向雨區正向香港靠近';
+  return '雨區正向香港靠近';
+}
+
 export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {}) {
   const frames = (Array.isArray(frameSummaries) ? frameSummaries : [])
     .filter(frame => frame?.loaded && frame?.spatialSummary)
@@ -124,7 +187,8 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
       label:base.complete ? '未來兩小時雨區變化不明顯' : '暫未見明顯雨區移動',
       displacementKm:0,
       distanceToHongKongChangeKm:0,
-      activityRatio:0
+      activityRatio:0,
+      development:null
     };
   }
 
@@ -136,15 +200,18 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
   const activityRatio = early.activity > 0 ? late.activity / early.activity : (late.activity > 0 ? Infinity : 1);
   const wetCellRatio = early.wetCells > 0 ? late.wetCells / early.wetCells : (late.wetCells > 0 ? Infinity : 1);
   const hkShareDelta = late.hkShare - early.hkShare;
+  const development = regionalDevelopment(early, late);
 
   if (early.activity > 0 && activityRatio <= 0.55 && wetCellRatio <= 0.7) {
+    const specific = development?.direction === 'decreasing' ? development.text : null;
     return {
       ...base,
       ready:true,
       status:'weakening',
-      label:early.hkShare >= 0.08 ? '香港附近雨區逐步減弱' : '雨區整體逐步減弱',
+      label:specific || (early.hkShare >= 0.08 ? '香港附近雨區逐步減弱' : '雨區整體逐步減弱'),
       activityRatio,
-      wetCellRatio
+      wetCellRatio,
+      development
     };
   }
 
@@ -162,21 +229,17 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
       : 0;
 
     if (distanceChange >= APPROACH_KM) {
-      const label = early.dominant === 'southSea'
-        ? '雨帶正由南面海域向香港靠近'
-        : early.dominant === 'shenzhen'
-          ? '深圳方向雨區正向香港靠近'
-          : '雨區正向香港靠近';
       return {
         ...base,
         ready:true,
         status:'approaching-hong-kong',
-        label,
+        label:withDevelopment(sourceApproachLabel(early), development),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
-        hkShareDelta
+        hkShareDelta,
+        development
       };
     }
 
@@ -185,12 +248,13 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
         ...base,
         ready:true,
         status:'moving-away',
-        label:'雨區逐步遠離香港',
+        label:withDevelopment('雨區逐步遠離香港', development),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
-        hkShareDelta
+        hkShareDelta,
+        development
       };
     }
 
@@ -199,12 +263,13 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
         ...base,
         ready:true,
         status:'moving',
-        label:`雨區主要向${directionLabel(dxKm, dyKm)}移動`,
+        label:withDevelopment(`雨區主要向${directionLabel(dxKm, dyKm)}移動`, development),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
-        hkShareDelta
+        hkShareDelta,
+        development
       };
     }
 
@@ -213,25 +278,28 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
         ...base,
         ready:true,
         status:'steady',
-        label:'雨區位置變化不大',
+        label:withDevelopment('雨區位置變化不大', development),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
-        hkShareDelta
+        hkShareDelta,
+        development
       };
     }
   }
 
   if ((early.activity <= 0 && late.activity > 0) || (Number.isFinite(activityRatio) && activityRatio >= 1.7 && wetCellRatio >= 1.3)) {
+    const specific = development?.direction === 'increasing' ? development.text : null;
     return {
       ...base,
       ready:true,
       status:'strengthening',
-      label:'雨區整體逐步增強',
+      label:specific || '雨區整體逐步增強',
       activityRatio,
       wetCellRatio,
-      hkShareDelta
+      hkShareDelta,
+      development
     };
   }
 
@@ -239,9 +307,10 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
     ...base,
     ready:true,
     status:'variable',
-    label:'雨區位置有變化，移動方向未明顯',
+    label:withDevelopment('雨區位置有變化，移動方向未明顯', development),
     activityRatio,
     wetCellRatio,
-    hkShareDelta
+    hkShareDelta,
+    development
   };
 }
