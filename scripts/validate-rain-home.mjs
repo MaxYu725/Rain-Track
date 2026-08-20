@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const api = readFileSync(new URL('../js/api.js', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 const home = readFileSync(new URL('../js/rain-home.js', import.meta.url), 'utf8');
 const time = readFileSync(new URL('../js/rain-home-time.js', import.meta.url), 'utf8');
 const state = readFileSync(new URL('../js/state.js', import.meta.url), 'utf8');
@@ -13,6 +14,16 @@ assert.match(api, /fetchSwirlsPointSeries/);
 assert.match(api, /\/api\/rain\/swirls\/point-series/);
 assert.ok(!api.includes('fetchSwirlsPointFrame'), 'Rain Home API must not expose the 16-frame fallback helper');
 assert.ok(!api.includes("cache:'no-store'"), 'generic browser API requests must not force no-store');
+
+assert.match(app, /const RAIN_HOME_OWNS_FORECAST = document\.body\.classList\.contains\('rain-home-v2'\)/);
+assert.match(app, /RAIN_HOME_OWNS_FORECAST \? Promise\.resolve\(\) : loadPointForecast\(\{ force:false \}\)/);
+assert.match(app, /async function loadPointForecast[\s\S]*?if \(RAIN_HOME_OWNS_FORECAST\) return;/);
+assert.match(app, /if \(!RAIN_HOME_OWNS_FORECAST\) setupRefreshLifecycle\(\)/);
+assert.match(app, /if \(!RAIN_HOME_OWNS_FORECAST\) window\.addEventListener\('rain:refresh'/);
+assert.match(app, /refresh-button[\s\S]*?RAIN_HOME_OWNS_FORECAST \? requestHomeRefresh\(\) : refresh\(false\)/);
+assert.match(app, /if \(!RAIN_HOME_OWNS_FORECAST\) void loadPointForecast\(\{ force:false \}\)/);
+assert.match(app, /function setupRefreshLifecycle\(\) \{\n  if \(RAIN_HOME_OWNS_FORECAST\) return;/);
+assert.match(app, /function scheduleRefresh\(\) \{\n  if \(RAIN_HOME_OWNS_FORECAST\) return;/);
 
 assert.match(home, /FRAME_COUNT\s*=\s*16/);
 assert.match(home, /RAIN_HOME_CADENCE_MINUTES/);
