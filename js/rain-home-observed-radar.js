@@ -17,6 +17,15 @@ let activeController = null;
 let observer = null;
 let scheduled = false;
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 function formatClock(value) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '—';
@@ -148,13 +157,13 @@ function renderObserved(root, samples, summary) {
     const label = level > 0
       ? `${formatClock(sample.time)} ${radarCoverageLabel(sample.nearby.coverage)}回波`
       : `${formatClock(sample.time)} 暫未見明顯回波`;
-    return `<span class="rain-home-observed-segment ${observedLevelClass(level)}" title="${label}" aria-label="${label}"></span>`;
+    return `<span class="rain-home-observed-segment ${observedLevelClass(level)}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"></span>`;
   }).join('');
   section.innerHTML = `
     <div class="rain-home-observed-head"><div class="rain-home-observed-title">過去 30 分鐘實況</div><div class="rain-home-observed-source">HKO 雷達回波</div></div>
-    <div class="rain-home-observed-summary">截至 ${summary.latestClock} · ${summary.text}</div>
+    <div class="rain-home-observed-summary">截至 ${escapeHtml(summary.latestClock)} · ${escapeHtml(summary.text)}</div>
     <div class="rain-home-observed-track" style="--rain-observed-count:${samples.length}">${cells}</div>
-    <div class="rain-home-observed-times"><span>${summary.firstClock}</span><span>${summary.lastClock}</span></div>`;
+    <div class="rain-home-observed-times"><span>${escapeHtml(summary.firstClock)}</span><span>${escapeHtml(summary.lastClock)}</span></div>`;
   root.querySelector('.rain-home-chart-section')?.before(section);
 
   const verdict = String(root.querySelector('.rain-home-verdict')?.textContent || '');
@@ -168,7 +177,8 @@ function renderObserved(root, samples, summary) {
 }
 
 async function loadObservedForRoot(root) {
-  if (!root?.isConnected || root.dataset.viewKind !== 'ready') return;
+  if (!root?.isConnected || root.dataset.viewKind !== 'ready' || root.dataset.rainHomeObservedAttempted === '1') return;
+  root.dataset.rainHomeObservedAttempted = '1';
   const token = ++loadToken;
   activeController?.abort();
   const controller = new AbortController();
@@ -206,7 +216,7 @@ function scheduleEnhance() {
   const run = () => {
     scheduled = false;
     const root = document.querySelector('.rain-home-root[data-view-kind="ready"]');
-    if (!root || root.dataset.rainHomeObservedLoading === '1') return;
+    if (!root || root.dataset.rainHomeObservedLoading === '1' || root.dataset.rainHomeObservedAttempted === '1') return;
     void loadObservedForRoot(root);
   };
   if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout:1200 });
@@ -219,6 +229,11 @@ function resetObserved() {
   activeController = null;
   analysisCache.clear();
   const root = document.querySelector('.rain-home-root[data-view-kind="ready"]');
+  if (root) {
+    delete root.dataset.rainHomeObservedAttempted;
+    delete root.dataset.rainHomeObservedKey;
+    delete root.dataset.rainHomeObservedLoading;
+  }
   clearObserved(root);
   scheduleEnhance();
 }
