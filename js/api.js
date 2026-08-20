@@ -1,7 +1,7 @@
 import { REQUEST_TIMEOUT_MS } from './config.js';
 import { state } from './state.js';
 
-const SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450;
+const SWIRLS_SERIES_TRANSPORT_RETRY_DELAYS_MS = Object.freeze([650, 1800]);
 
 function linkedAbortController(externalSignal, timeoutMs) {
   const controller = new AbortController();
@@ -50,7 +50,7 @@ function isTransientTransportError(error) {
   return /failed to fetch|network|連線逾時/i.test(String(error.message || error));
 }
 
-function waitForTransportRetry(signal, delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS) {
+function waitForTransportRetry(signal, delayMs) {
   if (signal?.aborted) return Promise.reject(signal.reason || new DOMException('Aborted', 'AbortError'));
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -72,13 +72,20 @@ export function fetchPointForecast(point, radiusKm, options = {}) {
 
 export async function fetchSwirlsPointSeries(point, options = {}) {
   const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:30_000, ...options };
-  try {
-    return await api(path, requestOptions);
-  } catch (error) {
-    if (!isTransientTransportError(error) || options.signal?.aborted) throw error;
-    await waitForTransportRetry(options.signal);
-    return await api(path, requestOptions);
+  const requestOptions = { timeoutMs:30_000, cache:'no-store', ...options };
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await api(path, requestOptions);
+    } catch (error) {
+      if (!isTransientTransportError(error) || options.signal?.aborted) throw error;
+      const delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_DELAYS_MS[attempt];
+      const timeoutRetryExhausted = error.name === 'TimeoutError' && attempt >= 1;
+      if (!Number.isFinite(delayMs) || timeoutRetryExhausted) throw error;
+      attempt += 1;
+      await waitForTransportRetry(options.signal, delayMs);
+    }
   }
 }
 
