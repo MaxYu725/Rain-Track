@@ -49,12 +49,12 @@ const regionalGrid = {
 };
 const regionalCount = regionalGrid.latitudes.length * regionalGrid.longitudes.length;
 const regionalWetIndexes = [
-  1,2,3,      // Shenzhen west / central / east
-  6,7,8,      // NT west / north / Sai Kung-east
-  11,12,13,   // NT west / east / Sai Kung-east
-  17,          // Kowloon
-  21,22,23,   // Lantau / HK Island / Sai Kung-east
-  25,27,29    // SW sea / south sea / SE sea
+  1,2,3,
+  6,7,8,
+  11,12,13,
+  17,
+  21,22,23,
+  25,27,29
 ];
 const regional = summarizeForecastRainArea(frameWith(regionalWetIndexes, 1, regionalCount), regionalGrid);
 for (const key of ['szWest','szCentral','szEast','hkNtWest','hkNtNorth','hkNtEast','hkSaiKungEast','hkKowloon','hkLantauIslands','hkIsland','seaWest','seaSouth','seaEast']) {
@@ -78,16 +78,19 @@ assert.match(eastSea.regionalDetail, /東南海域/);
 // A small product zone can be fully wet without being the main part of the
 // whole rain field. Regional headline ranking must use whole-field rainfall
 // contribution, while visible percentages remain within-zone affected share.
+// Extra dry HK cells keep the macro HK coverage below the widespread shortcut
+// so this fixture isolates regional ranking rather than the coarse headline.
 const contributionGrid = {
   latitudes:[22.50,22.48,21.90,21.80],
-  longitudes:[113.0,113.2,113.4,113.6,113.7,114.18,114.20]
+  longitudes:[113.0,113.2,113.4,113.6,113.7,113.9,114.0,114.18,114.20]
 };
 const contributionCount = contributionGrid.latitudes.length * contributionGrid.longitudes.length;
 const contributionWet = [
-  5,6,12,13,                   // all four New Territories north cells
-  14,15,16,17,21,22,23,24     // eight of ten south-west sea cells
+  7,8,16,17,
+  18,19,20,21,27,28,29,30
 ];
 const contribution = summarizeForecastRainArea(frameWith(contributionWet, 1, contributionCount), contributionGrid);
+assert.equal(contribution.zones.hongKong.wetShare, 0.5);
 assert.equal(contribution.productZones.hkNtNorth.wetShare, 1);
 assert.equal(contribution.productZones.seaWest.wetShare, 0.8);
 assert.ok(contribution.productZones.seaWest.contributionShare > contribution.productZones.hkNtNorth.contributionShare);
