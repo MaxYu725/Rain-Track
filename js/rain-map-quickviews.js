@@ -43,11 +43,11 @@ function ensureStyles() {
     .rain-map-quickview-btn.active{border-color:#277ca6;background:#08202c;color:#f4fbff;box-shadow:inset 0 -2px 0 #22a7e0}
     body.rain-home-v2.rain-map-view .radius-label{display:none!important}
     @media(max-width:700px){
-      .rain-map-quickviews{top:8px;right:8px;max-width:calc(100% - 112px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:3px;gap:3px}
+      .rain-map-quickviews{top:8px;right:8px;max-width:calc(100% - 96px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:3px;gap:3px}
       .rain-map-quickviews::-webkit-scrollbar{display:none}
       .rain-map-quickviews-label{display:none}
       .rain-map-quickview-btn{min-height:31px;padding:0 8px;font-size:.66rem}
-      body.rain-home-v2.rain-map-view .rain-home-back-map{top:8px;left:8px;min-height:38px;padding:0 10px;font-size:.82rem}
+      body.rain-home-v2.rain-map-view .rain-home-back-map{top:8px;left:8px;min-height:38px;padding:0 9px;font-size:.79rem}
     }
   `;
   document.head.append(style);
@@ -135,12 +135,20 @@ function applyDefaultRegionalView(controls) {
   });
 }
 
+function syncBackButton(visible) {
+  const button = document.getElementById('rain-home-back-map');
+  if (!button || !visible) return;
+  button.textContent = '← 預報';
+  button.setAttribute('aria-label', '返回目前位置降雨預報');
+}
+
 function syncVisibility() {
   const controls = ensureControls();
   if (!controls) return;
   const visible = activeMode === 'forecast';
   controls.classList.toggle('visible', visible);
   controls.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  syncBackButton(visible);
   if (!visible) {
     clearActive();
     return;
