@@ -14,6 +14,13 @@ assert.match(api, /fetchSwirlsPointSeries/);
 assert.match(api, /\/api\/rain\/swirls\/point-series/);
 assert.ok(!api.includes('fetchSwirlsPointFrame'), 'Rain Home API must not expose the 16-frame fallback helper');
 assert.ok(!api.includes("cache:'no-store'"), 'generic browser API requests must not force no-store');
+assert.ok(api.includes('SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450'), 'point-series must use one small bounded transport retry delay');
+assert.ok(api.includes('isTransientTransportError'), 'point-series retry must be limited to transport failures');
+assert.ok(api.includes('Number.isFinite(Number(error.status))'), 'HTTP failures must not enter the transport retry path');
+assert.ok(api.includes('await waitForTransportRetry(options.signal)'), 'transport retry must remain abort-aware');
+const seriesFunction = api.match(/export async function fetchSwirlsPointSeries[\s\S]*?\n\}/)?.[0] || '';
+assert.ok(seriesFunction, 'fetchSwirlsPointSeries body missing');
+assert.equal((seriesFunction.match(/await api\(path, requestOptions\)/g) || []).length, 2, 'point-series must make at most two transport attempts');
 
 assert.match(app, /const RAIN_HOME_OWNS_FORECAST = document\.body\.classList\.contains\('rain-home-v2'\)/);
 assert.match(app, /RAIN_HOME_OWNS_FORECAST \? Promise\.resolve\(\) : loadPointForecast\(\{ force:false \}\)/);
@@ -40,7 +47,7 @@ assert.match(home, /預報由 \$\{firstAvailableClock\} 開始/);
 assert.match(home, /data-rain-home-readout aria-live="polite" hidden/);
 assert.match(home, /readout\.hidden = false/);
 assert.match(home, /guide\.classList\.add\('is-active'\)/);
-assert.match(home, /title = Number\(first\.frameIndex\) === 0 \? '30 分鐘內可能有雨' : '稍後可能有雨'/);
+assert.ok(home.includes("title = nowInsideFirstWindow ? '目前預報窗有雨訊號' : '短時預報有雨訊號'"));
 assert.match(home, /endRatio <= 0\.7/);
 assert.match(home, /峰值後逐步減弱/);
 
@@ -60,6 +67,25 @@ assert.ok(!home.includes('開始出現訊號'), 'headline must use human weather
 assert.ok(!home.includes('香港有效時間優先'), 'internal presentation principles must not be user-facing copy');
 assert.ok(!home.includes('rain-home-peak-label'), 'peak text annotation must stay outside the plotted curve');
 
+// Current-aware forecast semantics.
+assert.ok(home.includes('const firstFutureIndex = points.findIndex'), 'summary must locate the first still-valid forecast point');
+assert.ok(home.includes('const relevantPoints = firstFutureIndex >= 0 ? points.slice(firstFutureIndex) : []'), 'past valid times must not drive current forecast wording');
+assert.ok(home.includes("title:'等待下一輪預報'"), 'expired forecast runs need an explicit terminal presentation');
+assert.ok(home.includes('const firstWindowStart = first.windowStart || data.runTime'), 'first +30 sample must be interpreted as an accumulation window');
+assert.ok(home.includes('`${formatClock(firstWindowStart)}–${formatClock(firstWindowEnd)} 預報窗有雨`'), 'first-window rain must be described by the forecast window');
+assert.ok(home.includes("title = '目前預報仍有雨訊號'"), 'wet signal spanning now must not be presented as a future onset');
+assert.ok(!home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'window end must not be mislabeled as earliest onset');
+assert.ok(!home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial data must not invent an onset from a rolling window end');
+
+// Bounded load recovery invariants.
+assert.ok(home.includes('SERIES_FALLBACK_CACHE_MS = 12 * 60 * 1000'), 'session fallback must have a strict short lifetime');
+assert.ok(home.includes("SERIES_SESSION_PREFIX = 'rain-home-series-v1:'"), 'session fallback key must be versioned');
+assert.ok(home.includes('sessionStorage.getItem(sessionSeriesKey(key))'), 'Rain Home must be able to recover a recent successful series after reload');
+assert.ok(home.includes('sessionStorage.setItem(sessionSeriesKey(key)'), 'successful series must populate the short session fallback');
+assert.ok(home.includes('seriesStillRelevant'), 'cached series must still overlap the forecast horizon');
+assert.ok(home.includes('const fallback = sessionFallback || readSessionSeries(key)'), 'failed current fetch may use one recent successful series');
+assert.ok(home.includes('短暫連線問題已嘗試重新連線'), 'terminal error copy must reflect the bounded transport retry');
+
 // Fifth-pass mobile readability invariants.
 assert.ok(home.includes('@media(max-width:700px)'), 'Rain Home must retain an explicit mobile presentation breakpoint');
 assert.ok(home.includes('.rain-home-location{padding:2px 0 13px}'), 'mobile location block must use tighter vertical spacing');
@@ -71,10 +97,7 @@ assert.ok(home.includes('.rain-home-axis-lead{font-size:13px}'), 'mobile lead la
 assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'redundant first-forecast text must be hidden on mobile');
 assert.ok(home.includes('const height = 300'), 'fifth-pass chart geometry must remain taller for mobile readability');
 
-// Final Rain Home finishing invariants.
-assert.ok(home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'first available forecast copy must use natural weather language');
-assert.ok(home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial onset copy must avoid internal forecast-system language');
-assert.ok(!home.includes('首個預報時間 ${formatClock(first.validTime)} 已有雨勢'), 'future valid time must not be described as rain already happening');
+// Final Rain Home interaction invariants.
 assert.ok(home.includes("const help = content.querySelector('.rain-home-chart-help:not(.is-partial)')"), 'complete-series help must be independently hideable after interaction');
 assert.ok(home.includes('if (help) help.hidden = true'), 'interaction hint must disappear after the inspector opens');
 assert.ok(home.includes('.rain-home-chart-help[hidden]{display:none}'), 'hidden interaction help must not retain layout space');
@@ -83,7 +106,7 @@ assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
 assert.ok(!home.includes('loadSeriesViaFrames'), 'Rain Home must not reconstruct a series through 16 /point requests');
 assert.ok(!home.includes('fetchSwirlsPointFrame'), 'Rain Home must have exactly one SWIRLS client path');
-assert.ok(!home.includes("window.addEventListener('online'"), 'network recovery must not trigger an automatic retry');
+assert.ok(!home.includes("window.addEventListener('online'"), 'network recovery must not create an online-event retry loop');
 assert.ok(!home.includes('data-rain-home-retry'), 'terminal error state must not create a hidden retry path');
 assert.ok(home.includes("window.addEventListener('rain:location-change'"), 'location change must be an explicit fetch trigger');
 assert.ok(home.includes("document.getElementById('refresh-button')?.addEventListener('click'"), 'user refresh must be an explicit fetch trigger');
@@ -119,6 +142,7 @@ assert.ok(stripShell.includes('if (bodyHasLegacySheetState())'), 'body class cle
 
 assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
+assert.ok(shellVersion && Number(shellVersion[1]) >= 49, 'Rain Home reliability fix requires PWA generation at least pwa49');
 
-console.log('Rain Home zero-base architecture + final presentation polish validation passed');
+console.log('Rain Home bounded transport recovery + current-aware forecast semantics validation passed');
