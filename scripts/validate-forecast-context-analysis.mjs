@@ -42,6 +42,15 @@ function summary({ ntNorth = 0.7, kowloon = 0.3, seaWest = 0.4, nearbyShare = 0.
   };
 }
 
+function shenzhenSummary({ west = 0.2, central = 0.08, east = 0.4 } = {}) {
+  const base = summary();
+  base.zones.shenzhen = { wetCellCount:9, wetShare:Math.max(west, central, east) };
+  base.productZones.szWest = zone('szWest','深圳西部','shenzhen',west,30 * west, west > 0 ? 4 : 0);
+  base.productZones.szCentral = zone('szCentral','深圳中部','shenzhen',central,26 * central, central > 0 ? 3 : 0);
+  base.productZones.szEast = zone('szEast','深圳東部','shenzhen',east,42 * east, east > 0 ? 5 : 0);
+  return base;
+}
+
 const selected = { lat:22.50, lon:114.18, name:'粉嶺' };
 const regional = summarizeForecastRainContext(summary(), { scope:'regional', selected });
 assert.equal(regional.label, '雨區較集中在西南海域');
@@ -68,10 +77,6 @@ const nearbyDry = summarizeForecastRainContext(summary({ nearbyShare:0, nearbySu
 assert.equal(nearbyDry.label, '粉嶺附近暫未見明顯雨區');
 assert.equal(nearbyDry.detail, '附近雨區覆蓋 0%');
 
-// True-radius fixture: two wet cells remain inside the broader New Territories
-// North product zone, but are far enough from the selected point to stay out of
-// the 2 km nearby sample. Nearby must therefore stay dry instead of borrowing
-// the product-zone result.
 const radiusGrid = { latitudes:[22.50], longitudes:[114.18,114.23,114.28] };
 const radiusSpatial = summarizeForecastRainArea({ values:[0,1,1] }, radiusGrid, {
   nearby:{ lat:22.50, lon:114.18, radiusKm:2 }
@@ -102,6 +107,7 @@ const hkMotion = summarizeForecastRainContextMotion(frames([
 assert.equal(hkMotion.ready, true);
 assert.match(hkMotion.label, /新界北雨區逐步減少|香港雨區逐步減弱/);
 assert.ok(!hkMotion.label.includes('西南海域'));
+assert.ok(hkMotion.confidence > 0 && hkMotion.confidence <= 1);
 
 const nearbyMotion = summarizeForecastRainContextMotion(frames([
   summary({ nearbyShare:0.65, nearbySum:7, nearbyWetCells:4 }),
@@ -114,8 +120,45 @@ assert.equal(nearbyMotion.ready, true);
 assert.match(nearbyMotion.label, /附近雨區逐步減少|粉嶺附近雨區逐步減弱/);
 assert.ok(!nearbyMotion.label.includes('新界北'));
 
-// Scope store is the single source of truth. A later frame-change render must
-// read this store rather than a stale local variable/event snapshot.
+// Motion Context v3 is compositional rather than case-enumerated. The current
+// dominant zone is the first explanation target. A secondary-zone trend is
+// only used when the primary zone has no meaningful trend, and then it keeps
+// the current primary context in the sentence.
+const shenzhenFrames = frames([
+  shenzhenSummary({ west:0.48, central:0.08, east:0.36 }),
+  shenzhenSummary({ west:0.39, central:0.08, east:0.37 }),
+  shenzhenSummary({ west:0.31, central:0.07, east:0.38 }),
+  shenzhenSummary({ west:0.23, central:0.06, east:0.39 }),
+  shenzhenSummary({ west:0.16, central:0.05, east:0.40 })
+]);
+const shenzhenSecondary = summarizeForecastRainContextMotion(shenzhenFrames, {
+  frameCount:16,
+  scope:'shenzhen',
+  selected,
+  currentSummary:shenzhenSummary({ west:0.16, central:0.05, east:0.40 })
+});
+assert.equal(shenzhenSecondary.ready, true);
+assert.equal(shenzhenSecondary.focus, 'secondary-zone');
+assert.match(shenzhenSecondary.label, /^深圳東部目前較明顯，深圳西部雨區逐步減少$/);
+assert.ok(shenzhenSecondary.confidence >= 0.5);
+
+const shenzhenPrimaryFrames = frames([
+  shenzhenSummary({ west:0.16, central:0.06, east:0.55 }),
+  shenzhenSummary({ west:0.16, central:0.06, east:0.48 }),
+  shenzhenSummary({ west:0.15, central:0.05, east:0.40 }),
+  shenzhenSummary({ west:0.14, central:0.05, east:0.31 }),
+  shenzhenSummary({ west:0.14, central:0.05, east:0.22 })
+]);
+const shenzhenPrimary = summarizeForecastRainContextMotion(shenzhenPrimaryFrames, {
+  frameCount:16,
+  scope:'shenzhen',
+  selected,
+  currentSummary:shenzhenSummary({ west:0.14, central:0.05, east:0.22 })
+});
+assert.equal(shenzhenPrimary.focus, 'primary-zone');
+assert.equal(shenzhenPrimary.label, '深圳東部雨區逐步減少');
+assert.ok(!shenzhenPrimary.label.includes('深圳西部'));
+
 resetForecastAnalysisScope({ notify:false });
 setForecastAnalysisScope('hong-kong', { notify:false });
 assert.equal(getForecastAnalysisScope(), 'hong-kong');
@@ -126,6 +169,7 @@ const ui = readFileSync('js/rain-map-area-summary.js', 'utf8');
 const runtime = readFileSync('js/forecast-map-runtime.js', 'utf8');
 const map = readFileSync('js/map.js', 'utf8');
 const scopeStore = readFileSync('js/forecast-map-analysis-scope.js', 'utf8');
+const contextSource = readFileSync('js/forecast-map-context-analysis.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
 for (const marker of [
@@ -141,11 +185,22 @@ assert.ok(!quick.includes("state.map.on?.('zoomstart'"), 'manual map zoom must n
 for (const marker of [
   "from './forecast-map-analysis-scope.js'",
   'const analysisScope = getForecastAnalysisScope()',
+  'currentSummary:snapshot?.spatialSummary || null',
+  'motion.dataset.motionFocus',
+  'motion.dataset.motionConfidence',
   "rain:forecast-analysis-scope-change",
   'refreshForecastMapSpatialAnalysis()',
   "rain:radius-change"
 ]) assert.ok(ui.includes(marker), `race-safe area summary marker missing: ${marker}`);
 assert.ok(!ui.includes('let analysisScope'), 'summary must not keep a stale local analysis scope');
+
+for (const marker of [
+  'scopedDevelopment(frames, scope, currentSummary)',
+  'primaryDevelopment || candidates[0]',
+  'contextText',
+  'confidence',
+  "focus:selectedDevelopment.isPrimary ? 'primary-zone' : 'secondary-zone'"
+]) assert.ok(contextSource.includes(marker), `motion context v3 marker missing: ${marker}`);
 
 for (const marker of [
   'let activeScope = \'regional\'',
@@ -165,6 +220,6 @@ assert.ok(map.includes("new CustomEvent('rain:radius-change'"), 'radius changes 
 assert.ok(sw.includes("'./js/forecast-map-context-analysis.js'"), 'context analyzer missing from PWA dependency inventory');
 assert.ok(sw.includes("'./js/forecast-map-analysis-scope.js'"), 'shared analysis scope store missing from PWA dependency inventory');
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
-assert.ok(shellVersion && Number(shellVersion[1]) >= 47, 'race-safe Nearby v2 requires PWA generation at least pwa47');
+assert.ok(shellVersion && Number(shellVersion[1]) >= 48, 'primary-context motion requires PWA generation at least pwa48');
 
-console.log('Forecast Map race-safe context analysis + true Nearby radius validation passed');
+console.log('Forecast Map primary-context motion + true Nearby radius validation passed');
