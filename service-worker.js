@@ -1,9 +1,9 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa51';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa52';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
 
-// Full local dependency inventory for CI and offline diagnostics. pwa51 does
+// Full local dependency inventory for CI and offline diagnostics. pwa52 does
 // not prefetch this list during install: the live page gets network priority,
 // and successfully used same-origin assets are cached progressively.
 const APP_SHELL = [
@@ -33,6 +33,8 @@ const APP_SHELL = [
   './js/forecast-map-smoke.js',
   './js/radar-entry.js',
   './js/radar-settings-mirror.js',
+  './js/radar-analysis.js',
+  './js/radar-analysis-runtime.js',
   './js/rain-home.js',
   './js/rain-home-time.js',
   './js/rain-home-shell.js',
