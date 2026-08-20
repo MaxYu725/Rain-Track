@@ -63,11 +63,10 @@ function selectedTimeText(snapshot) {
 }
 
 function motionText(snapshot) {
-  const frames = getForecastMapFrameSummaries();
   const options = { frameCount:snapshot?.frameCount };
   const motion = analysisScope === 'regional'
-    ? summarizeForecastRainMotion(frames, options)
-    : summarizeForecastRainContextMotion(frames, {
+    ? summarizeForecastRainMotion(getForecastMapFrameSummaries(), options)
+    : summarizeForecastRainContextMotion(getForecastMapFrameSummaries(), {
         ...options,
         scope:analysisScope,
         selected:state.selected
