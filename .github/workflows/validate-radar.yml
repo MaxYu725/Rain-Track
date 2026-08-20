@@ -52,6 +52,7 @@ jobs:
           node --check scripts/validate-rain-home.mjs
           node --check scripts/validate-rain-home-chart-intensity.mjs
           node --check scripts/validate-rain-home-observed-radar.mjs
+          node --check scripts/validate-rain-home-reliability.mjs
           node --check scripts/validate-rain-map-quickviews.mjs
           node --check scripts/validate-rain-home-point-explorer.mjs
           node --check scripts/validate-rain-home-time-axis.mjs
@@ -94,6 +95,8 @@ jobs:
         run: node scripts/validate-rain-home-chart-intensity.mjs
       - name: Validate Rain Home past-30-minute Radar observation
         run: node scripts/validate-rain-home-observed-radar.mjs
+      - name: Validate Rain Home reliability hardening
+        run: node scripts/validate-rain-home-reliability.mjs
       - name: Validate forecast map quick views
         run: node scripts/validate-rain-map-quickviews.mjs
       - name: Validate Rain Home 16-point explorer
