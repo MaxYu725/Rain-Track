@@ -12,6 +12,8 @@ import {
 import { state } from './state.js';
 
 const SERIES_CACHE_MS = 4 * 60 * 1000;
+const SERIES_FALLBACK_CACHE_MS = 12 * 60 * 1000;
+const SERIES_SESSION_PREFIX = 'rain-home-series-v1:';
 const FRAME_COUNT = 16;
 const seriesCache = new Map();
 
@@ -23,6 +25,38 @@ let viewState = { kind:'idle', key:'', point:null, data:null, error:null, cached
 
 function pointKey(point = state.selected) {
   return `${Number(point?.lat).toFixed(4)}|${Number(point?.lon).toFixed(4)}`;
+}
+
+function sessionSeriesKey(key) {
+  return `${SERIES_SESSION_PREFIX}${key}`;
+}
+
+function seriesStillRelevant(data, nowMs = Date.now()) {
+  const runMs = Date.parse(data?.runTime || '');
+  if (!Number.isFinite(runMs)) return false;
+  const validUntilMs = runMs + RAIN_HOME_HORIZON_MINUTES * 60_000;
+  return validUntilMs >= nowMs - RAIN_HOME_CADENCE_MINUTES * 60_000;
+}
+
+function readSessionSeries(key, maxAgeMs = SERIES_FALLBACK_CACHE_MS) {
+  try {
+    const raw = sessionStorage.getItem(sessionSeriesKey(key));
+    if (!raw) return null;
+    const stored = JSON.parse(raw);
+    const savedAt = Number(stored?.savedAt);
+    if (!Number.isFinite(savedAt) || Date.now() - savedAt > maxAgeMs) return null;
+    const data = normalizeSeries(stored?.data);
+    if (!seriesStillRelevant(data)) return null;
+    return { data, savedAt };
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionSeries(key, data, savedAt = Date.now()) {
+  try {
+    sessionStorage.setItem(sessionSeriesKey(key), JSON.stringify({ savedAt, data }));
+  } catch {}
 }
 
 function injectStyles() {
@@ -102,8 +136,16 @@ async function requestSeries({ force = false } = {}) {
   if (activeLoadKey === key) return;
 
   const cached = seriesCache.get(key);
-  if (!force && cached && Date.now() - cached.savedAt < SERIES_CACHE_MS) {
+  if (!force && cached && Date.now() - cached.savedAt < SERIES_CACHE_MS && seriesStillRelevant(cached.data)) {
     viewState = { kind:'ready', key, point:{ ...point }, data:cached.data, error:null, cached:true };
+    renderCurrentView(content);
+    return;
+  }
+
+  const sessionFallback = readSessionSeries(key);
+  if (!force && sessionFallback && Date.now() - sessionFallback.savedAt < SERIES_CACHE_MS) {
+    seriesCache.set(key, sessionFallback);
+    viewState = { kind:'ready', key, point:{ ...point }, data:sessionFallback.data, error:null, cached:true };
     renderCurrentView(content);
     return;
   }
@@ -118,11 +160,20 @@ async function requestSeries({ force = false } = {}) {
   try {
     const data = normalizeSeries(await fetchSwirlsPointSeries(point, { signal:activeController.signal }));
     if (token !== requestToken || pointKey(state.selected) !== key) return;
-    seriesCache.set(key, { data, savedAt:Date.now() });
+    const savedAt = Date.now();
+    seriesCache.set(key, { data, savedAt });
+    writeSessionSeries(key, data, savedAt);
     viewState = { kind:'ready', key, point:{ ...state.selected }, data, error:null, cached:false };
     renderCurrentView(content);
   } catch (error) {
     if (error?.name === 'AbortError' || token !== requestToken) return;
+    const fallback = sessionFallback || readSessionSeries(key);
+    if (fallback && seriesStillRelevant(fallback.data)) {
+      seriesCache.set(key, fallback);
+      viewState = { kind:'ready', key, point:{ ...state.selected }, data:fallback.data, error:null, cached:true };
+      renderCurrentView(content);
+      return;
+    }
     viewState = { kind:'error', key, point:{ ...state.selected }, data:null, error, cached:false };
     renderCurrentView(content);
   } finally {
@@ -193,7 +244,7 @@ function renderUnavailable(content, point, error) {
   content.innerHTML = `
     <section class="rain-home-root" data-rain-home-owned="series" data-view-kind="error" data-point-key="${escapeHtml(pointKey(point))}">
       ${locationMarkup(point)}
-      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">資料暫時不可用</div><h1 class="rain-home-verdict">定位序列未能載入</h1><p class="rain-home-detail">此狀態不會自動重試。可使用頁面更新按鈕或重新定位後再讀取。</p></div>
+      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">資料暫時不可用</div><h1 class="rain-home-verdict">定位序列未能載入</h1><p class="rain-home-detail">短暫連線問題已嘗試重新連線；如仍失敗，可使用頁面更新按鈕或重新定位後再讀取。</p></div>
       <div class="rain-home-error" role="alert"><strong>SWIRLS 資料讀取失敗</strong><span class="rain-home-error-detail">${escapeHtml(error?.message || String(error))}</span></div>
       ${mapActionMarkup()}
     </section>`;
@@ -306,26 +357,40 @@ function chartReadoutMarkup(point) {
 
 function analyzeTrend(data) {
   const points = data.points;
-  const firstWet = findFirstWetSignalTransition(points, RAIN_HOME_RAIN_THRESHOLD_MM);
+  const nowMs = Date.now();
+  const firstFutureIndex = points.findIndex(point => Date.parse(point?.validTime || '') >= nowMs - 60_000);
+  const relevantPoints = firstFutureIndex >= 0 ? points.slice(firstFutureIndex) : [];
   const partialSuffix = data.complete ? '' : `目前只有 ${points.length}/16 個有效時間可用。`;
+
+  if (!relevantPoints.length) return {
+    title:'等待下一輪預報',
+    timing:'目前資料的有效時間已結束',
+    detail:`這一輪 SWIRLS 預報已沒有未來有效時間。${partialSuffix}可稍後更新或打開雨區地圖查看最新雨帶。`,
+    chartSummary:'',
+    shortLabel:'等待下一輪預報'
+  };
+
+  const firstWet = findFirstWetSignalTransition(relevantPoints, RAIN_HOME_RAIN_THRESHOLD_MM);
   if (!firstWet) return {
     title:'暫無明顯降雨',
-    timing:'目前沒有明顯降雨時段',
-    detail:`可用時間點的 30 分鐘累積預測雨量維持很低。${partialSuffix}可打開雨區地圖查看香港、深圳及南海附近雨帶。`,
+    timing:'剩餘預報時段未見明顯降雨',
+    detail:`現在之後仍有效的 30 分鐘累積預測雨量維持很低。${partialSuffix}可打開雨區地圖查看香港、深圳及南海附近雨帶。`,
     chartSummary:'',
     shortLabel:'暫無明顯降雨'
   };
 
   const first = firstWet.first;
-  const previous = firstWet.previous;
+  const absoluteIndex = points.indexOf(first);
+  const previous = absoluteIndex > 0 ? points[absoluteIndex - 1] : null;
+  const previousWet = Boolean(previous && Number(previous.amountMm) >= RAIN_HOME_RAIN_THRESHOLD_MM);
   const adjacent = previous && Number(previous.frameIndex) === Number(first.frameIndex) - 1;
-  const peak = points.reduce((best, point) => Number(point.amountMm) > Number(best.amountMm) ? point : best, points[0]);
-  const peakIndex = points.indexOf(peak);
+  const peak = relevantPoints.reduce((best, point) => Number(point.amountMm) > Number(best.amountMm) ? point : best, relevantPoints[0]);
+  const peakIndex = relevantPoints.indexOf(peak);
   const peakValue = Number(peak.amountMm) || 0;
-  const lastValue = Number(points.at(-1)?.amountMm) || 0;
+  const lastValue = Number(relevantPoints.at(-1)?.amountMm) || 0;
   const endRatio = peakValue > 0 ? lastValue / peakValue : 1;
   const terminalPeak = data.complete && Number(peak.frameIndex) === FRAME_COUNT - 1;
-  const lastAvailablePeak = peakIndex === points.length - 1;
+  const lastAvailablePeak = peakIndex === relevantPoints.length - 1;
 
   let direction = '之後雨勢大致維持。';
   if (terminalPeak) {
@@ -338,16 +403,32 @@ function analyzeTrend(data) {
     direction = '峰值後逐步減弱。';
   } else if (endRatio <= 0.85) {
     direction = '峰值後稍為回落。';
-  } else if (peakIndex >= points.length - 3) {
+  } else if (peakIndex >= relevantPoints.length - 3) {
     direction = '較後段仍接近峰值。';
   }
 
-  const title = Number(first.frameIndex) === 0 ? '30 分鐘內可能有雨' : '稍後可能有雨';
-  const timing = Number(first.frameIndex) === 0
-    ? `最早 ${formatClock(first.validTime)} 可能有雨`
-    : adjacent
-      ? `約 ${formatClock(firstWet.transitionStartValidTime)}–${formatClock(firstWet.transitionEndValidTime)} 開始`
-      : `最早可用時間 ${formatClock(first.validTime)} 可能有雨`;
+  const firstWindowStart = first.windowStart || data.runTime;
+  const firstWindowEnd = first.windowEnd || first.validTime;
+  const windowStartMs = Date.parse(firstWindowStart || '');
+  const windowEndMs = Date.parse(firstWindowEnd || '');
+  const nowInsideFirstWindow = Number.isFinite(windowStartMs) && Number.isFinite(windowEndMs)
+    && nowMs >= windowStartMs - 60_000 && nowMs <= windowEndMs + 60_000;
+
+  let title;
+  let timing;
+  if (absoluteIndex === 0) {
+    title = nowInsideFirstWindow ? '目前預報窗有雨訊號' : '短時預報有雨訊號';
+    timing = `${formatClock(firstWindowStart)}–${formatClock(firstWindowEnd)} 預報窗有雨`;
+  } else if (absoluteIndex === firstFutureIndex && previousWet) {
+    title = '目前預報仍有雨訊號';
+    timing = `下一個有效時間 ${formatClock(first.validTime)} 仍有雨`;
+  } else if (adjacent) {
+    title = '稍後可能有雨';
+    timing = `約 ${formatClock(previous.validTime)}–${formatClock(first.validTime)} 開始`;
+  } else {
+    title = '可用預報時段有雨訊號';
+    timing = `${formatClock(firstWindowStart)}–${formatClock(firstWindowEnd)} 預報窗有雨`;
+  }
 
   const peakClock = formatClock(peak.validTime);
   const peakRain = formatRain(peak.amountMm);
@@ -355,12 +436,12 @@ function analyzeTrend(data) {
     ? `截至 ${peakClock}，30 分鐘累積預測雨量升至約 ${peakRain} mm。${direction}${partialSuffix}`
     : lastAvailablePeak
       ? `截至最後可用時間 ${peakClock}，30 分鐘累積預測雨量升至約 ${peakRain} mm。${direction}${partialSuffix}`
-      : `最強約在 ${peakClock} 前後，30 分鐘累積預測雨量最高約 ${peakRain} mm。${direction}${partialSuffix}`;
+      : `現在之後最強約在 ${peakClock} 前後，30 分鐘累積預測雨量最高約 ${peakRain} mm。${direction}${partialSuffix}`;
   const chartSummary = terminalPeak
     ? `至 ${peakClock} 升至 ${peakRain} mm / 30 min`
     : lastAvailablePeak
       ? `最後可用時間 ${peakClock} · ${peakRain} mm / 30 min`
-      : `最強約 ${peakClock} · ${peakRain} mm / 30 min`;
+      : `之後最強約 ${peakClock} · ${peakRain} mm / 30 min`;
 
   return { title, timing, detail, chartSummary, shortLabel:title };
 }
