@@ -1,6 +1,39 @@
 import assert from 'node:assert/strict';
-import { createPhase3Cv2Worker } from '../worker-phase3c-v2.js';
+import { createPhase3Cv2Worker, createWorkerSwirlsFetchText } from '../worker-phase3c-v2.js';
 import { SwirlsPointRequestError } from '../swirls-point-request.js';
+
+// Production SWIRLS origin reads must rely on fetch caching only. A normal
+// request must not force origin revalidation with cache:no-cache or a
+// Cache-Control:no-cache request header.
+const fetchCalls = [];
+const cachedFetchText = createWorkerSwirlsFetchText({
+  fetchImpl: async (url, options) => {
+    fetchCalls.push({ url, options });
+    return new Response('sample', {
+      status:200,
+      headers:{ 'CF-Cache-Status':'HIT', 'Last-Modified':'Thu, 20 Aug 2026 00:00:00 GMT' }
+    });
+  }
+});
+const cachedText = await cachedFetchText('https://example.test/frame.af.mdl', { ttlSeconds:45, timeoutMs:1000 });
+assert.equal(cachedText.body, 'sample');
+assert.equal(cachedText.cacheStatus, 'HIT');
+assert.equal(fetchCalls.length, 1);
+assert.equal(fetchCalls[0].options.cache, undefined, 'normal SWIRLS reads must not force cache revalidation');
+assert.equal(fetchCalls[0].options.headers['Cache-Control'], undefined, 'normal SWIRLS reads must not send Cache-Control:no-cache');
+assert.deepEqual(fetchCalls[0].options.cf, { cacheEverything:true, cacheTtl:45 });
+
+const bypassCalls = [];
+const bypassFetchText = createWorkerSwirlsFetchText({
+  fetchImpl: async (url, options) => {
+    bypassCalls.push({ url, options });
+    return new Response('fresh', { status:200 });
+  }
+});
+await bypassFetchText('https://example.test/frame.af.mdl', { bypassCache:true, ttlSeconds:45, timeoutMs:1000 });
+assert.equal(bypassCalls[0].options.cache, 'no-store');
+assert.match(bypassCalls[0].options.headers['Cache-Control'], /no-store/);
+assert.deepEqual(bypassCalls[0].options.cf, { cacheEverything:false, cacheTtl:0 });
 
 const forwarded = [];
 const baseWorker = {
@@ -67,6 +100,7 @@ assert.equal(payload.accumulationMinutes, 30);
 assert.equal(payload.unit, 'mm / 30 min');
 assert.equal(payload.amountMm, 1.25);
 assert.equal(point.headers.get('Cache-Control'), 'no-store');
+assert.match(point.headers.get('Server-Timing') || '', /^swirls;dur=\d+$/);
 assert.equal(point.headers.get('Access-Control-Allow-Origin'), '*');
 assert.equal(forwarded.length, 1, 'single-frame point GET must not pass through the legacy Worker');
 assert.equal(pointCalls.length, 1);
@@ -80,6 +114,7 @@ assert.equal(seriesPayload.points.length, 16);
 assert.equal(seriesPayload.cadenceMinutes, 6);
 assert.equal(seriesPayload.accumulationMinutes, 30);
 assert.equal(seriesPayload.points.at(-1).leadMinutes, 120);
+assert.match(series.headers.get('Server-Timing') || '', /^swirls;dur=\d+$/);
 assert.equal(seriesCalls.length, 1);
 assert.equal(forwarded.length, 1, 'point-series GET must not pass through the legacy Worker');
 
@@ -117,4 +152,4 @@ const seriesUnavailable = await upstreamWorker.fetch(new Request('https://exampl
 assert.equal(seriesUnavailable.status, 502);
 assert.deepEqual(await seriesUnavailable.json(), { ok:false, error:'series upstream unavailable' });
 
-console.log('Phase 3C v2 compact SWIRLS Worker entry gate PASS');
+console.log('Phase 3C v2 compact SWIRLS Worker entry + fetch-cache gate PASS');
