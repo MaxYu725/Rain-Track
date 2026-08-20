@@ -8,9 +8,6 @@ import { removeForecastOverlay, setForecastOverlayOpacity, upsertForecastOverlay
 import { summarizeForecastRainArea } from './forecast-map-spatial.js';
 
 const DEFAULT_OPACITY = 0.72;
-// Worker SWIRLS rollover recovery can perform index + MDL twice, with each
-// upstream fetch capped at 12 seconds. Keep the browser request alive long
-// enough for that bounded recovery path instead of falling back prematurely.
 const SWIRLS_REQUEST_TIMEOUT_MS = 55_000;
 
 let forecast = null;
@@ -45,6 +42,18 @@ function ensureCanvas() {
   }
   canvas = document.createElement('canvas');
   return canvas;
+}
+
+function nearbyOptions() {
+  const lat = Number(state.selected?.lat);
+  const lon = Number(state.selected?.lon);
+  const radiusKm = Number(state.radiusKm);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(radiusKm) || radiusKm <= 0) return null;
+  return { lat, lon, radiusKm };
+}
+
+function summarizeFrameSpatial(frame) {
+  return summarizeForecastRainArea(frame, forecast?.grid, { nearby:nearbyOptions() });
 }
 
 function frameSummary(frame, frameIndex) {
@@ -119,7 +128,7 @@ function renderForecastMapFrame(frameIndex) {
     opacity
   });
   visible = true;
-  const spatialSummary = summarizeForecastRainArea(frame, forecast.grid);
+  const spatialSummary = summarizeFrameSpatial(frame);
   frame.spatialSummary = spatialSummary;
   lastRender = {
     width:rendered.width,
@@ -129,6 +138,21 @@ function renderForecastMapFrame(frameIndex) {
     maxMm:rendered.maxMm,
     spatialSummary
   };
+  const snapshot = getForecastMapRuntimeSnapshot();
+  notifyFrameChange(snapshot);
+  return snapshot;
+}
+
+export function refreshForecastMapSpatialAnalysis() {
+  if (!forecast?.grid || !forecast?.frames?.length) return getForecastMapRuntimeSnapshot();
+  forecast.frames.forEach(frame => {
+    if (Array.isArray(frame?.values)) frame.spatialSummary = summarizeFrameSpatial(frame);
+  });
+  const selected = forecast.frames[index];
+  if (Array.isArray(selected?.values)) {
+    const spatialSummary = selected.spatialSummary || summarizeFrameSpatial(selected);
+    lastRender = lastRender ? { ...lastRender, spatialSummary } : { spatialSummary };
+  }
   const snapshot = getForecastMapRuntimeSnapshot();
   notifyFrameChange(snapshot);
   return snapshot;
