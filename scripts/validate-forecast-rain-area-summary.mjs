@@ -58,11 +58,15 @@ for (const marker of [
   'panel.dataset.rainAreaStatus',
   "activeMode === 'forecast'",
   "rain:forecast-map-frame-change",
+  '.rain-map-area-kicker::after{content:\' · \'',
   '.rain-map-area-summary{top:50px;left:8px',
-  'padding:7px 9px'
+  'width:calc(100% - 16px)',
+  'padding:7px 9px',
+  "panel.removeAttribute('title')"
 ]) assert.ok(ui.includes(marker), `rain-area summary UI marker missing: ${marker}`);
 
 assert.ok(!ui.includes('detail.textContent = `${summary.detail} · 判讀門檻'), 'engineering threshold text must not be appended to the visible product summary');
+assert.ok(!ui.includes('panel.title = `雨區判讀門檻'), 'engineering threshold tooltip must not bypass the explicit info disclosure');
 assert.ok(!ui.includes('fitBounds'), 'rain-area summary must not change map viewport');
 assert.ok(!ui.includes('setView'), 'rain-area summary must not recenter the map');
 assert.ok(!ui.includes('setForecastMapIndex'), 'rain-area summary must not control forecast playback/frame selection');
@@ -73,6 +77,6 @@ assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI mi
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 40, `Forecast Map fullscreen fix requires PWA generation at least pwa40, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 41, `Forecast Map disclosure polish requires PWA generation at least pwa41, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area compact fullscreen summary validation passed');
+console.log('Forecast rain-area compact summary + explicit disclosure validation passed');
