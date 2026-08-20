@@ -14,6 +14,7 @@ import {
 import { applyPwaUpdate, initPwa, installPwa } from './pwa.js';
 import { changeRadarHeight, changeRadarRange, setRadarIndex, setRadarOpacity, toggleRadar, updateRadarCapability } from './radar.js';
 
+const RAIN_HOME_OWNS_FORECAST = document.body.classList.contains('rain-home-v2');
 let initialized = false;
 
 async function init() {
@@ -22,7 +23,7 @@ async function init() {
   hydrateControls();
   initDialogs();
   initDrawer();
-  initMobileSheet();
+  if (!RAIN_HOME_OWNS_FORECAST) initMobileSheet();
   initPwa();
   initMap({ onSelect:(lat, lon) => selectPoint(lat, lon, '自選位置', { moveMap:true }) });
   bindEvents();
@@ -31,10 +32,13 @@ async function init() {
   updateLayerControls();
   updateStorageStatus();
   renderPointLayers();
-  setupRefreshLifecycle();
+  if (!RAIN_HOME_OWNS_FORECAST) setupRefreshLifecycle();
   await setupLocation();
 
-  await Promise.allSettled([loadCapabilities(), loadPointForecast({ force:false })]);
+  await Promise.allSettled([
+    loadCapabilities(),
+    RAIN_HOME_OWNS_FORECAST ? Promise.resolve() : loadPointForecast({ force:false })
+  ]);
   const shortcut = new URLSearchParams(location.search).get('action') === 'locate';
   await maybeAutoLocate({ shortcut });
   if (localStorage.getItem('hkRainHintDismissed') === '1') document.querySelector('.map-hint')?.classList.add('hint-hidden');
@@ -52,11 +56,14 @@ function hydrateControls() {
   updateDiagnostics({ appVersion:APP_VERSION });
 }
 
+function requestHomeRefresh() {
+  window.dispatchEvent(new CustomEvent('rain:refresh'));
+}
 
 function bindEvents() {
   document.getElementById('locate-button')?.addEventListener('click', () => requestLocation({ automatic:false, refine:true }));
   document.getElementById('badge-location')?.addEventListener('click', () => requestLocation({ automatic:false, refine:true }));
-  document.getElementById('refresh-button')?.addEventListener('click', () => refresh(false));
+  document.getElementById('refresh-button')?.addEventListener('click', () => RAIN_HOME_OWNS_FORECAST ? requestHomeRefresh() : refresh(false));
   document.getElementById('drawer-button')?.addEventListener('click', event => toggleDrawer(undefined, event.currentTarget));
   document.getElementById('mobile-status')?.addEventListener('click', event => toggleDrawer(true, event.currentTarget));
   document.getElementById('center-hk-button')?.addEventListener('click', centerHongKong);
@@ -72,7 +79,11 @@ function bindEvents() {
   document.getElementById('toggle-marker')?.addEventListener('change', event => { setLayerVisibility('marker', event.target.checked); });
   document.getElementById('toggle-radius')?.addEventListener('change', event => { setLayerVisibility('radius', event.target.checked); });
   document.getElementById('toggle-coverage')?.addEventListener('change', event => { setLayerVisibility('coverage', event.target.checked); });
-  document.getElementById('radius-select')?.addEventListener('change', event => { changeRadius(event.target.value); state.forecastCache.clear(); loadPointForecast({ force:true }); });
+  document.getElementById('radius-select')?.addEventListener('change', event => {
+    changeRadius(event.target.value);
+    state.forecastCache.clear();
+    if (!RAIN_HOME_OWNS_FORECAST) void loadPointForecast({ force:true });
+  });
   document.getElementById('toggle-radar')?.addEventListener('change', event => { state.layers.radar = event.target.checked; toggleRadar(event.target.checked); });
   document.getElementById('radar-range')?.addEventListener('change', event => changeRadarRange(event.target.value));
   document.getElementById('radar-height')?.addEventListener('change', event => changeRadarHeight(event.target.value));
@@ -89,8 +100,11 @@ function bindEvents() {
 
   window.addEventListener('rain:save-point', saveCurrentPoint);
   window.addEventListener('rain:share-point', sharePoint);
-  window.addEventListener('rain:refresh', () => refresh(false));
-  window.addEventListener('resize', () => { state.map?.invalidateSize(); if (isMobileLayout()) setSheetMode(state.sheet.mode, { persist:false, offset:false }); });
+  if (!RAIN_HOME_OWNS_FORECAST) window.addEventListener('rain:refresh', () => refresh(false));
+  window.addEventListener('resize', () => {
+    state.map?.invalidateSize();
+    if (!RAIN_HOME_OWNS_FORECAST && isMobileLayout()) setSheetMode(state.sheet.mode, { persist:false, offset:false });
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { toggleDrawer(false); toggleForecastPanel(false); }
   });
@@ -143,9 +157,13 @@ async function loadCapabilities() {
 
 function cacheKey(point = state.selected) { return `${point.lat.toFixed(3)}|${point.lon.toFixed(3)}|${state.radiusKm}`; }
 
-async function refresh(silent = false) { return loadPointForecast({ force:true, silent }); }
+async function refresh(silent = false) {
+  if (RAIN_HOME_OWNS_FORECAST) { requestHomeRefresh(); return; }
+  return loadPointForecast({ force:true, silent });
+}
 
 async function loadPointForecast({ force = false, silent = false } = {}) {
+  if (RAIN_HOME_OWNS_FORECAST) return;
   const point = { ...state.selected };
   const key = cacheKey(point);
   const memory = state.forecastCache.get(key);
@@ -215,8 +233,8 @@ function selectPoint(lat, lon, name = '自選位置', options = {}) {
   renderPointLayers();
   if (options.moveMap) centerPointForSheet(numericLat, numericLon, Math.max(state.map?.getZoom() || 13, 13));
   if (name === '自選位置') { localStorage.setItem('hkRainHintDismissed','1'); document.querySelector('.map-hint')?.classList.add('hint-hidden'); }
-  if (isMobileLayout() && !state.sheet.userMode) setSheetMode('half', { persist:false, offset:false });
-  loadPointForecast({ force:false });
+  if (!RAIN_HOME_OWNS_FORECAST && isMobileLayout() && !state.sheet.userMode) setSheetMode('half', { persist:false, offset:false });
+  if (!RAIN_HOME_OWNS_FORECAST) void loadPointForecast({ force:false });
   return true;
 }
 
@@ -236,7 +254,13 @@ async function saveCurrentPoint() {
   saveJSON('hkRainSavedPoints', state.saved);
   saveJSON('hkRainLastPoint', state.selected);
   renderSavedPoints(selectSavedPoint, deleteSavedPoint);
-  renderForecast(); renderPointLayers(); syncUrl(); updateStorageStatus();
+  if (RAIN_HOME_OWNS_FORECAST) {
+    const homeName = document.querySelector('.rain-home-location-name');
+    if (homeName) homeName.textContent = item.name;
+  } else {
+    renderForecast();
+  }
+  renderPointLayers(); syncUrl(); updateStorageStatus();
   toast('已儲存位置'); announce(`已儲存${item.name}`);
 }
 
@@ -320,6 +344,7 @@ function toggleFullscreen() {
 }
 
 function setupRefreshLifecycle() {
+  if (RAIN_HOME_OWNS_FORECAST) return;
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') clearRefreshTimer();
     else if (forecastAge() >= REFRESH_INTERVAL_MS) refresh(true); else scheduleRefresh();
@@ -336,6 +361,7 @@ function forecastAge() {
 function clearRefreshTimer() { if (state.refreshTimer) clearTimeout(state.refreshTimer); state.refreshTimer = null; }
 
 function scheduleRefresh() {
+  if (RAIN_HOME_OWNS_FORECAST) return;
   clearRefreshTimer();
   if (document.visibilityState === 'hidden') return;
   const delay = Math.max(1000, REFRESH_INTERVAL_MS - forecastAge());
