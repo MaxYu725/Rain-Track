@@ -1,5 +1,7 @@
+import { state } from './state.js';
 import { getForecastMapFrameSummaries, getForecastMapRuntimeSnapshot } from './forecast-map-runtime.js';
 import { summarizeForecastRainMotion } from './forecast-map-motion.js';
+import { summarizeForecastRainContext, summarizeForecastRainContextMotion } from './forecast-map-context-analysis.js';
 
 const HK_TIME = new Intl.DateTimeFormat('zh-HK', {
   timeZone:'Asia/Hong_Kong',
@@ -9,6 +11,7 @@ const HK_TIME = new Intl.DateTimeFormat('zh-HK', {
 });
 
 let activeMode = 'off';
+let analysisScope = 'regional';
 
 function ensureStyles() {
   if (document.getElementById('rain-map-area-summary-style')) return;
@@ -60,8 +63,16 @@ function selectedTimeText(snapshot) {
 }
 
 function motionText(snapshot) {
-  const motion = summarizeForecastRainMotion(getForecastMapFrameSummaries(), { frameCount:snapshot?.frameCount });
-  if (!motion.ready) return { text:'正在觀察雨區移動', complete:false, status:motion.status };
+  const frames = getForecastMapFrameSummaries();
+  const options = { frameCount:snapshot?.frameCount };
+  const motion = analysisScope === 'regional'
+    ? summarizeForecastRainMotion(frames, options)
+    : summarizeForecastRainContextMotion(frames, {
+        ...options,
+        scope:analysisScope,
+        selected:state.selected
+      });
+  if (!motion.ready) return { text:analysisScope === 'regional' ? '正在觀察雨區移動' : '正在觀察所選範圍雨區變化', complete:false, status:motion.status };
   return {
     text:motion.complete ? motion.label : `初步：${motion.label}`,
     complete:motion.complete,
@@ -78,20 +89,25 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
   if (!visible) return;
 
+  const scoped = summarizeForecastRainContext(summary, {
+    scope:analysisScope,
+    selected:state.selected
+  });
   const time = panel.querySelector('[data-rain-area-time]');
   const label = panel.querySelector('[data-rain-area-label]');
   const detail = panel.querySelector('[data-rain-area-detail]');
   const motion = panel.querySelector('[data-rain-area-motion]');
   if (time) time.textContent = selectedTimeText(snapshot);
-  if (label) label.textContent = summary.regionalLabel || summary.label;
-  if (detail) detail.textContent = summary.regionalDetail || summary.detail;
+  if (label) label.textContent = scoped?.label || '正在分析雨區…';
+  if (detail) detail.textContent = scoped?.detail || '';
   if (motion) {
     const insight = motionText(snapshot);
     motion.textContent = insight.text;
     motion.dataset.complete = insight.complete ? 'true' : 'false';
     motion.dataset.motionStatus = insight.status || '';
   }
-  panel.dataset.rainAreaStatus = summary.status || '';
+  panel.dataset.rainAreaStatus = scoped?.status || summary.status || '';
+  panel.dataset.analysisScope = analysisScope;
   panel.removeAttribute('title');
 }
 
@@ -100,11 +116,17 @@ function initRainAreaSummary() {
   ensureSummary();
   window.addEventListener('rain:map-mode-change', event => {
     activeMode = event.detail?.mode || 'off';
+    if (activeMode !== 'forecast') analysisScope = 'regional';
+    syncSummary();
+  });
+  window.addEventListener('rain:forecast-analysis-scope-change', event => {
+    analysisScope = event.detail?.scope || 'regional';
     syncSummary();
   });
   window.addEventListener('rain:forecast-map-frame-change', event => {
     syncSummary(event.detail?.snapshot || getForecastMapRuntimeSnapshot());
   });
+  window.addEventListener('rain:location-change', () => syncSummary());
 }
 
 if (document.readyState === 'loading') {
