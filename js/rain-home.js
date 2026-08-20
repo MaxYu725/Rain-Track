@@ -186,7 +186,10 @@ async function syncHome() {
     return;
   }
 
-  if (activeLoadKey === key) return;
+  if (activeLoadKey === key) {
+    if (!alreadyRendered) renderLoading(content, point);
+    return;
+  }
   activeLoadKey = key;
   const token = ++requestToken;
   activeController?.abort();
@@ -560,7 +563,7 @@ function initRainHome() {
   window.addEventListener('rain:map-mode-change', event => setMapView(event.detail?.mode && event.detail.mode !== 'off'));
   window.addEventListener('rain:refresh', scheduleRender);
   window.addEventListener('online', scheduleRender);
-  scheduleRender();
+  void syncHome();
 }
 
-document.addEventListener('DOMContentLoaded', initRainHome, { once:true });
+initRainHome();

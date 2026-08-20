@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa31';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa32';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
@@ -49,8 +49,8 @@ const APP_SHELL = [
   './icons/icon-maskable-512.png'
 ];
 
-// Rain Home must be able to start even when optional map/radar modules are
-// unavailable. Keep this dependency set deliberately small and atomic.
+// Only assets required to paint and start Rain Home are installation-critical.
+// Forecast Map, Radar and settings stay in APP_SHELL but never gate Home boot.
 const CORE_SHELL = [
   './',
   './index.html',
@@ -58,7 +58,6 @@ const CORE_SHELL = [
   './css/settings-phase1a.css',
   './css/rain-home-first-paint.css',
   './js/boot-watchdog.js',
-  './js/forecast-map-smoke.js',
   './js/rain-home.js',
   './js/rain-home-time.js',
   './js/rain-home-shell.js',
@@ -86,8 +85,6 @@ self.addEventListener('install', event => {
       await cache.put(new Request(url), response.clone());
     }
 
-    // pwa30 still painted the legacy static map/sheet before Rain Home takeover.
-    // Activate pwa31 as soon as the complete Rain Home first-paint core is cached.
     await self.skipWaiting();
   })());
 });
@@ -156,8 +153,6 @@ async function currentShellAsset(request) {
   try {
     const response = await fetch(request, { cache:'no-store' });
     if (response?.ok) {
-      // Optional map/radar modules become offline-capable after first use,
-      // without being allowed to block installation of the Rain Home core.
       cache.put(request, response.clone()).catch(() => {});
       return response;
     }

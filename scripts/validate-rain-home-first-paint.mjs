@@ -13,6 +13,11 @@ assert.ok(index.includes('正在整理未來兩小時雨勢'), 'static first pai
 assert.ok(index.includes('rain-home-skeleton-chart'), 'static first paint must include the Rain Home skeleton instead of the legacy spinner-only view');
 assert.ok(index.indexOf('data-rain-home-first-paint') < index.indexOf('<script type="module"'), 'Rain Home first paint must exist before application modules execute');
 
+const homeScript = index.indexOf('<script type="module" src="./js/rain-home.js"></script>');
+const appScript = index.indexOf('<script type="module" src="./js/app.js"></script>');
+assert.ok(homeScript >= 0, 'Rain Home must be loaded directly from index.html');
+assert.ok(appScript > homeScript, 'Rain Home must start before the legacy app module graph');
+
 for (const legacyMarker of [
   'id="sheet-handle"',
   'id="forecast-toggle"',
@@ -34,11 +39,12 @@ for (const marker of [
 }
 
 assert.ok(boot.includes("!root.hasAttribute('data-rain-home-first-paint')"), 'boot watchdog must distinguish static first paint from JavaScript takeover');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa31'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa32'/);
 
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 const coreShell = sw.match(/const CORE_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in the full PWA inventory');
 assert.ok(coreShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must be atomic with the Rain Home core');
+assert.ok(coreShell.includes("'./js/rain-home.js'"), 'direct Rain Home module must be atomic with the PWA core');
 
-console.log('Rain Home static first-paint + pwa31 regression gate PASS');
+console.log('Rain Home static first-paint + direct startup + pwa32 regression gate PASS');
