@@ -14,7 +14,10 @@ for (const marker of [
   'setForecastPlaybackSpeed',
   "hkRainForecastSpeed",
   "document.visibilityState === 'hidden'",
-  'await setFrame(nextIndex, { fromPlayback:true })'
+  'await setFrame(nextIndex, { fromPlayback:true })',
+  'export function initForecastTimeline()',
+  "document.readyState === 'loading'",
+  'initForecastTimeline();'
 ]) {
   assert.ok(timelineCore.includes(marker), `forecast playback marker missing from core: ${marker}`);
 }
@@ -22,10 +25,23 @@ for (const marker of [
 for (const marker of [
   "from './forecast-map-timeline-core.js'",
   'forecast-map-fullscreen-position-style',
-  'bottom:calc(14px + var(--safe-bottom))!important'
+  'bottom:calc(14px + var(--safe-bottom))!important',
+  'forecast-mobile-scrubber',
+  'forecast-mobile-range',
+  'forecast-mobile-output',
+  "range?.addEventListener('input'",
+  "range?.addEventListener('change'",
+  'target.click()',
+  'stopForecastPlayback()',
+  "#forecast-map-timeline .forecast-frame-buttons{display:none!important}"
 ]) {
   assert.ok(timeline.includes(marker), `map-first forecast timeline marker missing: ${marker}`);
 }
+
+const inputHandler = timeline.match(/range\?\.addEventListener\('input',[\s\S]*?\n  \}\);/)?.[0] || '';
+assert.ok(inputHandler, 'mobile scrubber input handler missing');
+assert.ok(!inputHandler.includes('target.click()'), 'scrubber input must not trigger frame fetches while the user is dragging');
+assert.ok(!inputHandler.includes('setForecastMapIndex'), 'scrubber input must not call the frame loader while dragging');
 
 for (const removedMarker of [
   'forecast-map-sheet-avoidance-style',
@@ -62,8 +78,9 @@ assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the 
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 23, `PWA shell generation must be at least pwa23, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 39, `Forecast Map first pass requires PWA generation at least pwa39, got pwa${shellVersion[1]}`);
+assert.ok(serviceWorker.includes("'./js/forecast-map-timeline.js'"), 'forecast timeline wrapper is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + separated settings + lazy map-mode facade + map-first timeline gate PASS');
+console.log('Forecast playback + mobile scrubber + lazy map-mode validation passed');
