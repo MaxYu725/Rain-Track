@@ -46,7 +46,11 @@ for (const marker of [
   '時間點相隔 6 分鐘',
   '30 分鐘累積預測雨量',
   'forecast-map-product-meta',
-  "meta.textContent = `${source} · 基準 ${timeText(snapshot?.issueTime)}`"
+  "meta.textContent = `${source} · 基準 ${timeText(snapshot?.issueTime)}`",
+  'sanitizeFrameButtonLabels',
+  'button.title = label',
+  "button.setAttribute('aria-label', label)",
+  'requestAnimationFrame(() => syncForecastHud(getForecastMapRuntimeSnapshot()))'
 ]) {
   assert.ok(timeline.includes(marker), `map-first forecast timeline marker missing: ${marker}`);
 }
@@ -64,6 +68,7 @@ for (const hiddenMarker of [
 assert.ok(timeline.includes('display:none!important'), 'technical Forecast Map annotations must be hidden in the normal HUD');
 assert.ok(timeline.includes("infoButton.addEventListener('click'"), 'data semantics must be revealed only from an explicit info-button click');
 assert.ok(timeline.includes("if (event.key === 'Escape') hideForecastInfo()"), 'temporary disclosure must be dismissible with Escape');
+assert.ok(!timeline.match(/button\.title\s*=\s*[^\n]*30 分鐘/), 'desktop frame hover text must not disclose accumulation semantics without the info action');
 
 const inputHandler = timeline.match(/range\?\.addEventListener\('input',[\s\S]*?\n  \}\);/)?.[0] || '';
 assert.ok(inputHandler, 'mobile scrubber input handler missing');
@@ -111,4 +116,4 @@ assert.ok(serviceWorker.includes("'./js/forecast-map-timeline.js'"), 'forecast t
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + fullscreen viewport + on-demand data-note validation passed');
+console.log('Forecast playback + fullscreen viewport + explicit on-demand data-note validation passed');
