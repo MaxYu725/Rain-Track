@@ -1,4 +1,5 @@
-import { getForecastMapRuntimeSnapshot } from './forecast-map-runtime.js';
+import { getForecastMapFrameSummaries, getForecastMapRuntimeSnapshot } from './forecast-map-runtime.js';
+import { summarizeForecastRainMotion } from './forecast-map-motion.js';
 
 const HK_TIME = new Intl.DateTimeFormat('zh-HK', {
   timeZone:'Asia/Hong_Kong',
@@ -20,9 +21,11 @@ function ensureStyles() {
     .rain-map-area-kicker::after{content:' · '}
     .rain-map-area-label{display:inline;color:#f1f8fb;font-size:.95rem;font-weight:680;line-height:1.35}
     .rain-map-area-detail{display:block;margin-top:4px;color:#91a0a7;font-size:.66rem;line-height:1.4;font-variant-numeric:tabular-nums}
+    .rain-map-area-motion{display:block;margin-top:4px;padding-top:4px;border-top:1px solid rgba(89,123,139,.34);color:#8dd9fb;font-size:.67rem;font-weight:620;line-height:1.35}
+    .rain-map-area-motion[data-complete="false"]{color:#82a8b9;font-weight:560}
     @media(max-width:700px){
       .rain-map-area-summary{top:50px;left:8px;width:calc(100% - 16px);max-width:560px;padding:7px 9px}
-      .rain-map-area-kicker{font-size:.6rem}.rain-map-area-label{font-size:.82rem;line-height:1.3}.rain-map-area-detail{margin-top:3px;font-size:.6rem;line-height:1.32}
+      .rain-map-area-kicker{font-size:.6rem}.rain-map-area-label{font-size:.82rem;line-height:1.3}.rain-map-area-detail{margin-top:3px;font-size:.6rem;line-height:1.32}.rain-map-area-motion{margin-top:3px;padding-top:3px;font-size:.61rem;line-height:1.3}
     }
   `;
   document.head.append(style);
@@ -42,7 +45,8 @@ function ensureSummary() {
   panel.innerHTML = `
     <span class="rain-map-area-kicker" data-rain-area-time>正在分析目前時段…</span>
     <strong class="rain-map-area-label" data-rain-area-label>正在分析雨區…</strong>
-    <span class="rain-map-area-detail" data-rain-area-detail></span>`;
+    <span class="rain-map-area-detail" data-rain-area-detail></span>
+    <span class="rain-map-area-motion" data-rain-area-motion data-complete="false">正在觀察雨區移動</span>`;
   mapContainer.append(panel);
   return panel;
 }
@@ -53,6 +57,16 @@ function selectedTimeText(snapshot) {
   const clock = Number.isNaN(time.getTime()) ? '—' : HK_TIME.format(time);
   const lead = Number(frame?.leadMinutes);
   return Number.isFinite(lead) ? `${clock} · +${lead} 分` : clock;
+}
+
+function motionText(snapshot) {
+  const motion = summarizeForecastRainMotion(getForecastMapFrameSummaries(), { frameCount:snapshot?.frameCount });
+  if (!motion.ready) return { text:'正在觀察雨區移動', complete:false, status:motion.status };
+  return {
+    text:motion.complete ? motion.label : `初步：${motion.label}`,
+    complete:motion.complete,
+    status:motion.status
+  };
 }
 
 function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
@@ -67,9 +81,16 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   const time = panel.querySelector('[data-rain-area-time]');
   const label = panel.querySelector('[data-rain-area-label]');
   const detail = panel.querySelector('[data-rain-area-detail]');
+  const motion = panel.querySelector('[data-rain-area-motion]');
   if (time) time.textContent = selectedTimeText(snapshot);
   if (label) label.textContent = summary.label;
   if (detail) detail.textContent = summary.detail;
+  if (motion) {
+    const insight = motionText(snapshot);
+    motion.textContent = insight.text;
+    motion.dataset.complete = insight.complete ? 'true' : 'false';
+    motion.dataset.motionStatus = insight.status || '';
+  }
   panel.dataset.rainAreaStatus = summary.status || '';
   panel.removeAttribute('title');
 }
