@@ -14,14 +14,18 @@ for (const marker of [
   "label:'香港'",
   "label:'深圳'",
   "label:'南海'",
+  '21.65, 113.68',
+  '22.80, 114.68',
   "data-rain-map-view=\"location\"",
   '查看目前定位附近',
   'map.fitBounds',
   'map.setView',
   "activeMode === 'forecast'",
+  "state.map?.invalidateSize?.({ pan:false, animate:false })",
   "applyView('regional', button, { animate:false })",
   "state.map.on?.('movestart'",
-  "state.map.on?.('zoomstart'"
+  "state.map.on?.('zoomstart'",
+  'body.rain-home-v2.rain-map-view .radius-label{display:none!important}'
 ]) {
   assert.ok(quick.includes(marker), `quick-view marker missing: ${marker}`);
 }
@@ -35,7 +39,7 @@ assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => im
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 39, `Forecast Map first pass requires PWA generation at least pwa39, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 40, `Forecast Map fullscreen fix requires PWA generation at least pwa40, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell inventory');
 
-console.log('Forecast Map regional quick-view validation passed');
+console.log('Forecast Map fullscreen regional quick-view validation passed');

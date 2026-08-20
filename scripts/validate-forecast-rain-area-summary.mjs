@@ -57,7 +57,9 @@ for (const marker of [
   'detail.textContent = summary.detail',
   'panel.dataset.rainAreaStatus',
   "activeMode === 'forecast'",
-  "rain:forecast-map-frame-change"
+  "rain:forecast-map-frame-change",
+  '.rain-map-area-summary{top:50px;left:8px',
+  'padding:7px 9px'
 ]) assert.ok(ui.includes(marker), `rain-area summary UI marker missing: ${marker}`);
 
 assert.ok(!ui.includes('detail.textContent = `${summary.detail} · 判讀門檻'), 'engineering threshold text must not be appended to the visible product summary');
@@ -71,6 +73,6 @@ assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI mi
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 39, `Forecast Map first pass requires PWA generation at least pwa39, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 40, `Forecast Map fullscreen fix requires PWA generation at least pwa40, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area product summary validation passed');
+console.log('Forecast rain-area compact fullscreen summary validation passed');

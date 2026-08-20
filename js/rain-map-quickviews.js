@@ -5,7 +5,7 @@ const PRESETS = Object.freeze([
     id:'regional',
     label:'區域',
     aria:'查看香港、深圳及南面海域整體雨區',
-    bounds:[[21.55, 113.40], [22.95, 114.95]]
+    bounds:[[21.65, 113.68], [22.80, 114.68]]
   },
   {
     id:'hong-kong',
@@ -41,11 +41,13 @@ function ensureStyles() {
     .rain-map-quickview-btn{min-height:34px;padding:0 10px;border:1px solid #3f464a;background:#090b0c;color:#c8d0d4;font-size:.7rem;white-space:nowrap}
     .rain-map-quickview-btn:hover{border-color:#6f7d84;color:#fff}
     .rain-map-quickview-btn.active{border-color:#277ca6;background:#08202c;color:#f4fbff;box-shadow:inset 0 -2px 0 #22a7e0}
+    body.rain-home-v2.rain-map-view .radius-label{display:none!important}
     @media(max-width:700px){
-      .rain-map-quickviews{top:10px;right:10px;max-width:calc(100% - 118px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;gap:4px}
+      .rain-map-quickviews{top:8px;right:8px;max-width:calc(100% - 112px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:3px;gap:3px}
       .rain-map-quickviews::-webkit-scrollbar{display:none}
       .rain-map-quickviews-label{display:none}
-      .rain-map-quickview-btn{min-height:34px;padding:0 9px;font-size:.69rem}
+      .rain-map-quickview-btn{min-height:31px;padding:0 8px;font-size:.66rem}
+      body.rain-home-v2.rain-map-view .rain-home-back-map{top:8px;left:8px;min-height:38px;padding:0 10px;font-size:.82rem}
     }
   `;
   document.head.append(style);
@@ -118,8 +120,8 @@ function applyView(id, button, { animate = true } = {}) {
   if (!preset) return;
   map.fitBounds(preset.bounds, {
     animate,
-    paddingTopLeft:[24, 76],
-    paddingBottomRight:[24, 168]
+    paddingTopLeft:[20, 68],
+    paddingBottomRight:[20, 150]
   });
   markActive(button);
 }
@@ -127,7 +129,10 @@ function applyView(id, button, { animate = true } = {}) {
 function applyDefaultRegionalView(controls) {
   const button = controls?.querySelector('[data-rain-map-view="regional"]');
   if (!button) return;
-  requestAnimationFrame(() => applyView('regional', button, { animate:false }));
+  requestAnimationFrame(() => {
+    state.map?.invalidateSize?.({ pan:false, animate:false });
+    requestAnimationFrame(() => applyView('regional', button, { animate:false }));
+  });
 }
 
 function syncVisibility() {

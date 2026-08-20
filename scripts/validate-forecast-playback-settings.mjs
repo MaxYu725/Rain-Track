@@ -24,8 +24,12 @@ for (const marker of [
 
 for (const marker of [
   "from './forecast-map-timeline-core.js'",
+  "from './state.js'",
   'forecast-map-fullscreen-position-style',
-  'bottom:calc(14px + var(--safe-bottom))!important',
+  'flex:1 1 0!important',
+  'height:auto!important',
+  'min-height:0!important',
+  'bottom:calc(12px + var(--safe-bottom))!important',
   'forecast-mobile-scrubber',
   'forecast-mobile-range',
   'forecast-mobile-output',
@@ -33,7 +37,8 @@ for (const marker of [
   "range?.addEventListener('change'",
   'target.click()',
   'stopForecastPlayback()',
-  "#forecast-map-timeline .forecast-frame-buttons{display:none!important}"
+  "#forecast-map-timeline .forecast-frame-buttons{display:none!important}",
+  "state.map?.invalidateSize?.({ pan:false, animate:false })"
 ]) {
   assert.ok(timeline.includes(marker), `map-first forecast timeline marker missing: ${marker}`);
 }
@@ -42,6 +47,7 @@ const inputHandler = timeline.match(/range\?\.addEventListener\('input',[\s\S]*?
 assert.ok(inputHandler, 'mobile scrubber input handler missing');
 assert.ok(!inputHandler.includes('target.click()'), 'scrubber input must not trigger frame fetches while the user is dragging');
 assert.ok(!inputHandler.includes('setForecastMapIndex'), 'scrubber input must not call the frame loader while dragging');
+assert.ok(!timeline.includes('height:100%!important;overflow:hidden!important;visibility:visible'), 'timeline polish must not reintroduce the overflowing 100%-height flex child pattern');
 
 for (const removedMarker of [
   'forecast-map-sheet-avoidance-style',
@@ -78,9 +84,9 @@ assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the 
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 39, `Forecast Map first pass requires PWA generation at least pwa39, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 40, `Forecast Map fullscreen fix requires PWA generation at least pwa40, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline.js'"), 'forecast timeline wrapper is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + mobile scrubber + lazy map-mode validation passed');
+console.log('Forecast playback + fullscreen viewport + mobile scrubber validation passed');
