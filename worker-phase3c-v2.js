@@ -12,62 +12,34 @@ const jsonHeaders = {
   'Content-Type': 'application/json; charset=utf-8'
 };
 
-function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {}) {
+export function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {}) {
   if (typeof fetchImpl !== 'function') throw new Error('A fetch implementation is required');
 
   return async function fetchSwirlsText(url, options = {}) {
-    const ttlSeconds = Math.max(1, Number(options.ttlSeconds) || SWIRLS_FETCH_POLICY.indexTtlSeconds);
     const timeoutMs = Math.max(1, Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
-    const bypassCache = options.bypassCache === true;
-    const cache = globalThis.caches?.default;
-    const cacheKey = new Request(url, { headers: { Accept: ACCEPT } });
-
-    if (!bypassCache && cache) {
-      const cached = await cache.match(cacheKey);
-      if (cached) {
-        const body = await cached.text();
-        return {
-          body,
-          bytes: new TextEncoder().encode(body).byteLength,
-          updatedAt: cached.headers.get('last-modified'),
-          cacheStatus: 'worker-hit'
-        };
-      }
-    }
-
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+
     try {
-      const response = await fetchImpl(url, {
+      const requestOptions = {
         redirect: 'follow',
-        cache: bypassCache ? 'no-store' : 'no-cache',
         headers: {
           Accept: ACCEPT,
-          'Cache-Control': bypassCache ? 'no-cache, no-store, max-age=0' : 'no-cache',
-          'User-Agent': 'Rain-Track-SWIRLS-Point/2.1'
+          'User-Agent': 'Rain-Track-SWIRLS-Point/3.0'
         },
-        signal: controller.signal,
-        cf: bypassCache
-          ? { cacheEverything: false, cacheTtl: 0 }
-          : { cacheEverything: true, cacheTtl: ttlSeconds }
-      });
+        signal: controller.signal
+      };
+      if (options.bypassCache === true) requestOptions.cache = 'no-store';
+
+      const response = await fetchImpl(url, requestOptions);
       if (!response.ok) throw new Error(`SWIRLS upstream HTTP ${response.status}`);
 
       const body = await response.text();
-      const updatedAt = response.headers.get('last-modified');
-      const upstreamCacheStatus = response.headers.get('cf-cache-status') || null;
-
-      if (!bypassCache && cache) {
-        const headers = new Headers(response.headers);
-        headers.set('Cache-Control', `public, max-age=${ttlSeconds}`);
-        await cache.put(cacheKey, new Response(body, { status: 200, headers }));
-      }
-
       return {
         body,
         bytes: new TextEncoder().encode(body).byteLength,
-        updatedAt,
-        cacheStatus: upstreamCacheStatus || (bypassCache ? 'bypass' : 'worker-miss')
+        updatedAt: response.headers.get('last-modified'),
+        cacheStatus: response.headers.get('cf-cache-status') || null
       };
     } finally {
       clearTimeout(timer);
@@ -91,8 +63,7 @@ const pointRequestHandler = createSwirlsPointRequestHandler({
 });
 
 const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({
-  loadFrames: pointSeriesBatchLoader,
-  concurrency: 4
+  loadFrames: pointSeriesBatchLoader
 });
 
 export function createPhase3Cv2Worker({
