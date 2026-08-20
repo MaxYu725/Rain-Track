@@ -159,6 +159,17 @@ function ensureProductHud() {
   return panel;
 }
 
+function sanitizeFrameButtonLabels(frames = getForecastMapFrameSummaries()) {
+  const panel = document.getElementById('forecast-map-timeline');
+  if (!panel) return;
+  panel.querySelectorAll('[data-forecast-index]').forEach(button => {
+    const frame = frames[Number(button.dataset.forecastIndex)];
+    const label = frame ? `有效時間 ${frameOutput(frame)}` : '預報有效時間';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+  });
+}
+
 function syncProductHud(snapshot = getForecastMapRuntimeSnapshot()) {
   const panel = ensureProductHud();
   if (!panel) return;
@@ -167,6 +178,7 @@ function syncProductHud(snapshot = getForecastMapRuntimeSnapshot()) {
     const source = snapshot?.source === 'swirls' ? 'SWIRLS' : '後備預報';
     meta.textContent = `${source} · 基準 ${timeText(snapshot?.issueTime)}`;
   }
+  sanitizeFrameButtonLabels();
   const note = panel.querySelector('#forecast-map-info-note');
   if (note && !note.hidden) note.textContent = infoText(snapshot);
 }
@@ -233,12 +245,17 @@ function initForecastTimelinePolish() {
   ensureProductHud();
   syncForecastHud();
   window.addEventListener('rain:forecast-map-frame-change', event => {
-    syncForecastHud(event.detail?.snapshot || getForecastMapRuntimeSnapshot());
+    const snapshot = event.detail?.snapshot || getForecastMapRuntimeSnapshot();
+    syncForecastHud(snapshot);
+    requestAnimationFrame(() => syncForecastHud(getForecastMapRuntimeSnapshot()));
   });
   window.addEventListener('rain:map-mode-change', event => {
     if (event.detail?.mode !== 'forecast') hideForecastInfo();
     syncForecastHud();
-    requestAnimationFrame(refreshForecastMapViewport);
+    requestAnimationFrame(() => {
+      refreshForecastMapViewport();
+      syncForecastHud(getForecastMapRuntimeSnapshot());
+    });
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') hideForecastInfo();
