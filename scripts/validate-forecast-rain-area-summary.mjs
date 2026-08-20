@@ -63,9 +63,11 @@ for (const key of ['szWest','szCentral','szEast','hkNtWest','hkNtNorth','hkNtEas
 assert.ok(regional.regionalLabel, 'regional label must be available');
 assert.ok(regional.regionalDetail, 'regional detail must be available');
 
-const eastSeaValues = Array(regionalCount).fill(0);
-[24,29].forEach(index => { eastSeaValues[index] = 1.2; });
-const eastSea = summarizeForecastRainArea({ values:eastSeaValues }, regionalGrid);
+const eastSeaGrid = {
+  latitudes:[21.90,21.80],
+  longitudes:[114.70,114.90]
+};
+const eastSea = summarizeForecastRainArea(frameWith([0,3], 1.2, 4), eastSeaGrid);
 assert.equal(eastSea.productZones.seaEast.wetCellCount, 2);
 assert.match(eastSea.regionalLabel, /東南海域/);
 assert.match(eastSea.regionalDetail, /東南海域/);
