@@ -73,7 +73,7 @@ for (const forbidden of [
   assert.ok(!fixedYSource.includes(forbidden), `fixed Y-axis polish must remain presentation-only: ${forbidden}`);
 }
 
-assert.ok(!fixedYSource.includes('scrollLeft ='), 'fixed Y-axis polish must never change the user chart scroll position');
+assert.ok(!/\.scrollLeft\s*=/.test(fixedYSource), 'fixed Y-axis polish must never change the user chart scroll position');
 assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
 assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'fixed Y axis must load as a best-effort optional Home enhancement');
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
