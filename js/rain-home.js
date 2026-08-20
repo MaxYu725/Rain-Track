@@ -45,17 +45,17 @@ function injectStyles() {
     .rain-home-location{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:6px 0 20px;border-bottom:1px solid #252525}.rain-home-location>div{min-width:0}
     .rain-home-location-kicker{margin:0 0 6px;color:#929ca1;font-size:.72rem;font-weight:650;letter-spacing:.08em;text-transform:uppercase}.rain-home-location-name{margin:0;color:#fff;font-size:clamp(1.55rem,5vw,2.35rem);font-weight:480;letter-spacing:-.03em;line-height:1.12;overflow-wrap:anywhere}.rain-home-location-coord{margin-top:7px;color:#6f787c;font-size:.72rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
     .rain-home-locate{flex:0 0 auto;min-height:42px;padding:0 13px;border:1px solid #424b50;background:#0b0e10;color:#e5e9eb;font-weight:600}.rain-home-locate:hover{border-color:#68757b;background:#111619}
-    .rain-home-summary{padding:30px 0 24px}.rain-home-verdict{margin:0;max-width:680px;color:#fff;font-size:clamp(1.8rem,6vw,3rem);font-weight:340;letter-spacing:-.045em;line-height:1.11;text-wrap:balance}.rain-home-detail{max-width:640px;margin:12px 0 0;color:#b8c0c4;font-size:.98rem;line-height:1.68}
-    .rain-home-chart-section{margin-top:4px;padding:20px 0 0;border-top:1px solid #252525}.rain-home-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.rain-home-section-title{margin:0;color:#fff;font-size:1.02rem;font-weight:680}.rain-home-section-note{color:#7d888d;font-size:.72rem;text-align:right;line-height:1.48}
-    .rain-home-chart-wrap{position:relative;padding:15px 14px 13px;border:1px solid #232d32;background:#070a0c}.rain-home-chart{display:block;width:100%;height:auto;overflow:visible;color:var(--accent);touch-action:pan-y;cursor:crosshair}.rain-home-grid{stroke:#242c30;stroke-width:1;vector-effect:non-scaling-stroke}.rain-home-axis-label{fill:#717c81;font-size:11px;font-family:"Segoe UI","Microsoft JhengHei",sans-serif}.rain-home-axis-clock{fill:#a6b0b5;font-size:10px;font-variant-numeric:tabular-nums}.rain-home-line{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.rain-home-area{fill:currentColor;opacity:.09}.rain-home-selection-guide{stroke:currentColor;stroke-width:1;stroke-dasharray:4 4;opacity:.38;vector-effect:non-scaling-stroke;pointer-events:none}.rain-home-dot{fill:#070a0c;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}.rain-home-dot.selected{fill:currentColor;stroke-width:3;r:5.5}.rain-home-hit{fill:transparent;stroke:transparent;stroke-width:1;cursor:pointer;outline:none}.rain-home-hit:focus-visible{stroke:var(--cyan);stroke-width:2;fill:rgba(0,216,255,.08)}
-    .rain-home-chart-readout{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px;margin:12px 0 0;padding:13px 14px;border-top:1px solid #27343a;background:#0a1013;min-height:72px}.rain-home-readout-time{color:#fff;font-size:.92rem;font-weight:680}.rain-home-readout-window{margin-top:4px;color:#7c898f;font-size:.7rem}.rain-home-readout-value{color:#e2f6ff;font-size:1.35rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}.rain-home-readout-unit{display:block;margin-top:1px;color:#71828a;font-size:.61rem;font-weight:500}
-    .rain-home-chart-caption{display:flex;justify-content:space-between;gap:12px;margin-top:9px;color:#717b80;font-size:.69rem}.rain-home-chart-caption span:last-child{text-align:right}.rain-home-chart-help{margin-top:5px;color:#586267;font-size:.66rem}.rain-home-meta{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px;color:#778187;font-size:.69rem}.rain-home-meta span{display:inline-flex;align-items:center;min-height:26px;padding:3px 8px;border:1px solid #242c30;background:#080b0d}
-    .rain-home-primary-action{display:flex;width:100%;min-height:64px;align-items:center;justify-content:space-between;gap:16px;margin-top:22px;padding:10px 16px;border:1px solid #3f7893;background:#07131a;color:#fff;text-align:left}.rain-home-action-copy{display:flex;min-width:0;flex-direction:column;gap:3px}.rain-home-action-copy strong{font-size:.94rem}.rain-home-action-copy small{color:#7e9aa8;font-size:.7rem}.rain-home-action-arrow{color:var(--accent);font-size:1.35rem}.rain-home-primary-action:disabled{opacity:.62;cursor:progress}
+    .rain-home-summary{padding:29px 0 24px}.rain-home-verdict-kicker{margin:0 0 8px;color:var(--accent);font-size:.78rem;font-weight:720;letter-spacing:.055em}.rain-home-verdict{margin:0;max-width:680px;color:#fff;font-size:clamp(1.7rem,5vw,2.55rem);font-weight:360;letter-spacing:-.038em;line-height:1.13;text-wrap:balance}.rain-home-detail{max-width:650px;margin:12px 0 0;color:#aeb8bd;font-size:.94rem;line-height:1.65}
+    .rain-home-chart-section{margin-top:4px;padding:20px 0 0;border-top:1px solid #252525}.rain-home-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:12px}.rain-home-section-title{margin:0;color:#fff;font-size:1.02rem;font-weight:680}.rain-home-section-note{color:#768288;font-size:.7rem;text-align:right;line-height:1.5}
+    .rain-home-chart-wrap{position:relative;padding:15px 14px 12px;border:1px solid #20292e;background:#06090b}.rain-home-chart{display:block;width:100%;height:auto;overflow:visible;color:var(--accent);touch-action:pan-y;cursor:crosshair}.rain-home-grid{stroke:#20282c;stroke-width:1;vector-effect:non-scaling-stroke}.rain-home-axis-label{fill:#68757b;font-size:10px;font-family:"Segoe UI","Microsoft JhengHei",sans-serif}.rain-home-axis-clock{fill:#c0c8cc;font-size:11px;font-weight:650;font-variant-numeric:tabular-nums}.rain-home-axis-lead{fill:#657177;font-size:9px}.rain-home-line{fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}.rain-home-area{fill:currentColor;opacity:.07}.rain-home-unavailable-zone{fill:#fff;opacity:.018}.rain-home-first-lead{stroke:#53636a;stroke-width:1;stroke-dasharray:3 5;opacity:.5;vector-effect:non-scaling-stroke}.rain-home-unavailable-label{fill:#59666c;font-size:9px}.rain-home-selection-guide{stroke:currentColor;stroke-width:1;stroke-dasharray:4 4;opacity:0;transition:opacity .15s ease;vector-effect:non-scaling-stroke;pointer-events:none}.rain-home-selection-guide.is-active{opacity:.38}.rain-home-dot{fill:#06090b;stroke:currentColor;stroke-width:2;vector-effect:non-scaling-stroke}.rain-home-dot.selected{fill:currentColor;stroke-width:3;r:5.5}.rain-home-hit{fill:transparent;stroke:transparent;stroke-width:1;cursor:pointer;outline:none}.rain-home-hit:focus-visible{stroke:var(--cyan);stroke-width:2;fill:rgba(0,216,255,.08)}
+    .rain-home-peak-label{fill:#ccefff;font-size:10px;font-weight:650;pointer-events:none}.rain-home-peak-value{fill:#7e98a4;font-size:9px;font-weight:500}.rain-home-chart-readout{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px;margin:12px 0 0;padding:12px 13px;border-top:1px solid #263238;background:#091013;min-height:66px}.rain-home-chart-readout[hidden]{display:none}.rain-home-readout-time{color:#fff;font-size:.9rem;font-weight:680}.rain-home-readout-window{margin-top:4px;color:#748188;font-size:.68rem}.rain-home-readout-value{color:#dff5ff;font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}.rain-home-readout-unit{display:block;margin-top:1px;color:#71828a;font-size:.6rem;font-weight:500}
+    .rain-home-chart-caption{display:flex;justify-content:space-between;gap:12px;margin-top:9px;color:#68747a;font-size:.67rem}.rain-home-chart-caption span:last-child{text-align:right}.rain-home-chart-help{margin-top:4px;color:#535f64;font-size:.64rem}.rain-home-meta{margin-top:13px;color:#68757b;font-size:.68rem;line-height:1.5}.rain-home-meta.is-partial{color:#d8a66f}.rain-home-meta strong{color:#94a0a6;font-weight:650}
+    .rain-home-primary-action{display:flex;width:100%;min-height:61px;align-items:center;justify-content:space-between;gap:16px;margin-top:22px;padding:10px 16px;border:1px solid #365f73;background:#061117;color:#fff;text-align:left}.rain-home-action-copy{display:flex;min-width:0;flex-direction:column;gap:3px}.rain-home-action-copy strong{font-size:.94rem}.rain-home-action-copy small{color:#7994a0;font-size:.7rem}.rain-home-action-arrow{color:var(--accent);font-size:1.35rem}.rain-home-primary-action:disabled{opacity:.62;cursor:progress}
     .rain-home-loading{display:flex;min-height:330px;flex-direction:column;justify-content:center;gap:16px;color:#929ca1}.rain-home-loading-head{display:flex;align-items:center;gap:11px}.rain-home-loading-head strong{color:#d6dde0;font-size:.9rem}.rain-home-loading-head span:last-child{display:block;margin-top:2px;color:#707a7f;font-size:.7rem}.rain-home-loading-spinner{width:26px;height:26px;border:2px solid #313a3e;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}.rain-home-skeleton{display:grid;gap:10px;padding:16px;border:1px solid #20282c;background:#06090a}.rain-home-skeleton-line,.rain-home-skeleton-chart{background:#11171a}.rain-home-skeleton-line{height:13px}.rain-home-skeleton-line.short{width:56%}.rain-home-skeleton-line.medium{width:78%}.rain-home-skeleton-chart{height:126px;margin-top:5px}
     .rain-home-error{display:grid;gap:9px;margin-top:22px;padding:15px;border:1px solid #5d3a23;background:#160e08;color:#e9c29b;line-height:1.55}.rain-home-error strong{color:#f2d2b5}.rain-home-error-detail{color:#b89070;font-size:.74rem;overflow-wrap:anywhere}.rain-home-back-map{position:absolute;z-index:1200;top:12px;left:12px;display:none;min-height:42px;padding:0 13px;border:1px solid #5b5b5b;background:rgba(0,0,0,.9);color:#fff}body.rain-home-v2.rain-map-view .rain-home-back-map{display:block}
-    @media(max-width:700px){body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}.rain-home-location{padding-bottom:17px}.rain-home-summary{padding:23px 0 19px}.rain-home-section-head{align-items:flex-start;flex-direction:column;gap:5px}.rain-home-section-note{text-align:left}.rain-home-chart-wrap{padding:12px 9px 10px}.rain-home-loading{min-height:300px}}
+    @media(max-width:700px){body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}.rain-home-location{padding-bottom:17px}.rain-home-summary{padding:23px 0 19px}.rain-home-verdict{font-size:clamp(1.65rem,8vw,2.3rem)}.rain-home-section-head{align-items:flex-start;flex-direction:column;gap:5px}.rain-home-section-note{text-align:left}.rain-home-chart-wrap{padding:12px 9px 10px}.rain-home-loading{min-height:300px}}
     @media(max-width:390px){.rain-home-chart-caption{flex-direction:column;gap:2px}.rain-home-chart-caption span:last-child{text-align:left}.rain-home-chart-readout{grid-template-columns:1fr}.rain-home-readout-value{text-align:left}.rain-home-readout-unit{display:inline;margin-left:5px}}
-    @media(prefers-reduced-motion:reduce){.rain-home-loading-spinner{animation:none!important}}
+    @media(prefers-reduced-motion:reduce){.rain-home-loading-spinner{animation:none!important}.rain-home-selection-guide{transition:none!important}}
   `;
   document.head.append(style);
 }
@@ -159,12 +159,7 @@ function normalizeSeries(data) {
   if (!points.length) throw new Error('兩小時 SWIRLS 定位序列沒有可用資料點');
   if (data.complete === true && missingFrames.length) throw new Error('兩小時 SWIRLS 完整旗標與資料不符');
 
-  return {
-    ...data,
-    complete:missingFrames.length === 0,
-    points,
-    missingFrames
-  };
+  return { ...data, complete:missingFrames.length === 0, points, missingFrames };
 }
 
 function renderCurrentView(content = document.getElementById('forecast-content')) {
@@ -198,7 +193,7 @@ function renderUnavailable(content, point, error) {
   content.innerHTML = `
     <section class="rain-home-root" data-rain-home-owned="series" data-view-kind="error" data-point-key="${escapeHtml(pointKey(point))}">
       ${locationMarkup(point)}
-      <div class="rain-home-summary"><h1 class="rain-home-verdict">定位序列暫時未能載入</h1><p class="rain-home-detail">此狀態不會自動重試。可使用頁面更新按鈕或重新定位後再讀取。</p></div>
+      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">資料暫時不可用</div><h1 class="rain-home-verdict">定位序列未能載入</h1><p class="rain-home-detail">此狀態不會自動重試。可使用頁面更新按鈕或重新定位後再讀取。</p></div>
       <div class="rain-home-error" role="alert"><strong>SWIRLS 資料讀取失敗</strong><span class="rain-home-error-detail">${escapeHtml(error?.message || String(error))}</span></div>
       ${mapActionMarkup()}
     </section>`;
@@ -207,15 +202,16 @@ function renderUnavailable(content, point, error) {
 
 function renderHome(content, point, data, { cached }) {
   const analysis = analyzeTrend(data);
-  const partialLabel = data.complete ? '16 點定位序列' : `${data.points.length}/16 點 · 缺 ${data.missingFrames.join(', ')}`;
+  const statusText = data.complete ? '16/16' : `${data.points.length}/16 · 缺 ${data.missingFrames.join(', ')}`;
+  const validUntil = formatClock(new Date(Date.parse(data.runTime) + RAIN_HOME_HORIZON_MINUTES * 60_000).toISOString());
   content.innerHTML = `
     <section class="rain-home-root" data-rain-home-owned="series" data-view-kind="ready" data-point-key="${escapeHtml(pointKey(point))}">
       ${locationMarkup(point)}
-      <div class="rain-home-summary"><h1 class="rain-home-verdict">${escapeHtml(analysis.title)}</h1><p class="rain-home-detail">${escapeHtml(analysis.detail)}</p></div>
+      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">${escapeHtml(analysis.kicker)}</div><h1 class="rain-home-verdict">${escapeHtml(analysis.title)}</h1><p class="rain-home-detail">${escapeHtml(analysis.detail)}</p></div>
       <section class="rain-home-chart-section" aria-labelledby="rain-home-chart-title">
-        <div class="rain-home-section-head"><h2 id="rain-home-chart-title" class="rain-home-section-title">未來 2 小時雨勢</h2><div class="rain-home-section-note">SWIRLS +30 至 +120 分鐘<br>每 6 分鐘預測 · 數值代表 30 分鐘預測雨量</div></div>
+        <div class="rain-home-section-head"><h2 id="rain-home-chart-title" class="rain-home-section-title">未來 2 小時雨勢</h2><div class="rain-home-section-note">香港有效時間優先<br>6 分鐘時間間隔 · 30 分鐘累積雨量</div></div>
         ${chartMarkup(data.points, data.runTime)}
-        <div class="rain-home-meta"><span>預報基準 ${escapeHtml(formatClock(data.runTime))}</span><span>有效至 ${escapeHtml(formatClock(new Date(Date.parse(data.runTime) + RAIN_HOME_HORIZON_MINUTES * 60_000).toISOString()))}</span><span>${escapeHtml(partialLabel)}</span>${cached ? '<span>短期快取</span>' : ''}</div>
+        <div class="rain-home-meta${data.complete ? '' : ' is-partial'}"><strong>SWIRLS</strong> · 基準 ${escapeHtml(formatClock(data.runTime))} · ${escapeHtml(statusText)} · 有效至 ${escapeHtml(validUntil)}${cached ? ' · 快取' : ''}</div>
       </section>
       ${mapActionMarkup()}
     </section>`;
@@ -262,7 +258,12 @@ function bindChartExplorer(content, points) {
     const selectedX = hits[normalizedIndex]?.getAttribute('cx');
     dots.forEach((dot, dotIndex) => dot.classList.toggle('selected', dotIndex === normalizedIndex));
     hits.forEach((hit, hitIndex) => hit.setAttribute('aria-pressed', hitIndex === normalizedIndex ? 'true' : 'false'));
-    if (guide && selectedX) { guide.setAttribute('x1', selectedX); guide.setAttribute('x2', selectedX); }
+    if (guide && selectedX) {
+      guide.setAttribute('x1', selectedX);
+      guide.setAttribute('x2', selectedX);
+      guide.classList.add('is-active');
+    }
+    readout.hidden = false;
     readout.innerHTML = chartReadoutMarkup(sample);
     if (focus) hits[normalizedIndex]?.focus();
   };
@@ -290,9 +291,6 @@ function bindChartExplorer(content, points) {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectPoint(index); }
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); selectPoint(index + (event.key === 'ArrowLeft' ? -1 : 1), { focus:true }); }
   });
-
-  const firstWet = findFirstWetSignalTransition(points);
-  selectPoint(firstWet?.index ?? 0);
 }
 
 function chartReadoutMarkup(point) {
@@ -307,58 +305,81 @@ function analyzeTrend(data) {
   const points = data.points;
   const firstWet = findFirstWetSignalTransition(points, RAIN_HOME_RAIN_THRESHOLD_MM);
   const partialSuffix = data.complete ? '' : `目前只有 ${points.length}/16 個有效時間可用。`;
-  if (!firstWet) return { title:'未來 2 小時暫無明顯降雨', detail:`目前可用定位點的預報曲線維持接近 0 mm。${partialSuffix}可打開雨區地圖查看香港、深圳及南海附近雨帶。`, shortLabel:'暫無明顯降雨' };
+  if (!firstWet) return {
+    kicker:'未來 2 小時',
+    title:'暫無明顯降雨',
+    detail:`目前可用定位點的 30 分鐘累積預測雨量維持接近 0 mm。${partialSuffix}可打開雨區地圖查看香港、深圳及南海附近雨帶。`,
+    shortLabel:'暫無明顯降雨'
+  };
 
   const first = firstWet.first;
   const previous = firstWet.previous;
   const adjacent = previous && Number(previous.frameIndex) === Number(first.frameIndex) - 1;
   const peak = points.reduce((best, point) => Number(point.amountMm) > Number(best.amountMm) ? point : best, points[0]);
   const last = points.at(-1);
+  const kicker = Number(first.frameIndex) === 0 ? '30 分鐘內可能有雨' : '稍後可能有雨';
   const startTitle = Number(first.frameIndex) === 0
-    ? '未來 30 分鐘內可能有雨'
+    ? `首個預報點 ${formatClock(first.validTime)} 已見降雨訊號`
     : adjacent
-      ? `約 ${formatClock(firstWet.transitionStartValidTime)}–${formatClock(firstWet.transitionEndValidTime)} 開始見到降雨訊號`
-      : `最早可用訊號在 ${formatClock(first.validTime)} 顯示可能有雨`;
+      ? `${formatClock(firstWet.transitionStartValidTime)}–${formatClock(firstWet.transitionEndValidTime)} 開始出現訊號`
+      : `最早可用訊號在 ${formatClock(first.validTime)}`;
 
   let direction = '之後雨勢變化不大。';
   if (Number(last.amountMm) <= Number(peak.amountMm) * 0.45) direction = '峰值後有明顯減弱趨勢。';
   else if (Number(last.amountMm) >= Number(peak.amountMm) * 0.85 && peak.frameIndex >= 11) direction = '較後段的降雨訊號仍然維持。';
   else if (peak.frameIndex <= 5) direction = '較強訊號出現在前段，之後逐步回落。';
 
-  return { title:startTitle, detail:`較強的 30 分鐘累積雨量時窗約在 ${formatClock(peak.validTime)} 前後，最高約 ${formatRain(peak.amountMm)} mm / 30 min。${direction}${partialSuffix}`, shortLabel:Number(first.frameIndex) === 0 ? '30 分鐘內可能有雨' : '稍後可能有雨' };
+  return {
+    kicker,
+    title:startTitle,
+    detail:`較強的 30 分鐘累積雨量約在 ${formatClock(peak.validTime)} 前後，最高約 ${formatRain(peak.amountMm)} mm / 30 min。${direction}${partialSuffix}`,
+    shortLabel:kicker
+  };
 }
 
 function chartMarkup(points, runTime) {
   const width = 700;
-  const height = 266;
-  const pad = { left:42, right:12, top:12, bottom:50 };
+  const height = 270;
+  const pad = { left:42, right:12, top:18, bottom:52 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
   const values = points.map(point => Number(point.amountMm) || 0);
-  const yMax = niceCeiling(Math.max(...values));
+  const peakPoint = points.reduce((best, point) => Number(point.amountMm) > Number(best.amountMm) ? point : best, points[0]);
+  const peak = Number(peakPoint?.amountMm) || 0;
+  const yMax = rainfallScaleMax(peak);
   const xLead = leadMinutes => pad.left + plotW * (rainHomeLeadRatio(leadMinutes, RAIN_HOME_HORIZON_MINUTES) ?? 0);
   const y = value => pad.top + plotH * (1 - Math.min(yMax, Math.max(0, value)) / yMax);
   const segments = contiguousSegments(points);
   const lineMarkup = segments.map(segment => `<path class="rain-home-line" d="${segment.map((point, index) => `${index ? 'L' : 'M'} ${xLead(point.leadMinutes).toFixed(1)} ${y(point.amountMm).toFixed(1)}`).join(' ')}"></path>`).join('');
   const complete = points.length === FRAME_COUNT && segments.length === 1;
   const fullLine = complete ? segments[0].map((point, index) => `${index ? 'L' : 'M'} ${xLead(point.leadMinutes).toFixed(1)} ${y(point.amountMm).toFixed(1)}`).join(' ') : '';
-  const firstX = xLead(points[0]?.leadMinutes ?? RAIN_HOME_FIRST_LEAD_MINUTES);
+  const firstLead = points[0]?.leadMinutes ?? RAIN_HOME_FIRST_LEAD_MINUTES;
+  const firstX = xLead(firstLead);
   const lastX = xLead(points.at(-1)?.leadMinutes ?? RAIN_HOME_HORIZON_MINUTES);
   const area = complete ? `${fullLine} L ${lastX.toFixed(1)} ${(pad.top + plotH).toFixed(1)} L ${firstX.toFixed(1)} ${(pad.top + plotH).toFixed(1)} Z` : '';
-  const ticks = [0,.25,.5,.75,1].map(ratio => { const yy = pad.top + plotH * (1 - ratio); return `<line class="rain-home-grid" x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${width - pad.right}" y2="${yy.toFixed(1)}"></line><text class="rain-home-axis-label" x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end">${formatAxis(yMax * ratio)}</text>`; }).join('');
+  const ticks = [0,.25,.5,.75,1].map(ratio => {
+    const yy = pad.top + plotH * (1 - ratio);
+    return `<line class="rain-home-grid" x1="${pad.left}" y1="${yy.toFixed(1)}" x2="${width - pad.right}" y2="${yy.toFixed(1)}"></line><text class="rain-home-axis-label" x="${pad.left - 8}" y="${(yy + 4).toFixed(1)}" text-anchor="end">${formatAxis(yMax * ratio, yMax)}</text>`;
+  }).join('');
   const xLeads = [0,30,60,90,120];
   const xLabels = xLeads.map(lead => {
     const x = xLead(lead).toFixed(1);
     const anchor = lead === 0 ? 'start' : lead === 120 ? 'end' : 'middle';
-    if (lead === 0) return `<text class="rain-home-axis-label" x="${x}" y="${height - 16}" text-anchor="${anchor}">現在</text>`;
+    if (lead === 0) return `<text class="rain-home-axis-label" x="${x}" y="${height - 18}" text-anchor="${anchor}">現在</text>`;
     const axisPoint = points.find(point => Number(point.leadMinutes) === lead);
     const clock = formatClock(axisPoint?.validTime || validTimeForLead(runTime, lead));
-    return `<text class="rain-home-axis-label" x="${x}" y="${height - 29}" text-anchor="${anchor}"><tspan x="${x}">+${lead}</tspan><tspan class="rain-home-axis-clock" x="${x}" dy="13">${escapeHtml(clock)}</tspan></text>`;
+    return `<text x="${x}" y="${height - 31}" text-anchor="${anchor}"><tspan class="rain-home-axis-clock" x="${x}">${escapeHtml(clock)}</tspan><tspan class="rain-home-axis-lead" x="${x}" dy="13">+${lead}</tspan></text>`;
   }).join('');
   const dots = points.map(point => `<circle class="rain-home-dot" cx="${xLead(point.leadMinutes).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="3" data-lead-minutes="${Number(point.leadMinutes)}"></circle>`).join('');
   const hits = points.map((point, index) => `<circle class="rain-home-hit" cx="${xLead(point.leadMinutes).toFixed(1)}" cy="${y(point.amountMm).toFixed(1)}" r="14" tabindex="0" role="button" aria-pressed="false" aria-label="${escapeHtml(`有效時間 ${formatClock(point.validTime)}，${formatRain(point.amountMm)} mm / 30 min，預報 +${Number(point.leadMinutes)} 分鐘`)}" data-rain-home-point="${index}"></circle>`).join('');
-  const peak = Math.max(...values);
-  return `<div class="rain-home-chart-wrap"><svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖；時間軸由預報基準 +0 到 +120 分鐘，並顯示各主要 lead 的香港有效時間；首個 SWIRLS 有效時間在 +30 分鐘；最高 ${formatRain(peak)} 毫米每 30 分鐘" data-plot-left="${pad.left}" data-plot-width="${plotW}" data-horizon-minutes="${RAIN_HOME_HORIZON_MINUTES}">${ticks}<line class="rain-home-selection-guide" x1="${firstX.toFixed(1)}" y1="${pad.top}" x2="${firstX.toFixed(1)}" y2="${(pad.top + plotH).toFixed(1)}" data-rain-home-guide></line>${area ? `<path class="rain-home-area" d="${area}"></path>` : ''}${lineMarkup}${dots}${hits}${xLabels}</svg><div class="rain-home-chart-readout" data-rain-home-readout aria-live="polite"></div><div class="rain-home-chart-caption"><span>橫軸：預報 lead + 香港有效時間 · 首個資料 +30</span><span>mm / 30 min</span></div><div class="rain-home-chart-help">點按圖表任何位置可查看最近的可用有效時間；缺失 frame 不會以直線跨接。</div></div>`;
+  const peakX = xLead(peakPoint?.leadMinutes ?? firstLead);
+  const peakY = y(peak);
+  const peakLabelY = peakY < pad.top + 28 ? peakY + 18 : peakY - 12;
+  const peakMarkup = peak >= RAIN_HOME_RAIN_THRESHOLD_MM
+    ? `<text class="rain-home-peak-label" x="${peakX.toFixed(1)}" y="${peakLabelY.toFixed(1)}" text-anchor="middle">峰值 ${escapeHtml(formatClock(peakPoint.validTime))}<tspan class="rain-home-peak-value" x="${peakX.toFixed(1)}" dy="12">${escapeHtml(formatRain(peak))} mm</tspan></text>`
+    : '';
+  const unavailableWidth = Math.max(0, firstX - pad.left);
+  return `<div class="rain-home-chart-wrap"><svg class="rain-home-chart" viewBox="0 0 ${width} ${height}" role="group" aria-label="未來兩小時定位點雨量折線圖；香港有效時間為主要時間標示；首個 SWIRLS 有效時間在 +30 分鐘；最高 ${formatRain(peak)} 毫米每 30 分鐘" data-plot-left="${pad.left}" data-plot-width="${plotW}" data-horizon-minutes="${RAIN_HOME_HORIZON_MINUTES}">${ticks}<rect class="rain-home-unavailable-zone" x="${pad.left}" y="${pad.top}" width="${unavailableWidth.toFixed(1)}" height="${plotH}"></rect><line class="rain-home-first-lead" x1="${firstX.toFixed(1)}" y1="${pad.top}" x2="${firstX.toFixed(1)}" y2="${(pad.top + plotH).toFixed(1)}"></line><text class="rain-home-unavailable-label" x="${Math.max(pad.left + 4, firstX - 6).toFixed(1)}" y="${(pad.top + 11).toFixed(1)}" text-anchor="end">首個預報點 +30</text><line class="rain-home-selection-guide" x1="${firstX.toFixed(1)}" y1="${pad.top}" x2="${firstX.toFixed(1)}" y2="${(pad.top + plotH).toFixed(1)}" data-rain-home-guide></line>${area ? `<path class="rain-home-area" d="${area}"></path>` : ''}${lineMarkup}${dots}${peakMarkup}${hits}${xLabels}</svg><div class="rain-home-chart-readout" data-rain-home-readout aria-live="polite" hidden></div><div class="rain-home-chart-caption"><span>每點＝截至該時間的 30 分鐘累積預測雨量</span><span>mm</span></div><div class="rain-home-chart-help">點按圖表查看細節 · 缺失 frame 不會以直線跨接</div></div>`;
 }
 
 function contiguousSegments(points) {
@@ -377,8 +398,24 @@ function validTimeForLead(runTime, leadMinutes) {
   return Number.isFinite(time) ? new Date(time + Number(leadMinutes) * 60_000).toISOString() : null;
 }
 
-function niceCeiling(value) { if (!Number.isFinite(value) || value <= 1) return 1; if (value <= 2) return 2; if (value <= 5) return 5; if (value <= 10) return 10; if (value <= 20) return 20; if (value <= 50) return 50; return Math.ceil(value / 25) * 25; }
-function formatAxis(value) { if (value >= 10) return String(Math.round(value)); return value.toFixed(value < 1 ? 1 : 0); }
+function rainfallScaleMax(value) {
+  const peak = Number(value);
+  if (!Number.isFinite(peak) || peak <= 0.2) return 0.3;
+  if (peak <= 0.5) return 0.5;
+  if (peak <= 1) return 1;
+  if (peak <= 2) return 2;
+  if (peak <= 5) return 5;
+  if (peak <= 10) return 10;
+  if (peak <= 20) return 20;
+  if (peak <= 50) return 50;
+  return Math.ceil(peak / 25) * 25;
+}
+
+function formatAxis(value, yMax = 1) {
+  if (yMax <= 0.5) return Number(value).toFixed(2).replace(/0$/, '').replace(/\.0$/, '');
+  if (yMax <= 2) return Number(value).toFixed(1).replace(/\.0$/, '');
+  return String(Math.round(value));
+}
 function formatRain(value) { const number = Number(value); if (!Number.isFinite(number)) return '—'; if (number < 0.05) return '0'; if (number < 10) return number.toFixed(1).replace(/\.0$/, ''); return String(Math.round(number)); }
 function formatClock(value) { const time = Date.parse(value || ''); if (!Number.isFinite(time)) return '—'; return new Intl.DateTimeFormat('zh-HK', { hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'Asia/Hong_Kong' }).format(new Date(time)); }
 function escapeHtml(value) { return String(value ?? '').replace(/[&<>'"]/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char])); }
