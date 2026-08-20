@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { getForecastAnalysisScope, resetForecastAnalysisScope, setForecastAnalysisScope } from './forecast-map-analysis-scope.js';
 
 const PRESETS = Object.freeze([
   {
@@ -28,7 +29,6 @@ const PRESETS = Object.freeze([
 ]);
 
 let activeMode = 'off';
-let activeScope = 'regional';
 
 function ensureStyles() {
   if (document.getElementById('rain-map-quickviews-style')) return;
@@ -92,14 +92,6 @@ function markActive(button) {
   button?.classList.add('active');
 }
 
-function notifyAnalysisScope(scope) {
-  activeScope = scope;
-  if (typeof window?.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
-  window.dispatchEvent(new CustomEvent('rain:forecast-analysis-scope-change', {
-    detail:{ scope }
-  }));
-}
-
 function applyView(id, button, { animate = true } = {}) {
   const map = state.map;
   if (!map) return;
@@ -110,7 +102,7 @@ function applyView(id, button, { animate = true } = {}) {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
     map.setView([lat, lon], Math.max(12, Number(map.getZoom?.()) || 12), { animate });
     markActive(button);
-    notifyAnalysisScope('location');
+    setForecastAnalysisScope('location', { forceNotify:true });
     return;
   }
 
@@ -122,7 +114,7 @@ function applyView(id, button, { animate = true } = {}) {
     paddingBottomRight:[20, 150]
   });
   markActive(button);
-  notifyAnalysisScope(id);
+  setForecastAnalysisScope(id, { forceNotify:true });
 }
 
 function applyDefaultRegionalView(controls) {
@@ -150,13 +142,15 @@ function syncVisibility() {
   syncBackButton(visible);
   if (!visible) {
     clearActive();
-    activeScope = 'regional';
+    resetForecastAnalysisScope({ notify:false });
     return;
   }
+
+  const activeScope = getForecastAnalysisScope();
   const activeButton = controls.querySelector(`[data-rain-map-view="${activeScope}"]`);
   if (activeButton && activeScope !== 'regional') {
     markActive(activeButton);
-    notifyAnalysisScope(activeScope);
+    setForecastAnalysisScope(activeScope, { forceNotify:true });
     return;
   }
   applyDefaultRegionalView(controls);
