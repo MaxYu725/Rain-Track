@@ -5,8 +5,10 @@ import {
   buildSteppedIntensityStops,
   rainfallIntensityStyle
 } from '../js/rain-home-chart-intensity.js';
+import { scrollPixelsToSvgUnits } from '../js/rain-home-chart-fixed-y.js';
 
 const source = readFileSync('js/rain-home-chart-intensity.js', 'utf8');
+const fixedYSource = readFileSync('js/rain-home-chart-fixed-y.js', 'utf8');
 const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
@@ -30,6 +32,10 @@ assert.equal(stops.at(-1).offset, 1, 'gradient must extend the final point colou
 const duplicateOffsets = stops.filter((stop, index) => index > 0 && stop.offset === stops[index - 1].offset);
 assert.ok(duplicateOffsets.length >= 3, 'adjacent point bands must change colour at midpoint boundaries instead of blending arbitrary hues');
 
+assert.equal(scrollPixelsToSvgUnits(0, 860, 700), 0, 'zero horizontal scroll must not move the Y axis');
+assert.ok(Math.abs(scrollPixelsToSvgUnits(200, 860, 700) - (200 * 700 / 860)) < 1e-9, 'Y-axis compensation must convert CSS scroll pixels through the live SVG scale');
+assert.equal(scrollPixelsToSvgUnits(200, 0, 700), 0, 'invalid rendered width must fail soft');
+
 for (const marker of [
   "const CHART_MIN_WIDTH_PX = 840",
   'overflow-x:auto',
@@ -44,16 +50,34 @@ for (const marker of [
   "MutationObserver(() => enhanceCurrentChart())"
 ]) assert.ok(source.includes(marker), `Rain Home chart intensity marker missing: ${marker}`);
 
+for (const marker of [
+  "const CHART_SELECTOR = '.rain-home-chart-scroll .rain-home-chart'",
+  "const FIXED_LABEL_SELECTOR = '.rain-home-axis-label'",
+  "chart.dataset.rainHomeFixedYAxis = '1'",
+  "label.dataset.rainHomeFixedYLabel = '1'",
+  "viewport.addEventListener('scroll'",
+  'scrollPixelsToSvgUnits(binding.viewport.scrollLeft, renderedWidth, viewBoxWidth(binding.chart))',
+  "label.setAttribute('transform', transform)",
+  'paint-order:stroke fill',
+  "MutationObserver(() => enhanceCurrentChart())"
+]) assert.ok(fixedYSource.includes(marker), `Rain Home fixed Y-axis marker missing: ${marker}`);
+
 for (const forbidden of [
   'fetchSwirlsPointSeries',
   "from './api.js'",
   'fetch(',
   '/point-series',
   '/api/rain/swirls'
-]) assert.ok(!source.includes(forbidden), `chart intensity enhancement must not become a second weather client: ${forbidden}`);
+]) {
+  assert.ok(!source.includes(forbidden), `chart intensity enhancement must not become a second weather client: ${forbidden}`);
+  assert.ok(!fixedYSource.includes(forbidden), `fixed Y-axis polish must remain presentation-only: ${forbidden}`);
+}
 
+assert.ok(!/\.scrollLeft\s*=/.test(fixedYSource), 'fixed Y-axis polish must never change the user chart scroll position');
 assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa54'/);
+assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'fixed Y axis must load as a best-effort optional Home enhancement');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
 assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'chart intensity must be included in the PWA dependency inventory');
+assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'fixed Y-axis polish must be included in the PWA dependency inventory');
 
-console.log('Rain Home fixed intensity bands + enlarged horizontal chart + pwa54 regression gate PASS');
+console.log('Rain Home fixed intensity bands + horizontal chart + fixed Y axis + pwa55 regression gate PASS');

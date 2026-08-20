@@ -99,8 +99,8 @@ for (const forbidden of ['summarizeRadarHistory', 'trendDirection(', 'bearingDir
 }
 
 assert.ok(smoke.includes("'./radar-analysis-runtime.js'"), 'Radar analysis must remain an optional enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa54'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
 assert.ok(sw.includes("'./js/radar-analysis.js'"));
 assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"));
 
-console.log('Radar current-frame summary + nearby radius + pwa54 regression gate PASS');
+console.log('Radar current-frame summary + nearby radius + pwa55 regression gate PASS');
