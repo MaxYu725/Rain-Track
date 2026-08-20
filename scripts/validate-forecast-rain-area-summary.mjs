@@ -44,7 +44,7 @@ assert.equal(productZones.filter(zone => zone.parent === 'shenzhen').length, 3, 
 assert.equal(productZones.filter(zone => zone.parent === 'southSea').length, 3, 'south sea must have three product zones');
 
 const regionalGrid = {
-  latitudes:[22.75,22.53,22.40,22.32,22.25,21.80],
+  latitudes:[22.75,22.48,22.40,22.32,22.25,21.80],
   longitudes:[113.5,113.9,114.18,114.38,114.70]
 };
 const regionalCount = regionalGrid.latitudes.length * regionalGrid.longitudes.length;
@@ -62,21 +62,52 @@ for (const key of ['szWest','szCentral','szEast','hkNtWest','hkNtNorth','hkNtEas
 }
 assert.ok(regional.regionalLabel, 'regional label must be available');
 assert.ok(regional.regionalDetail, 'regional detail must be available');
+for (const zone of Object.values(regional.productZones)) {
+  assert.ok(zone.contributionShare >= 0 && zone.contributionShare <= 1, `invalid contribution share for ${zone.key}`);
+}
 
 const eastSeaGrid = {
   latitudes:[21.90,21.80],
   longitudes:[114.70,114.90]
 };
-const eastSea = summarizeForecastRainArea(frameWith([0,3], 1.2, 4), eastSeaGrid);
-assert.equal(eastSea.productZones.seaEast.wetCellCount, 2);
+const eastSea = summarizeForecastRainArea(frameWith([0,1,2,3], 1.2, 4), eastSeaGrid);
+assert.equal(eastSea.productZones.seaEast.wetCellCount, 4);
 assert.match(eastSea.regionalLabel, /東南海域/);
 assert.match(eastSea.regionalDetail, /東南海域/);
+
+// A small product zone can be fully wet without being the main part of the
+// whole rain field. Regional headline ranking must use whole-field rainfall
+// contribution, while visible percentages remain within-zone affected share.
+const contributionGrid = {
+  latitudes:[22.50,22.48,21.90,21.80],
+  longitudes:[113.0,113.2,113.4,113.6,113.7,114.18,114.20]
+};
+const contributionCount = contributionGrid.latitudes.length * contributionGrid.longitudes.length;
+const contributionWet = [
+  5,6,12,13,                   // all four New Territories north cells
+  14,15,16,17,21,22,23,24     // eight of ten south-west sea cells
+];
+const contribution = summarizeForecastRainArea(frameWith(contributionWet, 1, contributionCount), contributionGrid);
+assert.equal(contribution.productZones.hkNtNorth.wetShare, 1);
+assert.equal(contribution.productZones.seaWest.wetShare, 0.8);
+assert.ok(contribution.productZones.seaWest.contributionShare > contribution.productZones.hkNtNorth.contributionShare);
+assert.equal(contribution.regionalLabel, '雨區較集中在西南海域');
+assert.match(contribution.regionalDetail, /^西南海域 80%/);
+
+// Coarse HK coverage deliberately extends slightly offshore. The refined
+// product geometry should fail open at the coast instead of forcing a nearshore
+// grid cell into Hong Kong Island.
+const nearshore = summarizeForecastRainArea({ values:[1] }, { latitudes:[22.17], longitudes:[114.18] });
+assert.equal(nearshore.zones.hongKong.wetCellCount, 1);
+assert.equal(nearshore.productZones.hkIsland.wetCellCount, 0);
+assert.equal(Object.values(nearshore.productZones).reduce((sum, zone) => sum + zone.wetCellCount, 0), 0);
 
 assert.equal(summarizeForecastRainArea({ values:[1] }, grid), null, 'incomplete grids must fail closed');
 
 const runtime = readFileSync(new URL('../js/forecast-map-runtime.js', import.meta.url), 'utf8');
 const ui = readFileSync(new URL('../js/rain-map-area-summary.js', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../js/forecast-map-smoke.js', import.meta.url), 'utf8');
+const spatialSource = readFileSync(new URL('../js/forecast-map-spatial.js', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8');
 
 for (const marker of [
@@ -84,6 +115,13 @@ for (const marker of [
   "spatialSummary:lastRender?.spatialSummary || null",
   "rain:forecast-map-frame-change"
 ]) assert.ok(runtime.includes(marker), `runtime spatial summary marker missing: ${marker}`);
+
+for (const marker of [
+  'contributionShare',
+  'SECONDARY_CONTRIBUTION',
+  'b.contributionShare - a.contributionShare',
+  'Percentages remain within-zone affected share'
+]) assert.ok(spatialSource.includes(marker), `regional v2.1 contribution marker missing: ${marker}`);
 
 for (const marker of [
   'data-rain-area-time',
@@ -112,6 +150,6 @@ assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI mi
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 44, `Forecast Map regional v2 requires PWA generation at least pwa44, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 45, `Forecast Map regional v2.1 requires PWA generation at least pwa45, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area regional v2 summary validation passed');
+console.log('Forecast rain-area regional v2.1 contribution + geometry validation passed');
