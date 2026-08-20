@@ -34,15 +34,17 @@ for (const marker of [
   '@media(prefers-reduced-motion:reduce)'
 ]) assert.ok(criticalCss.includes(marker), `critical first-paint CSS marker missing: ${marker}`);
 
-assert.ok(boot.includes('data-rain-critical-fallback'), 'classic script must be able to replace the static first paint without modules');
-assert.ok(boot.includes('正在直接讀取 SWIRLS'), 'classic fallback must expose actual data-loading progress');
-assert.ok(boot.includes("!current.hasAttribute('data-rain-home-first-paint')"), 'watchdog must distinguish static first paint from takeover');
+assert.ok(boot.includes('data-rain-boot-recovery'), 'classic watchdog must provide a reload-only recovery UI');
+assert.ok(boot.includes('.rain-home-root[data-rain-home-owned="series"]'), 'watchdog must detect normal Rain Home takeover');
+for (const forbidden of ['/api/rain/swirls', 'data-rain-critical-fallback', '正在直接讀取 SWIRLS', 'runCriticalForecast']) {
+  assert.ok(!boot.includes(forbidden), `first-paint watchdog must not become a second weather client: ${forbidden}`);
+}
+
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa33'/);
 assert.ok(!sw.includes('const CORE_SHELL = ['), 'first paint must not trigger a PWA core prefetch storm');
-
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
-assert.ok(appShell.includes("'./js/boot-watchdog.js'"), 'classic fallback must remain in dependency inventory');
+assert.ok(appShell.includes("'./js/boot-watchdog.js'"), 'boot watchdog must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home.js'"), 'normal Rain Home module must remain in dependency inventory');
 
-console.log('Rain Home first paint + classic fallback + pwa33 regression gate PASS');
+console.log('Rain Home first paint + reload-only watchdog + pwa33 regression gate PASS');
