@@ -44,7 +44,7 @@ assert.match(home, /title = Number\(first\.frameIndex\) === 0 \? '30 分鐘內�
 assert.match(home, /endRatio <= 0\.7/);
 assert.match(home, /峰值後逐步減弱/);
 
-// Fourth-pass product-language invariants.
+// Product-language invariants.
 assert.ok(!home.includes('<div class="rain-home-verdict-kicker">未來 2 小時</div>'), 'normal Rain Home summary must not repeat the two-hour horizon kicker');
 assert.ok(!home.includes('每 6 分鐘一點 · 每點為 30 分鐘累積雨量'), 'chart header must avoid repeating cadence details already encoded by the axis');
 assert.match(home, /const terminalPeak = data\.complete && Number\(peak\.frameIndex\) === FRAME_COUNT - 1/);
@@ -52,7 +52,7 @@ assert.match(home, /預報結束時仍呈上升/);
 assert.match(home, /截至 \$\{peakClock\}，30 分鐘累積預測雨量升至約 \$\{peakRain\} mm/);
 assert.match(home, /`至 \$\{peakClock\} 升至 \$\{peakRain\} mm \/ 30 min`/);
 assert.match(home, /chartMarkup\(data\.points, data\.runTime, \{ seriesComplete:data\.complete \}\)/);
-assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete series must use a concise chart interaction hint');
+assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete series must use a concise chart interaction hint before selection');
 assert.ok(home.includes('部分時間資料暫缺，圖表會以空白表示'), 'partial series must explain gaps in user language');
 assert.ok(!home.includes('缺失 frame 不會以直線跨接'), 'implementation terminology must not be visible in the chart help');
 assert.ok(!home.includes('rain-home-chart-caption'), 'normal chart must not repeat accumulation semantics in a second caption row');
@@ -64,12 +64,20 @@ assert.ok(!home.includes('rain-home-peak-label'), 'peak text annotation must sta
 assert.ok(home.includes('@media(max-width:700px)'), 'Rain Home must retain an explicit mobile presentation breakpoint');
 assert.ok(home.includes('.rain-home-location{padding:2px 0 13px}'), 'mobile location block must use tighter vertical spacing');
 assert.ok(home.includes('.rain-home-summary{padding:19px 0 16px}'), 'mobile weather summary must use tighter vertical spacing');
-assert.ok(home.includes('.rain-home-chart-summary{margin-bottom:8px;color:#75838a;font-size:.69rem;font-weight:520}'), 'mobile chart summary must stay visually secondary');
+assert.ok(home.includes('.rain-home-chart-summary{display:none}'), 'mobile chart must not repeat the peak summary already explained above the chart');
 assert.ok(home.includes('.rain-home-axis-label{font-size:14px}'), 'mobile rainfall scale labels must be enlarged');
 assert.ok(home.includes('.rain-home-axis-clock{font-size:16px}'), 'mobile clock labels must be enlarged');
 assert.ok(home.includes('.rain-home-axis-lead{font-size:13px}'), 'mobile lead labels must be enlarged');
 assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'redundant first-forecast text must be hidden on mobile');
-assert.ok(home.includes('const height = 300'), 'fifth-pass chart geometry must be taller for mobile readability');
+assert.ok(home.includes('const height = 300'), 'fifth-pass chart geometry must remain taller for mobile readability');
+
+// Final Rain Home finishing invariants.
+assert.ok(home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'first available forecast copy must use natural weather language');
+assert.ok(home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial onset copy must avoid internal forecast-system language');
+assert.ok(!home.includes('首個預報時間 ${formatClock(first.validTime)} 已有雨勢'), 'future valid time must not be described as rain already happening');
+assert.ok(home.includes("const help = content.querySelector('.rain-home-chart-help:not(.is-partial)')"), 'complete-series help must be independently hideable after interaction');
+assert.ok(home.includes('if (help) help.hidden = true'), 'interaction hint must disappear after the inspector opens');
+assert.ok(home.includes('.rain-home-chart-help[hidden]{display:none}'), 'hidden interaction help must not retain layout space');
 
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
@@ -113,4 +121,4 @@ assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 
-console.log('Rain Home zero-base architecture + fifth-pass mobile presentation validation passed');
+console.log('Rain Home zero-base architecture + final presentation polish validation passed');
