@@ -40,7 +40,7 @@ for (const forbidden of ['/api/rain/swirls', 'data-rain-critical-fallback', '正
   assert.ok(!boot.includes(forbidden), `first-paint watchdog must not become a second weather client: ${forbidden}`);
 }
 
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa57'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa58'/);
 assert.ok(!sw.includes('const CORE_SHELL = ['), 'first paint must not trigger a PWA core prefetch storm');
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
@@ -48,9 +48,9 @@ assert.ok(appShell.includes("'./js/boot-watchdog.js'"), 'boot watchdog must rema
 assert.ok(appShell.includes("'./js/rain-home.js'"), 'normal Rain Home module must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-intensity.js'"), 'optional Rain Home chart intensity must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-fixed-y.js'"), 'optional Y-axis gutter must remain in dependency inventory');
-assert.ok(appShell.includes("'./js/rain-home-observed-radar.js'"), 'optional Rain Home observed Radar must remain in dependency inventory');
+assert.ok(appShell.includes("'./js/rain-home-observed-radar.js'"), 'optional Rain Home Now + Next Radar context must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-image.js'"), 'shared Radar image analysis helper must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-entry.js'"), 'Radar entry must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-runtime.js'"), 'optional Radar analysis must remain in dependency inventory');
 
-console.log('Rain Home first paint + optional observed Radar/chart polish inventory + pwa57 regression gate PASS');
+console.log('Rain Home first paint + optional Now + Next/chart polish inventory + pwa58 regression gate PASS');
