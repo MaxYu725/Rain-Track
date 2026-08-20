@@ -9,6 +9,7 @@ const OPTIONAL_MAP_MODULES = [
   './rain-home-chart-intensity.js',
   './rain-home-chart-fixed-y.js',
   './rain-home-observed-radar.js',
+  './rain-home-reliability.js',
   './radar-entry.js',
   './radar-settings-mirror.js',
   './radar-analysis-runtime.js',
