@@ -56,7 +56,7 @@ assert.ok(!boot.includes('registration?.unregister?.()'), 'boot watchdog must no
 
 assert.ok(smoke.includes("import './rain-home.js';"), 'Forecast Map smoke may reuse Rain Home');
 assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'Rain Home chart intensity must remain an optional enhancement');
-assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'Rain Home fixed Y-axis polish must remain optional');
+assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'Rain Home Y-axis gutter must remain optional');
 assert.ok(smoke.includes("'./radar-entry.js'"), 'direct Radar entry must remain an optional map enhancement');
 assert.ok(smoke.includes("'./radar-analysis-runtime.js'"), 'Radar analysis must remain an optional map enhancement');
 assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'map enhancements must remain best-effort');
@@ -76,16 +76,16 @@ assert.ok(!radarEntry.includes('fetchRadarFrames'), 'Radar entry must not become
 
 assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force reload');
 assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA reload must require explicit update application');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
-assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa55 must remain zero-prefetch');
-assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa55 install must remain zero-prefetch');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa56'/);
+assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa56 must remain zero-prefetch');
+assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa56 install must remain zero-prefetch');
 assert.ok(sw.includes('navigationNetworkFirst(request)'), 'navigation must prefer the live network');
 assert.ok(sw.includes('shellAssetNetworkFirst(request)'), 'same-origin assets must prefer the live network');
 assert.ok(sw.includes("fetch(request, { cache:'no-store' })"), 'shell network fetches must bypass stale HTTP cache');
 assert.ok(sw.includes("'./js/rain-map-mode-heavy.js'"), 'heavy map module must stay in dependency inventory');
 assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'Rain Home chart intensity must stay in the PWA dependency inventory');
-assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'Rain Home fixed Y-axis polish must stay in the PWA dependency inventory');
+assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'Rain Home Y-axis gutter must stay in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must stay in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"), 'Radar analysis runtime must stay in the PWA dependency inventory');
 
-console.log('Boot isolation + optional Rain Home chart polish + Radar current-frame analysis + pwa55 resilience PASS');
+console.log('Boot isolation + optional Rain Home chart polish + Radar current-frame analysis + pwa56 resilience PASS');
