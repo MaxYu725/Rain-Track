@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - deploy/zero-base-once
+    paths:
+      - .github/workflows/deploy-worker.yml
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: deploy-worker-production
@@ -53,10 +55,37 @@ jobs:
             deployments status --name radar --json
 
       - name: Smoke stable production routes
-        run: node scripts/smoke-worker-production.mjs
+        run: node scripts/smoke-worker-production.mjs | tee smoke-stable.log
 
       - name: Smoke compact SWIRLS point endpoint
-        run: node scripts/probe-swirls-point-production.mjs
+        run: node scripts/probe-swirls-point-production.mjs | tee smoke-point.log
 
       - name: Smoke SWIRLS point-series endpoint
-        run: node scripts/probe-swirls-point-series-production.mjs
+        run: node scripts/probe-swirls-point-series-production.mjs | tee smoke-series.log
+
+      - name: Record deploy result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          MAIN_SHA: e021df44a3f4b8bd28d5c670138ceca0436675ff
+        run: |
+          {
+            echo "main_sha=${MAIN_SHA}"
+            echo "workflow_sha=${GITHUB_SHA}"
+            echo "job_status=${JOB_STATUS}"
+            echo "recorded_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "--- stable smoke ---"
+            cat smoke-stable.log 2>/dev/null || true
+            echo
+            echo "--- point smoke ---"
+            cat smoke-point.log 2>/dev/null || true
+            echo
+            echo "--- point-series smoke ---"
+            cat smoke-series.log 2>/dev/null || true
+          } > deploy-result.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- deploy-result.txt
+          git commit -m "Record zero-base production deploy result" || true
+          git push
