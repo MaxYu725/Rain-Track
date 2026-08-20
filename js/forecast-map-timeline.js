@@ -30,11 +30,14 @@ function ensureMapFirstTimelinePosition() {
   const style = document.createElement('style');
   style.id = 'forecast-map-fullscreen-position-style';
   style.textContent = `
+    body.rain-home-v2.rain-map-view .pivot-content-wrapper{flex:1 1 0!important;height:auto!important;min-height:0!important;overflow:hidden!important}
+    body.rain-home-v2.rain-map-view #map-container,body.rain-home-v2.rain-map-view #rain-map{height:100%!important;min-height:0!important;overflow:hidden!important}
+    #forecast-map-timeline.forecast-map-timeline{position:absolute!important;left:12px!important;right:12px!important;width:auto!important;max-width:none!important;bottom:calc(12px + var(--safe-bottom))!important;z-index:1220!important}
     .forecast-mobile-scrubber{display:none;min-width:0;flex:1 1 auto;align-items:center;gap:9px;padding:0 2px}
     .forecast-mobile-scrubber input{width:100%;min-width:0;accent-color:#22a7e0}
     .forecast-mobile-scrubber-output{flex:0 0 88px;color:#eaf7fc;font-size:.7rem;font-weight:650;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
     @media(max-width:700px){
-      #forecast-map-timeline.forecast-map-timeline{bottom:calc(14px + var(--safe-bottom))!important}
+      #forecast-map-timeline.forecast-map-timeline{left:8px!important;right:8px!important;bottom:calc(8px + var(--safe-bottom))!important}
       #forecast-map-timeline .forecast-frame-buttons{display:none!important}
       #forecast-map-timeline .forecast-mobile-scrubber{display:flex}
       #forecast-map-timeline .forecast-frame-control{align-items:center}
@@ -96,6 +99,11 @@ function syncMobileScrubber() {
   if (output) output.textContent = frameOutput(frames[Number(range.value)]);
 }
 
+function refreshForecastMapViewport() {
+  const map = window?.rainMapState?.map;
+  map?.invalidateSize?.({ pan:false, animate:false });
+}
+
 function initForecastTimelinePolish() {
   ensureMapFirstTimelinePosition();
   ensureMobileScrubber();
@@ -104,6 +112,7 @@ function initForecastTimelinePolish() {
   window.addEventListener('rain:map-mode-change', () => {
     ensureMobileScrubber();
     syncMobileScrubber();
+    requestAnimationFrame(refreshForecastMapViewport);
   });
 }
 
