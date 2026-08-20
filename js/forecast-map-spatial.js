@@ -8,22 +8,26 @@ export const RAIN_AREA_ZONES = Object.freeze({
 });
 
 export const RAIN_AREA_PRODUCT_ZONES = Object.freeze({
-  hkLantauIslands:Object.freeze({ key:'hkLantauIslands', parent:'hongKong', label:'大嶼山及離島', polygon:[[113.82,22.15],[114.08,22.15],[114.08,22.34],[113.82,22.34]] }),
-  hkIsland:Object.freeze({ key:'hkIsland', parent:'hongKong', label:'香港島', polygon:[[114.08,22.15],[114.28,22.15],[114.28,22.29],[114.08,22.29]] }),
-  hkKowloon:Object.freeze({ key:'hkKowloon', parent:'hongKong', label:'九龍', polygon:[[114.08,22.29],[114.28,22.29],[114.28,22.36],[114.08,22.36]] }),
-  hkNtWest:Object.freeze({ key:'hkNtWest', parent:'hongKong', label:'新界西', polygon:[[113.82,22.34],[114.10,22.34],[114.10,22.56],[113.82,22.56]] }),
-  hkNtEast:Object.freeze({ key:'hkNtEast', parent:'hongKong', label:'新界東', polygon:[[114.10,22.36],[114.28,22.36],[114.28,22.46],[114.10,22.46]] }),
-  hkNtNorth:Object.freeze({ key:'hkNtNorth', parent:'hongKong', label:'新界北', polygon:[[114.10,22.46],[114.28,22.46],[114.28,22.56],[114.10,22.56]] }),
-  hkSaiKungEast:Object.freeze({ key:'hkSaiKungEast', parent:'hongKong', label:'西貢及香港東面', polygon:[[114.28,22.15],[114.50,22.15],[114.50,22.56],[114.28,22.56]] }),
-  szWest:Object.freeze({ key:'szWest', parent:'shenzhen', label:'深圳西部', polygon:[[113.72,22.52],[114.02,22.52],[114.02,22.90],[113.72,22.90]] }),
-  szCentral:Object.freeze({ key:'szCentral', parent:'shenzhen', label:'深圳中部', polygon:[[114.02,22.52],[114.35,22.52],[114.35,22.90],[114.02,22.90]] }),
-  szEast:Object.freeze({ key:'szEast', parent:'shenzhen', label:'深圳東部', polygon:[[114.35,22.52],[114.65,22.52],[114.65,22.90],[114.35,22.90]] }),
-  seaWest:Object.freeze({ key:'seaWest', parent:'southSea', label:'西南海域', polygon:[[112.956,21.328],[113.75,21.328],[113.75,22.15],[112.956,22.15]] }),
-  seaSouth:Object.freeze({ key:'seaSouth', parent:'southSea', label:'正南海域', polygon:[[113.75,21.328],[114.50,21.328],[114.50,22.15],[113.75,22.15]] }),
-  seaEast:Object.freeze({ key:'seaEast', parent:'southSea', label:'東南海域', polygon:[[114.50,21.328],[115.291,21.328],[115.291,22.15],[114.50,22.15]] })
+  hkLantauIslands:Object.freeze({ key:'hkLantauIslands', parent:'hongKong', label:'大嶼山及離島', polygon:[[113.82,22.16],[113.82,22.31],[113.96,22.34],[114.07,22.31],[114.07,22.18],[113.98,22.15]] }),
+  hkIsland:Object.freeze({ key:'hkIsland', parent:'hongKong', label:'香港島', polygon:[[114.08,22.20],[114.12,22.29],[114.24,22.30],[114.30,22.25],[114.27,22.20]] }),
+  hkKowloon:Object.freeze({ key:'hkKowloon', parent:'hongKong', label:'九龍', polygon:[[114.10,22.29],[114.10,22.36],[114.25,22.36],[114.27,22.30]] }),
+  hkNtWest:Object.freeze({ key:'hkNtWest', parent:'hongKong', label:'新界西', polygon:[[113.84,22.34],[113.84,22.56],[114.05,22.56],[114.11,22.45],[114.10,22.34]] }),
+  hkNtEast:Object.freeze({ key:'hkNtEast', parent:'hongKong', label:'新界東', polygon:[[114.10,22.36],[114.10,22.46],[114.22,22.44],[114.28,22.46],[114.28,22.36]] }),
+  hkNtNorth:Object.freeze({ key:'hkNtNorth', parent:'hongKong', label:'新界北', polygon:[[114.05,22.46],[114.05,22.56],[114.30,22.56],[114.30,22.47],[114.22,22.44],[114.10,22.46]] }),
+  hkSaiKungEast:Object.freeze({ key:'hkSaiKungEast', parent:'hongKong', label:'西貢及香港東面', polygon:[[114.28,22.22],[114.28,22.48],[114.40,22.50],[114.50,22.42],[114.50,22.24],[114.40,22.20]] }),
+  szWest:Object.freeze({ key:'szWest', parent:'shenzhen', label:'深圳西部', polygon:[[113.72,22.56],[114.02,22.56],[114.02,22.90],[113.72,22.90]] }),
+  szCentral:Object.freeze({ key:'szCentral', parent:'shenzhen', label:'深圳中部', polygon:[[114.02,22.56],[114.34,22.56],[114.34,22.90],[114.02,22.90]] }),
+  szEast:Object.freeze({ key:'szEast', parent:'shenzhen', label:'深圳東部', polygon:[[114.34,22.56],[114.65,22.56],[114.65,22.90],[114.34,22.90]] }),
+  seaWest:Object.freeze({ key:'seaWest', parent:'southSea', label:'西南海域', polygon:[[112.956,21.328],[113.76,21.328],[113.76,22.15],[112.956,22.15]] }),
+  seaSouth:Object.freeze({ key:'seaSouth', parent:'southSea', label:'正南海域', polygon:[[113.76,21.328],[114.48,21.328],[114.48,22.15],[113.76,22.15]] }),
+  seaEast:Object.freeze({ key:'seaEast', parent:'southSea', label:'東南海域', polygon:[[114.48,21.328],[115.291,21.328],[115.291,22.15],[114.48,22.15]] })
 });
 
 const PRODUCT_ZONE_LIST = Object.freeze(Object.values(RAIN_AREA_PRODUCT_ZONES));
+const MIN_PRODUCT_WET_CELLS = 2;
+const MIN_PRODUCT_CONTRIBUTION = 0.035;
+const SECONDARY_CONTRIBUTION = 0.12;
+const SECONDARY_RELATIVE_CONTRIBUTION = 0.65;
 
 function blankStats(zone) {
   return {
@@ -33,6 +37,7 @@ function blankStats(zone) {
     cellCount:0,
     wetCellCount:0,
     wetShare:0,
+    contributionShare:0,
     sumMm:0,
     meanWetMm:0,
     maxMm:0,
@@ -85,8 +90,6 @@ function round(value, digits = 3) {
 function finalizeStats(stats) {
   const wetShare = stats.cellCount ? stats.wetCellCount / stats.cellCount : 0;
   const meanWetMm = stats.wetCellCount ? stats.sumMm / stats.wetCellCount : 0;
-  // Coverage share is the main signal. Mean wet-cell intensity gives a small
-  // boost without allowing one isolated extreme cell to dominate the label.
   const score = wetShare * (1 + Math.log1p(meanWetMm));
   return {
     ...stats,
@@ -95,6 +98,13 @@ function finalizeStats(stats) {
     meanWetMm:round(meanWetMm),
     maxMm:round(stats.maxMm),
     score:round(score, 4)
+  };
+}
+
+function addContribution(stats, totalWetMm) {
+  return {
+    ...stats,
+    contributionShare:round(totalWetMm > 0 ? stats.sumMm / totalWetMm : 0, 4)
   };
 }
 
@@ -110,8 +120,11 @@ function dominantRegion(zones) {
 
 function dominantProductZones(productZones) {
   return Object.values(productZones)
-    .filter(zone => zone.wetCellCount >= 2 && zone.wetShare >= 0.04)
-    .sort((a, b) => b.score - a.score);
+    .filter(zone => zone.wetCellCount >= MIN_PRODUCT_WET_CELLS && zone.contributionShare >= MIN_PRODUCT_CONTRIBUTION)
+    .sort((a, b) => {
+      const byContribution = b.contributionShare - a.contributionShare;
+      return Math.abs(byContribution) > 1e-9 ? byContribution : b.sumMm - a.sumMm;
+    });
 }
 
 function makeLabel(zones, totalWetCellCount) {
@@ -147,11 +160,14 @@ function makeRegionalPresentation(headline, productZones) {
   const first = ranked[0];
   const second = ranked[1];
   const combine = second
-    && second.wetShare >= 0.08
-    && second.score >= first.score * 0.72;
+    && second.contributionShare >= SECONDARY_CONTRIBUTION
+    && second.contributionShare >= first.contributionShare * SECONDARY_RELATIVE_CONTRIBUTION;
   const regionalLabel = combine
     ? `雨區主要在${first.label}及${second.label}`
     : `雨區較集中在${first.label}`;
+  // Percentages remain within-zone affected share. Ranking above is based on
+  // contribution to the whole wet field so a small zone cannot dominate only
+  // because a large fraction of that small zone is wet.
   const regionalDetail = ranked.slice(0, 3).map(zone => `${zone.label} ${percentage(zone.wetShare)}`).join(' · ');
   return { regionalLabel, regionalDetail };
 }
@@ -210,8 +226,8 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
     }
   }
 
-  const zones = Object.fromEntries(Object.entries(mutable).map(([key, stats]) => [key, finalizeStats(stats)]));
-  const productZones = Object.fromEntries(Object.entries(mutableProduct).map(([key, stats]) => [key, finalizeStats(stats)]));
+  const zones = Object.fromEntries(Object.entries(mutable).map(([key, stats]) => [key, addContribution(finalizeStats(stats), totalWetMm)]));
+  const productZones = Object.fromEntries(Object.entries(mutableProduct).map(([key, stats]) => [key, addContribution(finalizeStats(stats), totalWetMm)]));
   const headline = makeLabel(zones, totalWetCellCount);
   const regional = makeRegionalPresentation(headline, productZones);
   const detail = `香港 ${percentage(zones.hongKong.wetShare)} · 深圳 ${percentage(zones.shenzhen.wetShare)} · 南面海域 ${percentage(zones.southSea.wetShare)}`;
