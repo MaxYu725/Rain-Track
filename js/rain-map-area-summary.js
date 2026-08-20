@@ -63,7 +63,10 @@ function selectedTimeText(snapshot) {
 }
 
 function motionText(snapshot, analysisScope) {
-  const options = { frameCount:snapshot?.frameCount };
+  const options = {
+    frameCount:snapshot?.frameCount,
+    currentSummary:snapshot?.spatialSummary || null
+  };
   const motion = analysisScope === 'regional'
     ? summarizeForecastRainMotion(getForecastMapFrameSummaries(), options)
     : summarizeForecastRainContextMotion(getForecastMapFrameSummaries(), {
@@ -75,13 +78,17 @@ function motionText(snapshot, analysisScope) {
     return {
       text:analysisScope === 'regional' ? '正在觀察雨區移動' : '正在觀察所選範圍雨區變化',
       complete:false,
-      status:motion.status
+      status:motion.status,
+      confidence:Number(motion.confidence) || 0,
+      focus:motion.focus || 'observing'
     };
   }
   return {
     text:motion.complete ? motion.label : `初步：${motion.label}`,
     complete:motion.complete,
-    status:motion.status
+    status:motion.status,
+    confidence:Number(motion.confidence) || 0,
+    focus:motion.focus || 'scope-total'
   };
 }
 
@@ -114,6 +121,8 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
     motion.textContent = insight.text;
     motion.dataset.complete = insight.complete ? 'true' : 'false';
     motion.dataset.motionStatus = insight.status || '';
+    motion.dataset.motionFocus = insight.focus;
+    motion.dataset.motionConfidence = insight.confidence.toFixed(2);
   }
   panel.dataset.rainAreaStatus = scoped?.status || summary.status || '';
   panel.dataset.analysisScope = analysisScope;
