@@ -56,6 +56,7 @@ assert.ok(!boot.includes('registration?.unregister?.()'), 'boot watchdog must no
 
 assert.ok(smoke.includes("import './rain-home.js';"), 'Forecast Map smoke may reuse Rain Home');
 assert.ok(smoke.includes("'./radar-entry.js'"), 'direct Radar entry must remain an optional map enhancement');
+assert.ok(smoke.includes("'./radar-analysis-runtime.js'"), 'Radar analysis must remain an optional map enhancement');
 assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'map enhancements must remain best-effort');
 assert.ok(existsSync('js/rain-map-mode-heavy.js'), 'full rain-map mode implementation is missing');
 assert.ok(mode.includes("import('./rain-map-mode-heavy.js')"), 'Rain Home map facade must defer the heavy map graph');
@@ -73,13 +74,14 @@ assert.ok(!radarEntry.includes('fetchRadarFrames'), 'Radar entry must not become
 
 assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force reload');
 assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA reload must require explicit update application');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa51'/);
-assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa51 must remain zero-prefetch');
-assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa51 install must remain zero-prefetch');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa52'/);
+assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa52 must remain zero-prefetch');
+assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa52 install must remain zero-prefetch');
 assert.ok(sw.includes('navigationNetworkFirst(request)'), 'navigation must prefer the live network');
 assert.ok(sw.includes('shellAssetNetworkFirst(request)'), 'same-origin assets must prefer the live network');
 assert.ok(sw.includes("fetch(request, { cache:'no-store' })"), 'shell network fetches must bypass stale HTTP cache');
 assert.ok(sw.includes("'./js/rain-map-mode-heavy.js'"), 'heavy map module must stay in dependency inventory');
 assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must stay in the PWA dependency inventory');
+assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"), 'Radar analysis runtime must stay in the PWA dependency inventory');
 
-console.log('Boot isolation + direct Radar entry + pwa51 resilience PASS');
+console.log('Boot isolation + optional Radar analysis + pwa52 resilience PASS');
