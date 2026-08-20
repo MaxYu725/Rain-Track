@@ -18,24 +18,20 @@ assert.equal(dry.status, 'dry');
 assert.equal(dry.label, '附近雨區不明顯');
 assert.equal(dry.totalWetCellCount, 0);
 
-// Rows 2-4 are inside the coarse Hong Kong product region: 12 / 12 wet.
 const hkWide = summarizeForecastRainArea(frameWith([...Array(12)].map((_, i) => i + 8), 0.8), grid);
 assert.equal(hkWide.status, 'hong-kong-widespread');
 assert.equal(hkWide.zones.hongKong.wetShare, 1);
 assert.equal(hkWide.zones.shenzhen.wetShare, 0);
 
-// Four of twelve HK cells are wet: local rather than widespread coverage.
 const hkLocal = summarizeForecastRainArea(frameWith([8,9,10,11], 0.8), grid);
 assert.equal(hkLocal.status, 'hong-kong-local');
 assert.ok(hkLocal.zones.hongKong.wetShare > 0.3 && hkLocal.zones.hongKong.wetShare < 0.34);
 
-// Rows 0-1 belong to Shenzhen after HK gets priority in the border overlap.
 const shenzhen = summarizeForecastRainArea(frameWith([0,1,2,3,4,5,6,7], 1.2), grid);
 assert.equal(shenzhen.status, 'shenzhen');
 assert.equal(shenzhen.zones.shenzhen.wetShare, 1);
 assert.equal(shenzhen.zones.hongKong.wetShare, 0);
 
-// Final row is south of Hong Kong and inside SWIRLS coverage.
 const sea = summarizeForecastRainArea(frameWith([20,21,22,23], 1.2), grid);
 assert.equal(sea.status, 'south-sea');
 assert.equal(sea.zones.southSea.wetShare, 1);
@@ -55,14 +51,16 @@ for (const marker of [
 ]) assert.ok(runtime.includes(marker), `runtime spatial summary marker missing: ${marker}`);
 
 for (const marker of [
-  '所選預報時段',
-  "activeMode === 'forecast'",
+  'data-rain-area-time',
+  'selectedTimeText(snapshot)',
   'summary.label',
-  'summary.detail',
-  '判讀門檻',
+  'detail.textContent = summary.detail',
+  'panel.dataset.rainAreaStatus',
+  "activeMode === 'forecast'",
   "rain:forecast-map-frame-change"
 ]) assert.ok(ui.includes(marker), `rain-area summary UI marker missing: ${marker}`);
 
+assert.ok(!ui.includes('detail.textContent = `${summary.detail} · 判讀門檻'), 'engineering threshold text must not be appended to the visible product summary');
 assert.ok(!ui.includes('fitBounds'), 'rain-area summary must not change map viewport');
 assert.ok(!ui.includes('setView'), 'rain-area summary must not recenter the map');
 assert.ok(!ui.includes('setForecastMapIndex'), 'rain-area summary must not control forecast playback/frame selection');
@@ -73,6 +71,6 @@ assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI mi
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 25, `rain-area summary requires PWA generation at least pwa25, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 39, `Forecast Map first pass requires PWA generation at least pwa39, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area spatial summary validation passed');
+console.log('Forecast rain-area product summary validation passed');

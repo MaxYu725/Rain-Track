@@ -2,6 +2,12 @@ import { state } from './state.js';
 
 const PRESETS = Object.freeze([
   {
+    id:'regional',
+    label:'區域',
+    aria:'查看香港、深圳及南面海域整體雨區',
+    bounds:[[21.55, 113.40], [22.95, 114.95]]
+  },
+  {
     id:'hong-kong',
     label:'香港',
     aria:'查看全香港雨區',
@@ -15,15 +21,9 @@ const PRESETS = Object.freeze([
   },
   {
     id:'south-sea',
-    label:'南面海域',
+    label:'南海',
     aria:'查看香港以南海域雨區',
     bounds:[[21.35, 113.10], [22.22, 115.20]]
-  },
-  {
-    id:'coverage',
-    label:'全域',
-    aria:'查看完整 SWIRLS 預報覆蓋範圍',
-    bounds:[[21.328, 112.956], [23.487, 115.291]]
   }
 ]);
 
@@ -35,18 +35,17 @@ function ensureStyles() {
   const style = document.createElement('style');
   style.id = 'rain-map-quickviews-style';
   style.textContent = `
-    .rain-map-quickviews{position:absolute;z-index:1200;top:12px;right:12px;display:none;align-items:center;gap:5px;max-width:calc(100% - 140px);padding:5px;border:1px solid #3f464a;background:rgba(0,0,0,.88);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px)}
+    .rain-map-quickviews{position:absolute;z-index:1200;top:12px;right:12px;display:none;align-items:center;gap:5px;max-width:calc(100% - 140px);padding:5px;border:1px solid #3f464a;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px)}
     .rain-map-quickviews.visible{display:flex}
     .rain-map-quickviews-label{padding:0 5px;color:#8f969a;font-size:.64rem;white-space:nowrap}
-    .rain-map-quickview-btn{min-height:34px;padding:0 9px;border:1px solid #3f464a;background:#090b0c;color:#c8d0d4;font-size:.7rem;white-space:nowrap}
+    .rain-map-quickview-btn{min-height:34px;padding:0 10px;border:1px solid #3f464a;background:#090b0c;color:#c8d0d4;font-size:.7rem;white-space:nowrap}
     .rain-map-quickview-btn:hover{border-color:#6f7d84;color:#fff}
     .rain-map-quickview-btn.active{border-color:#277ca6;background:#08202c;color:#f4fbff;box-shadow:inset 0 -2px 0 #22a7e0}
-    .rain-map-quickview-btn.locate{min-width:38px;padding:0 8px;color:#9bdcff}
     @media(max-width:700px){
-      .rain-map-quickviews{top:10px;right:10px;max-width:calc(100% - 122px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;gap:4px}
+      .rain-map-quickviews{top:10px;right:10px;max-width:calc(100% - 118px);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;padding:4px;gap:4px}
       .rain-map-quickviews::-webkit-scrollbar{display:none}
       .rain-map-quickviews-label{display:none}
-      .rain-map-quickview-btn{min-height:32px;padding:0 8px;font-size:.66rem}
+      .rain-map-quickview-btn{min-height:34px;padding:0 9px;font-size:.69rem}
     }
   `;
   document.head.append(style);
@@ -66,7 +65,7 @@ function ensureControls() {
   controls.innerHTML = `
     <span class="rain-map-quickviews-label">雨區視野</span>
     ${PRESETS.map(preset => `<button class="rain-map-quickview-btn" type="button" data-rain-map-view="${preset.id}" aria-label="${preset.aria}">${preset.label}</button>`).join('')}
-    <button class="rain-map-quickview-btn locate" type="button" data-rain-map-view="location" aria-label="返回目前定位">◎</button>`;
+    <button class="rain-map-quickview-btn" type="button" data-rain-map-view="location" aria-label="查看目前定位附近">附近</button>`;
 
   controls.addEventListener('click', event => {
     const button = event.target.closest('[data-rain-map-view]');
@@ -102,7 +101,7 @@ function markActive(button) {
   button?.classList.add('active');
 }
 
-function applyView(id, button) {
+function applyView(id, button, { animate = true } = {}) {
   const map = state.map;
   if (!map) return;
 
@@ -110,7 +109,7 @@ function applyView(id, button) {
     const lat = Number(state.selected?.lat);
     const lon = Number(state.selected?.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-    map.setView([lat, lon], Math.max(13, Number(map.getZoom?.()) || 13), { animate:true });
+    map.setView([lat, lon], Math.max(12, Number(map.getZoom?.()) || 12), { animate });
     markActive(button);
     return;
   }
@@ -118,11 +117,17 @@ function applyView(id, button) {
   const preset = PRESETS.find(item => item.id === id);
   if (!preset) return;
   map.fitBounds(preset.bounds, {
-    animate:true,
-    paddingTopLeft:[24, 64],
-    paddingBottomRight:[24, 150]
+    animate,
+    paddingTopLeft:[24, 76],
+    paddingBottomRight:[24, 168]
   });
   markActive(button);
+}
+
+function applyDefaultRegionalView(controls) {
+  const button = controls?.querySelector('[data-rain-map-view="regional"]');
+  if (!button) return;
+  requestAnimationFrame(() => applyView('regional', button, { animate:false }));
 }
 
 function syncVisibility() {
@@ -131,8 +136,12 @@ function syncVisibility() {
   const visible = activeMode === 'forecast';
   controls.classList.toggle('visible', visible);
   controls.setAttribute('aria-hidden', visible ? 'false' : 'true');
-  if (!visible) clearActive();
-  if (visible) bindMapMoveClear();
+  if (!visible) {
+    clearActive();
+    return;
+  }
+  bindMapMoveClear();
+  applyDefaultRegionalView(controls);
 }
 
 function initRainMapQuickViews() {
@@ -144,4 +153,8 @@ function initRainMapQuickViews() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', initRainMapQuickViews, { once:true });
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRainMapQuickViews, { once:true });
+} else {
+  initRainMapQuickViews();
+}
