@@ -15,7 +15,7 @@ function ensureStyles() {
   const style = document.createElement('style');
   style.id = 'rain-map-area-summary-style';
   style.textContent = `
-    .rain-map-area-summary{position:absolute;z-index:1190;top:62px;left:12px;display:none;width:min(460px,calc(100% - 24px));padding:10px 12px;border:1px solid #39454b;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px);pointer-events:none}
+    .rain-map-area-summary{position:absolute;z-index:1190;top:62px;left:12px;display:none;width:min(500px,calc(100% - 24px));padding:10px 12px;border:1px solid #39454b;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px);pointer-events:none}
     .rain-map-area-summary.visible{display:block}
     .rain-map-area-kicker{display:inline;color:#8ca0a9;font-size:.64rem;font-weight:650;letter-spacing:.03em;font-variant-numeric:tabular-nums}
     .rain-map-area-kicker::after{content:' · '}
@@ -83,8 +83,8 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   const detail = panel.querySelector('[data-rain-area-detail]');
   const motion = panel.querySelector('[data-rain-area-motion]');
   if (time) time.textContent = selectedTimeText(snapshot);
-  if (label) label.textContent = summary.label;
-  if (detail) detail.textContent = summary.detail;
+  if (label) label.textContent = summary.regionalLabel || summary.label;
+  if (detail) detail.textContent = summary.regionalDetail || summary.detail;
   if (motion) {
     const insight = motionText(snapshot);
     motion.textContent = insight.text;
