@@ -38,10 +38,37 @@ for (const marker of [
   'target.click()',
   'stopForecastPlayback()',
   "#forecast-map-timeline .forecast-frame-buttons{display:none!important}",
-  "state.map?.invalidateSize?.({ pan:false, animate:false })"
+  "state.map?.invalidateSize?.({ pan:false, animate:false })",
+  'forecast-map-info-button',
+  'forecast-map-info-note',
+  'INFO_HIDE_MS = 4500',
+  'setTimeout(hideForecastInfo, INFO_HIDE_MS)',
+  '時間點相隔 6 分鐘',
+  '30 分鐘累積預測雨量',
+  'forecast-map-product-meta',
+  "meta.textContent = `${source} · 基準 ${timeText(snapshot?.issueTime)}`",
+  'sanitizeFrameButtonLabels',
+  'button.title = label',
+  "button.setAttribute('aria-label', label)",
+  'requestAnimationFrame(() => syncForecastHud(getForecastMapRuntimeSnapshot()))'
 ]) {
   assert.ok(timeline.includes(marker), `map-first forecast timeline marker missing: ${marker}`);
 }
+
+for (const hiddenMarker of [
+  '#forecast-map-timeline #forecast-map-title',
+  '#forecast-map-timeline #forecast-map-unit',
+  '#forecast-map-timeline #forecast-map-window',
+  '#forecast-map-timeline #forecast-map-counter',
+  '#forecast-map-timeline #forecast-map-issued',
+  '#forecast-map-timeline .forecast-map-legend-title'
+]) {
+  assert.ok(timeline.includes(hiddenMarker), `technical HUD element is not hidden by default: ${hiddenMarker}`);
+}
+assert.ok(timeline.includes('display:none!important'), 'technical Forecast Map annotations must be hidden in the normal HUD');
+assert.ok(timeline.includes("infoButton.addEventListener('click'"), 'data semantics must be revealed only from an explicit info-button click');
+assert.ok(timeline.includes("if (event.key === 'Escape') hideForecastInfo()"), 'temporary disclosure must be dismissible with Escape');
+assert.ok(!timeline.match(/button\.title\s*=\s*[^\n]*30 分鐘/), 'desktop frame hover text must not disclose accumulation semantics without the info action');
 
 const inputHandler = timeline.match(/range\?\.addEventListener\('input',[\s\S]*?\n  \}\);/)?.[0] || '';
 assert.ok(inputHandler, 'mobile scrubber input handler missing');
@@ -84,9 +111,9 @@ assert.ok(!mode.includes('subtree:true'), 'settings observer must not watch the 
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 40, `Forecast Map fullscreen fix requires PWA generation at least pwa40, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 41, `Forecast Map disclosure polish requires PWA generation at least pwa41, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline.js'"), 'forecast timeline wrapper is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/forecast-map-timeline-core.js'"), 'forecast timeline core is missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/rain-map-mode-heavy.js'"), 'full rain-map mode implementation is missing from the PWA app shell inventory');
 
-console.log('Forecast playback + fullscreen viewport + mobile scrubber validation passed');
+console.log('Forecast playback + fullscreen viewport + explicit on-demand data-note validation passed');
