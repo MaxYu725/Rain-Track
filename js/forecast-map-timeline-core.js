@@ -268,7 +268,7 @@ function setVisibleForMode(mode) {
   }
 }
 
-function initForecastTimeline() {
+export function initForecastTimeline() {
   if (ready) return;
   ready = true;
   ensureStyles();
@@ -289,4 +289,8 @@ function initForecastTimeline() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', initForecastTimeline, { once:true });
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initForecastTimeline, { once:true });
+} else {
+  initForecastTimeline();
+}
