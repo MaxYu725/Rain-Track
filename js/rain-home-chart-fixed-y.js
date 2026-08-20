@@ -13,9 +13,12 @@ export function axisLabelCenterPx(labelTopPx, labelHeightPx, chartTopPx) {
 }
 
 function injectStyles() {
-  if (document.getElementById('rain-home-chart-fixed-y-style')) return;
-  const style = document.createElement('style');
-  style.id = 'rain-home-chart-fixed-y-style';
+  let style = document.getElementById('rain-home-chart-fixed-y-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'rain-home-chart-fixed-y-style';
+    document.head.append(style);
+  }
   style.textContent = `
     .rain-home-chart-stage{position:relative}
     .rain-home-chart-y-gutter{
@@ -33,7 +36,6 @@ function injectStyles() {
     @media(max-width:700px){.rain-home-chart-y-gutter{width:${GUTTER_WIDTH_PX}px}.rain-home-chart-y-gutter-label{font-size:14px}}
     @media(max-width:390px){.rain-home-chart-y-gutter-label{font-size:15px}}
   `;
-  document.head.append(style);
 }
 
 function cleanupDetachedBindings() {
