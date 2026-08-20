@@ -89,7 +89,7 @@ for (const marker of [
   "analysisScope = 'regional'",
   "rain:forecast-analysis-scope-change",
   'summarizeForecastRainContext(summary',
-  'summarizeForecastRainContextMotion(frames'
+  'summarizeForecastRainContextMotion(getForecastMapFrameSummaries()'
 ]) assert.ok(ui.includes(marker), `scope-aware area summary marker missing: ${marker}`);
 
 assert.ok(sw.includes("'./js/forecast-map-context-analysis.js'"), 'context analyzer missing from PWA dependency inventory');
