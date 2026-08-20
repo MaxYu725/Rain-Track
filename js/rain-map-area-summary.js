@@ -117,12 +117,8 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   panel.removeAttribute('title');
 }
 
-function refreshNearbyIfActive() {
-  if (getForecastAnalysisScope() === 'location') {
-    refreshForecastMapSpatialAnalysis();
-    return;
-  }
-  syncSummary();
+function refreshNearbyAnalysis() {
+  refreshForecastMapSpatialAnalysis();
 }
 
 function initRainAreaSummary() {
@@ -136,8 +132,8 @@ function initRainAreaSummary() {
   window.addEventListener('rain:forecast-map-frame-change', event => {
     syncSummary(event.detail?.snapshot || getForecastMapRuntimeSnapshot());
   });
-  window.addEventListener('rain:location-change', refreshNearbyIfActive);
-  window.addEventListener('rain:radius-change', refreshNearbyIfActive);
+  window.addEventListener('rain:location-change', refreshNearbyAnalysis);
+  window.addEventListener('rain:radius-change', refreshNearbyAnalysis);
 }
 
 if (document.readyState === 'loading') {
