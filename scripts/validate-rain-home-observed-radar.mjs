@@ -1,12 +1,20 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import {
+
+globalThis.localStorage = {
+  getItem:() => null,
+  setItem:() => {},
+  removeItem:() => {}
+};
+globalThis.location = { search:'' };
+
+const {
   RAIN_HOME_OBSERVED_MAX_FRAMES,
   RAIN_HOME_OBSERVED_WINDOW_MINUTES,
   describeObservedRadarHistory,
   observedRadarLevel,
   selectObservedRadarFrames
-} from '../js/rain-home-observed-radar.js';
+} = await import('../js/rain-home-observed-radar.js');
 
 const base = Date.parse('2026-08-20T10:00:00.000Z');
 const frames = Array.from({ length:8 }, (_, index) => ({
@@ -61,7 +69,8 @@ for (const marker of [
   '過去 30 分鐘實況',
   'HKO 雷達回波',
   '未來雨量仍以 SWIRLS 預報為準',
-  'requestIdleCallback(run, { timeout:1200 })'
+  'requestIdleCallback(run, { timeout:1200 })',
+  "root.dataset.rainHomeObservedAttempted = '1'"
 ]) assert.ok(source.includes(marker), `Rain Home observed Radar marker missing: ${marker}`);
 
 for (const forbidden of ['fetchSwirlsPointSeries', '/point-series', '/api/rain/swirls']) {
