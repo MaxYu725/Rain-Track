@@ -61,12 +61,12 @@ assert.ok(!mode.match(/^import\s/m), 'rain-map-mode facade must not have static 
 
 assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force reload');
 assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA reload must require explicit update application');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa35'/);
-assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa35 must remain zero-prefetch');
-assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa35 install must remain zero-prefetch');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa36'/);
+assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa36 must remain zero-prefetch');
+assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa36 install must remain zero-prefetch');
 assert.ok(sw.includes('navigationNetworkFirst(request)'), 'navigation must prefer the live network');
 assert.ok(sw.includes('shellAssetNetworkFirst(request)'), 'same-origin assets must prefer the live network');
 assert.ok(sw.includes("fetch(request, { cache:'no-store' })"), 'shell network fetches must bypass stale HTTP cache');
 assert.ok(sw.includes("'./js/rain-map-mode-heavy.js'"), 'heavy map module must stay in dependency inventory');
 
-console.log('Boot watchdog isolation + pwa35 resilience PASS');
+console.log('Boot watchdog isolation + pwa36 resilience PASS');
