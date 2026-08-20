@@ -1,6 +1,9 @@
 name: Deploy Worker production
 
 on:
+  push:
+    branches:
+      - deploy/zero-base-once
   workflow_dispatch:
 
 permissions:
