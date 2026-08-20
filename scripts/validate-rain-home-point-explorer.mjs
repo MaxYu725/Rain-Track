@@ -34,9 +34,10 @@ assert.ok(!home.includes('6 分鐘雨量'), 'Rain Home must not relabel rolling 
 assert.ok(home.includes('每點為 30 分鐘累積雨量'), 'rolling accumulation semantics must remain visible once in the chart header');
 assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete chart should use a concise interaction hint');
 assert.ok(!home.includes('rain-home-chart-caption'), 'normal chart should not duplicate accumulation semantics below the plot');
+assert.ok(home.includes('.rain-home-chart-help{font-size:.7rem}'), 'mobile interaction hint must remain readable after the chart grows');
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 36, `Rain Home fourth-pass polish requires PWA generation at least pwa36, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 37, `Rain Home fifth-pass mobile polish requires PWA generation at least pwa37, got pwa${shellVersion[1]}`);
 
-console.log('Rain Home 16-point explorer + concise interaction-only inspector validation passed');
+console.log('Rain Home 16-point explorer + fifth-pass mobile readability validation passed');

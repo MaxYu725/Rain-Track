@@ -60,6 +60,17 @@ assert.ok(!home.includes('開始出現訊號'), 'headline must use human weather
 assert.ok(!home.includes('香港有效時間優先'), 'internal presentation principles must not be user-facing copy');
 assert.ok(!home.includes('rain-home-peak-label'), 'peak text annotation must stay outside the plotted curve');
 
+// Fifth-pass mobile readability invariants.
+assert.ok(home.includes('@media(max-width:700px)'), 'Rain Home must retain an explicit mobile presentation breakpoint');
+assert.ok(home.includes('.rain-home-location{padding:2px 0 13px}'), 'mobile location block must use tighter vertical spacing');
+assert.ok(home.includes('.rain-home-summary{padding:19px 0 16px}'), 'mobile weather summary must use tighter vertical spacing');
+assert.ok(home.includes('.rain-home-chart-summary{margin-bottom:8px;color:#75838a;font-size:.69rem;font-weight:520}'), 'mobile chart summary must stay visually secondary');
+assert.ok(home.includes('.rain-home-axis-label{font-size:14px}'), 'mobile rainfall scale labels must be enlarged');
+assert.ok(home.includes('.rain-home-axis-clock{font-size:16px}'), 'mobile clock labels must be enlarged');
+assert.ok(home.includes('.rain-home-axis-lead{font-size:13px}'), 'mobile lead labels must be enlarged');
+assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'redundant first-forecast text must be hidden on mobile');
+assert.ok(home.includes('const height = 300'), 'fifth-pass chart geometry must be taller for mobile readability');
+
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
 assert.ok(!home.includes('loadSeriesViaFrames'), 'Rain Home must not reconstruct a series through 16 /point requests');
@@ -102,4 +113,4 @@ assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 
-console.log('Rain Home zero-base one-request architecture + fourth-pass product language validation passed');
+console.log('Rain Home zero-base architecture + fifth-pass mobile presentation validation passed');
