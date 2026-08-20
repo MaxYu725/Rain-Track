@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 
 const radar = readFileSync('js/radar.js', 'utf8');
 const entry = readFileSync('js/radar-entry.js', 'utf8');
+const mirror = readFileSync('js/radar-settings-mirror.js', 'utf8');
+const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
 for (const marker of [
@@ -46,8 +48,19 @@ assert.ok(!radar.includes('setSheetMode('), 'Radar v2 must not depend on the rem
 assert.ok(!radar.includes('bottom:calc(96px + var(--safe-bottom))'), 'Radar timeline must not reserve the removed 96px sheet offset');
 assert.ok(!entry.includes('fetchRadarFrames'), 'direct Radar entry must remain navigation-only');
 
+for (const marker of [
+  "document.getElementById('radar-range')",
+  "document.getElementById('radar-height')",
+  "queueMicrotask(syncRadarSettingsMirror)",
+  "window.addEventListener('rain:radar-frame-change'",
+  "window.addEventListener('rain:map-mode-change'"
+]) assert.ok(mirror.includes(marker), `Radar settings mirror marker missing: ${marker}`);
+assert.ok(!mirror.includes('fetchRadarFrames'), 'Radar settings mirror must never load Radar data');
+assert.ok(smoke.includes("'./radar-settings-mirror.js'"), 'Radar settings mirror must remain an optional map enhancement');
+
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa51'/);
 assert.ok(sw.includes("'./js/radar.js'"), 'Radar runtime must remain in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must remain in the PWA dependency inventory');
+assert.ok(sw.includes("'./js/radar-settings-mirror.js'"), 'Radar settings mirror must remain in the PWA dependency inventory');
 
-console.log('Radar commit-based playback + direct controls + pwa51 regression gate PASS');
+console.log('Radar commit-based playback + direct controls + synchronized settings + pwa51 regression gate PASS');
