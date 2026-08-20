@@ -4,9 +4,13 @@ import { createSwirlsPointSeriesRequestHandler } from './swirls-point-series-req
 import { createSwirlsPointSeriesBatchLoader } from './swirls-point-series-batch.js';
 import { createSwirlsRuntime, SWIRLS_FETCH_POLICY } from './swirls-worker-runtime.js';
 
+export const STABLE_WORKER_VERSION = '2.5.0';
+const SWIRLS_PROBE_PATH = '/probe/swirls';
+const SWIRLS_FRAME_PATH = '/api/rain/swirls/frame';
 const POINT_PATH = '/api/rain/swirls/point';
 const POINT_SERIES_PATH = '/api/rain/swirls/point-series';
 const ACCEPT = 'text/plain,*/*';
+const SWIRLS_PATHS = new Set([SWIRLS_PROBE_PATH, SWIRLS_FRAME_PATH, POINT_PATH, POINT_SERIES_PATH]);
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json; charset=utf-8'
@@ -72,6 +76,44 @@ const pointSeriesBatchLoader = createSwirlsPointSeriesBatchLoader({
   policy: SWIRLS_FETCH_POLICY
 });
 
+const swirlsProbeHandler = async () => ({
+  ...(await pointRuntime.probe({ frameIndex:0, includeLastFrame:true })),
+  version:STABLE_WORKER_VERSION,
+  workerVersion:STABLE_WORKER_VERSION
+});
+
+const swirlsFrameHandler = async url => {
+  const rawFrame = url.searchParams.get('frame');
+  if (!/^\d+$/.test(String(rawFrame || ''))) {
+    throw new SwirlsPointRequestError('SWIRLS frame must be an integer from 0 to 15', 400);
+  }
+  const frameIndex = Number(rawFrame);
+  if (!Number.isInteger(frameIndex) || frameIndex < 0 || frameIndex > 15) {
+    throw new SwirlsPointRequestError('SWIRLS frame must be an integer from 0 to 15', 400);
+  }
+  const frame = await pointRuntime.loadFrame(frameIndex);
+  return {
+    ok:true,
+    version:STABLE_WORKER_VERSION,
+    contractVersion:frame.contractVersion,
+    frameIndex:frame.frameIndex,
+    runTime:frame.runTime,
+    validTime:frame.validTime,
+    leadMinutes:frame.leadMinutes,
+    windowStart:frame.windowStart,
+    windowEnd:frame.windowEnd,
+    unit:frame.unit,
+    source:frame.source,
+    sourceBytes:frame.sourceBytes,
+    sourceUpdatedAt:frame.sourceUpdatedAt,
+    cacheStatus:frame.cacheStatus,
+    index:frame.index,
+    grid:frame.grid,
+    values:frame.values,
+    validation:frame.validation
+  };
+};
+
 const pointRequestHandler = createSwirlsPointRequestHandler({
   loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex)
 });
@@ -83,35 +125,46 @@ const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({
 
 export function createPhase3Cv2Worker({
   baseWorker = stableWorker,
+  handleProbe = swirlsProbeHandler,
+  handleFrame = swirlsFrameHandler,
   handlePoint = pointRequestHandler,
   handlePointSeries = pointSeriesRequestHandler
 } = {}) {
   if (!baseWorker || typeof baseWorker.fetch !== 'function') {
     throw new Error('Phase 3C v2 entry requires the Stable Recovery Worker');
   }
-  if (typeof handlePoint !== 'function' || typeof handlePointSeries !== 'function') {
-    throw new Error('Phase 3C v2 entry requires point handlers');
+  if ([handleProbe, handleFrame, handlePoint, handlePointSeries].some(handler => typeof handler !== 'function')) {
+    throw new Error('Phase 3C v2 entry requires SWIRLS handlers');
   }
 
   return {
     async fetch(request) {
       const url = new URL(request.url);
 
-      // Only compact SWIRLS point routes are intercepted. OPTIONS, non-GET
-      // requests and every legacy route continue through Stable Recovery.
-      if (request.method !== 'GET' || (url.pathname !== POINT_PATH && url.pathname !== POINT_SERIES_PATH)) {
+      // All SWIRLS forecast routes use the compact fast fetch runtime. Every
+      // non-SWIRLS route remains delegated to Stable Recovery unchanged.
+      if (request.method !== 'GET' || !SWIRLS_PATHS.has(url.pathname)) {
         return baseWorker.fetch(request);
       }
 
       try {
-        const handler = url.pathname === POINT_SERIES_PATH ? handlePointSeries : handlePoint;
+        const handler = url.pathname === SWIRLS_PROBE_PATH
+          ? handleProbe
+          : url.pathname === SWIRLS_FRAME_PATH
+            ? handleFrame
+            : url.pathname === POINT_SERIES_PATH
+              ? handlePointSeries
+              : handlePoint;
         const startedAt = Date.now();
         const payload = await handler(url);
+        const cacheControl = url.pathname === SWIRLS_FRAME_PATH
+          ? `public, max-age=${SWIRLS_FETCH_POLICY.mdlTtlSeconds}`
+          : 'no-store';
         return json({
           ...payload,
           generatedAt: new Date().toISOString()
         }, 200, {
-          'Cache-Control': 'no-store',
+          'Cache-Control': cacheControl,
           'Server-Timing': `swirls;dur=${Math.max(0, Date.now() - startedAt)}`
         });
       } catch (error) {
