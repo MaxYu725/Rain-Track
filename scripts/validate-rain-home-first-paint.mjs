@@ -40,7 +40,7 @@ for (const forbidden of ['/api/rain/swirls', 'data-rain-critical-fallback', '正
   assert.ok(!boot.includes(forbidden), `first-paint watchdog must not become a second weather client: ${forbidden}`);
 }
 
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa59'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa60'/);
 assert.ok(!sw.includes('const CORE_SHELL = ['), 'first paint must not trigger a PWA core prefetch storm');
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
@@ -51,8 +51,9 @@ assert.ok(appShell.includes("'./js/rain-home-chart-scale-polish.js'"), 'optional
 assert.ok(appShell.includes("'./js/rain-home-chart-intensity.js'"), 'optional Rain Home chart intensity must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-fixed-y.js'"), 'optional Y-axis gutter must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-observed-radar.js'"), 'optional Rain Home Now + Next Radar context must remain in dependency inventory');
+assert.ok(appShell.includes("'./js/rain-home-reliability.js'"), 'optional Rain Home reliability guard must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-image.js'"), 'shared Radar image analysis helper must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-entry.js'"), 'Radar entry must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-runtime.js'"), 'optional Radar analysis must remain in dependency inventory');
 
-console.log('Rain Home first paint + optional scale/Now + Next/chart polish inventory + pwa59 regression gate PASS');
+console.log('Rain Home first paint + optional reliability/scale/Now + Next/chart polish inventory + pwa60 regression gate PASS');
