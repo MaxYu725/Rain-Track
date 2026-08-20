@@ -2,21 +2,26 @@ import { fetchRadarFrames } from './api.js';
 import { APP_VERSION, RADAR_CONTRACT_VERSION } from './config.js';
 import { state } from './state.js';
 import { updateForecastMobileStatus } from './forecast.js';
-import { clamp, formatDateTime, isMobileLayout } from './utils.js';
-import { setBadge, setMobileStatus, setSheetMode, toast } from './ui.js';
+import { clamp, formatDateTime } from './utils.js';
+import { setBadge, setMobileStatus, toast } from './ui.js';
 
 const DEFAULT_PLAYBACK_DELAY = 750;
 const RADAR_REFRESH_MS = 5.5 * 60 * 1000;
-const RECENT_PRELOAD_COUNT = 12;
+const RECENT_PRELOAD_COUNT = 8;
 const RADAR_FRESH_NORMAL_MINUTES = 15;
 const RADAR_FRESH_MAX_MINUTES = 30;
 
 let displayToken = 0;
 let preloadToken = 0;
+let playToken = 0;
 let playTimer = null;
+let playResolve = null;
 let refreshTimer = null;
-let previousSheetMode = null;
 let controlsReady = false;
+let radarBusy = false;
+let playing = false;
+let sliderScrubbing = false;
+let sliderPreviewIndex = null;
 let radarMode = localStorage.getItem('hkRainRadarMode') === 'test' ? 'test' : 'live';
 let playbackDelay = normalizePlaybackDelay(localStorage.getItem('hkRainRadarSpeed'));
 
@@ -35,6 +40,7 @@ export function updateRadarCapability(capabilities = {}, contract = null) {
   }
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
   syncRadarHeightUi();
+  syncRadarQuickControls();
 }
 
 export async function toggleRadar(enabled) {
@@ -47,16 +53,17 @@ export async function toggleRadar(enabled) {
     state.layers.radar = false;
     const toggle = document.getElementById('toggle-radar');
     if (toggle) toggle.checked = false;
+    syncRadarQuickControls(false);
     toast('雷達介面已準備，但目前 Worker 尚未啟用雷達資料');
     return;
   }
 
   state.layers.radar = true;
-  collapseSheetForRadar();
-  await loadRadarFrames({ preserveTime:false });
+  syncRadarQuickControls(true);
+  await loadRadarFrames({ preserveTime:false, fitBounds:true });
 }
 
-export async function loadRadarFrames({ preserveTime = false, quiet = false } = {}) {
+export async function loadRadarFrames({ preserveTime = false, quiet = false, fitBounds = false } = {}) {
   ensureRadarUi();
   stopPlayback();
   clearTimeout(refreshTimer);
@@ -76,15 +83,13 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
     state.radar.frames = data.frames;
     syncRadarHeightUi();
 
+    let targetIndex = Math.max(0, data.frames.length - 1);
     if (preserveTime && previousTime && !wasLatest) {
       const matched = data.frames.findIndex(frame => frame.time === previousTime);
-      state.radar.index = matched >= 0 ? matched : Math.max(0, data.frames.length - 1);
-    } else {
-      state.radar.index = Math.max(0, data.frames.length - 1);
+      if (matched >= 0) targetIndex = matched;
     }
 
-    await showRadarFrame();
-    collapseSheetForRadar();
+    await showRadarFrame(targetIndex, { fitBounds });
     configureTimeline(data);
     preloadRecentFrames(data.frames);
     setBadge('radar','ok','RADAR');
@@ -107,7 +112,7 @@ export async function loadRadarFrames({ preserveTime = false, quiet = false } = 
       const toggle = document.getElementById('toggle-radar');
       if (toggle) toggle.checked = false;
       configureTimeline(null);
-      restoreSheetAfterRadarFailure();
+      syncRadarQuickControls(false);
       setBadge('radar','error','RADAR');
       if (!quiet) toast(`雷達載入失敗：${error.message}`);
     }
@@ -133,30 +138,44 @@ function validateRadarResponse(data) {
   }
 }
 
-async function showRadarFrame() {
-  const frame = state.radar.frames[state.radar.index];
-  if (!frame || !window.L || !state.map) return;
+async function showRadarFrame(targetIndex = state.radar.index, { fitBounds = false } = {}) {
+  const index = clamp(Number(targetIndex) || 0, 0, Math.max(0, state.radar.frames.length - 1));
+  const frame = state.radar.frames[index];
+  if (!frame || !window.L || !state.map) return false;
+
   const token = ++displayToken;
   const url = resolveImageUrl(frame.imageUrl);
   setTimelineLoading(true);
-  const loaded = await preloadImage(url);
-  if (token !== displayToken) return;
-  if (!loaded) throw new Error('雷達影像載入失敗');
+  try {
+    const loaded = await preloadImage(url);
+    if (token !== displayToken) return false;
+    if (!loaded) throw new Error('雷達影像載入失敗');
 
-  ensureRadarPane();
-  const bounds = [[frame.bounds.south,frame.bounds.west],[frame.bounds.north,frame.bounds.east]];
-  const next = window.L.imageOverlay(url, bounds, {
-    opacity:state.radar.opacity,
-    interactive:false,
-    pane:'radarPane',
-    className:`rain-radar-overlay ${radarMode === 'live' ? 'live-radar-overlay' : 'test-radar-overlay'}`
-  }).addTo(state.map);
+    ensureRadarPane();
+    const bounds = [[frame.bounds.south,frame.bounds.west],[frame.bounds.north,frame.bounds.east]];
+    const next = window.L.imageOverlay(url, bounds, {
+      opacity:state.radar.opacity,
+      interactive:false,
+      pane:'radarPane',
+      className:`rain-radar-overlay ${radarMode === 'live' ? 'live-radar-overlay' : 'test-radar-overlay'}`
+    }).addTo(state.map);
 
-  if (state.radar.layer) state.map.removeLayer(state.radar.layer);
-  state.radar.layer = next;
-  updateTimelineLabels(frame);
-  setTimelineLoading(false);
-  preloadAdjacentFrames();
+    if (token !== displayToken) {
+      state.map.removeLayer(next);
+      return false;
+    }
+    if (state.radar.layer) state.map.removeLayer(state.radar.layer);
+    state.radar.layer = next;
+    state.radar.index = index;
+    clearRadarPreview();
+    updateTimelineLabels(frame);
+    if (fitBounds) fitRadarFrameBounds(frame);
+    preloadAdjacentFrames(index);
+    window.dispatchEvent(new CustomEvent('rain:radar-frame-change', { detail:{ index, frame } }));
+    return true;
+  } finally {
+    if (token === displayToken) setTimelineLoading(false);
+  }
 }
 
 function ensureRadarPane() {
@@ -165,6 +184,15 @@ function ensureRadarPane() {
   if (!pane) pane = state.map.createPane('radarPane');
   pane.style.zIndex = '350';
   pane.style.pointerEvents = 'none';
+}
+
+function fitRadarFrameBounds(frame) {
+  if (!state.map || !frame?.bounds) return;
+  state.map.invalidateSize?.({ pan:false, animate:false });
+  state.map.fitBounds(
+    [[frame.bounds.south, frame.bounds.west], [frame.bounds.north, frame.bounds.east]],
+    { animate:false, paddingTopLeft:[20,64], paddingBottomRight:[20,150] }
+  );
 }
 
 function configureTimeline(data) {
@@ -195,6 +223,7 @@ function configureTimeline(data) {
   if (data?.cadenceMinutes) panel?.setAttribute('data-cadence', String(data.cadenceMinutes));
   updateRadarAgeLabel();
   updatePlayButton();
+  syncRadarQuickControls();
 }
 
 function updateTimelineLabels(frame = state.radar.frames[state.radar.index]) {
@@ -209,17 +238,47 @@ function updateTimelineLabels(frame = state.radar.frames[state.radar.index]) {
   updateRadarAgeLabel();
 }
 
-export function setRadarIndex(value) {
+function previewRadarIndex(value) {
+  const index = clamp(Number(value) || 0, 0, Math.max(0, state.radar.frames.length - 1));
+  const frame = state.radar.frames[index];
+  if (!frame) return;
+  sliderPreviewIndex = index;
+  document.getElementById('radar-timeline')?.classList.add('is-preview');
+  const time = document.getElementById('radar-timeline-time');
+  if (time) time.textContent = `預覽 ${formatDateTime(frame.time)}`;
+  const counter = document.getElementById('radar-frame-counter');
+  if (counter) counter.textContent = `${index + 1}/${state.radar.frames.length}`;
+  const latest = document.getElementById('radar-latest-button');
+  if (latest) latest.disabled = index === state.radar.frames.length - 1;
+}
+
+function clearRadarPreview({ restore = false } = {}) {
+  sliderPreviewIndex = null;
+  document.getElementById('radar-timeline')?.classList.remove('is-preview');
+  if (restore) updateTimelineLabels();
+}
+
+export async function setRadarIndex(value) {
   stopPlayback();
-  state.radar.index = clamp(Number(value) || 0, 0, Math.max(0, state.radar.frames.length - 1));
-  showRadarFrame().catch(error => {
+  const index = clamp(Number(value) || 0, 0, Math.max(0, state.radar.frames.length - 1));
+  try {
+    return await showRadarFrame(index);
+  } catch (error) {
     setTimelineLoading(false);
+    clearRadarPreview({ restore:true });
     toast(error.message);
-  });
+    return false;
+  }
 }
 
 export function changeRadarRange(value) {
-  state.radar.range = String(value) === '256' ? 256 : 64;
+  const nextRange = String(value) === '256' ? 256 : 64;
+  if (state.radar.range === nextRange) {
+    syncRadarHeightUi();
+    return;
+  }
+  stopPlayback();
+  state.radar.range = nextRange;
   localStorage.setItem('hkRainRadarRange', String(state.radar.range));
   if (state.radar.range === 64) {
     state.radar.height = localStorage.getItem('hkRainRadarHeight') === '2' ? 2 : 3;
@@ -227,7 +286,7 @@ export function changeRadarRange(value) {
     state.radar.height = 3;
   }
   syncRadarHeightUi();
-  if (state.layers.radar) loadRadarFrames({ preserveTime:false });
+  if (state.layers.radar) void loadRadarFrames({ preserveTime:true, fitBounds:true });
 }
 
 export function changeRadarHeight(value) {
@@ -238,10 +297,15 @@ export function changeRadarHeight(value) {
     syncRadarHeightUi();
     return;
   }
+  if (state.radar.height === requested) {
+    syncRadarHeightUi();
+    return;
+  }
+  stopPlayback();
   state.radar.height = requested;
   if (state.radar.range === 64) localStorage.setItem('hkRainRadarHeight', String(requested));
   syncRadarHeightUi();
-  if (state.layers.radar) loadRadarFrames({ preserveTime:false });
+  if (state.layers.radar) void loadRadarFrames({ preserveTime:true, fitBounds:false });
 }
 
 export function setRadarOpacity(value) {
@@ -253,35 +317,21 @@ export function setRadarOpacity(value) {
 }
 
 export function clearRadar({ restoreSheet = false } = {}) {
+  void restoreSheet;
   stopPlayback();
   clearTimeout(refreshTimer);
   refreshTimer = null;
+  ++displayToken;
+  ++preloadToken;
   state.layers.radar = false;
   state.radar.frames = [];
   state.radar.index = 0;
+  clearRadarPreview();
   removeRadarLayer();
   document.getElementById('radar-timeline')?.classList.add('hidden');
+  syncRadarQuickControls(false);
   setBadge('radar', state.worker.capabilities.radarFrames ? 'empty' : 'disabled', 'RADAR');
   updateForecastMobileStatus();
-
-  if (restoreSheet && isMobileLayout() && previousSheetMode) {
-    const restore = previousSheetMode;
-    previousSheetMode = null;
-    setSheetMode(restore, { persist:false, offset:false });
-  }
-}
-
-function collapseSheetForRadar() {
-  if (!isMobileLayout()) return;
-  previousSheetMode ||= state.sheet.mode;
-  if (state.sheet.mode !== 'peek') setSheetMode('peek', { persist:false, offset:false });
-}
-
-function restoreSheetAfterRadarFailure() {
-  if (!previousSheetMode) return;
-  const restore = previousSheetMode;
-  previousSheetMode = null;
-  if (isMobileLayout() && state.sheet.mode === 'peek') setSheetMode(restore, { persist:false, offset:false });
 }
 
 function removeRadarLayer() {
@@ -290,50 +340,71 @@ function removeRadarLayer() {
 }
 
 function togglePlayback() {
-  if (playTimer) {
+  if (playing) {
     stopPlayback();
     return;
   }
   if (state.radar.frames.length < 2) return;
-  if (state.radar.index >= state.radar.frames.length - 1) state.radar.index = 0;
-  updateTimelineLabels();
-  playNext();
+  playing = true;
+  const token = ++playToken;
+  const last = state.radar.frames.length - 1;
+  const startIndex = state.radar.index >= last ? 0 : state.radar.index;
+  updatePlayButton(true);
+  void playbackLoop(token, startIndex);
 }
 
-function playNext() {
-  if (!state.layers.radar || state.radar.frames.length < 2) {
-    stopPlayback();
-    return;
-  }
-  updatePlayButton(true);
-  showRadarFrame().catch(error => {
-    stopPlayback();
-    toast(error.message);
-  });
+async function playbackLoop(token, startIndex) {
+  let targetIndex = startIndex;
+  while (playing && token === playToken && state.layers.radar && state.radar.frames.length > 1) {
+    try {
+      const shown = await showRadarFrame(targetIndex);
+      if (!shown || !playing || token !== playToken) return;
+    } catch (error) {
+      stopPlayback();
+      toast(error.message);
+      return;
+    }
 
-  const atLatest = state.radar.index >= state.radar.frames.length - 1;
-  const delay = atLatest ? Math.round(playbackDelay * 1.8) : playbackDelay;
-  playTimer = setTimeout(() => {
-    state.radar.index = atLatest ? 0 : state.radar.index + 1;
-    updateTimelineLabels();
-    playNext();
-  }, delay);
+    const atLatest = targetIndex >= state.radar.frames.length - 1;
+    const delay = atLatest ? Math.round(playbackDelay * 1.8) : playbackDelay;
+    const keepPlaying = await waitForPlaybackDelay(delay, token);
+    if (!keepPlaying) return;
+    targetIndex = atLatest ? 0 : targetIndex + 1;
+  }
+}
+
+function waitForPlaybackDelay(delay, token) {
+  return new Promise(resolve => {
+    playResolve = resolve;
+    playTimer = setTimeout(() => {
+      playTimer = null;
+      playResolve = null;
+      resolve(playing && token === playToken);
+    }, delay);
+  });
 }
 
 function stopPlayback() {
+  playing = false;
+  ++playToken;
   if (playTimer) clearTimeout(playTimer);
   playTimer = null;
+  if (playResolve) playResolve(false);
+  playResolve = null;
   updatePlayButton(false);
 }
 
-function jumpToLatest() {
+async function jumpToLatest() {
   stopPlayback();
   if (!state.radar.frames.length) return;
-  state.radar.index = state.radar.frames.length - 1;
-  showRadarFrame().catch(error => toast(error.message));
+  try {
+    await showRadarFrame(state.radar.frames.length - 1);
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
-function updatePlayButton(forcePlaying = Boolean(playTimer)) {
+function updatePlayButton(forcePlaying = playing) {
   const button = document.getElementById('radar-play-button');
   if (!button) return;
   button.textContent = forcePlaying ? '❚❚' : '▶';
@@ -400,9 +471,7 @@ function supportsRadarHeightSelection() {
 
 function radarModeChipText() {
   if (radarMode === 'test') return 'TEST';
-  return supportsRadarHeightSelection()
-    ? `${state.radar.range} km · ${state.radar.height} km高`
-    : `${state.radar.range} km`;
+  return `${state.radar.range} km · ${state.radar.height} km高`;
 }
 
 function syncRadarHeightUi() {
@@ -410,26 +479,30 @@ function syncRadarHeightUi() {
   const select = document.getElementById('radar-height');
   const supported = supportsRadarHeightSelection();
   row?.classList.toggle('hidden', !supported);
-  if (!select) return;
 
   if (!supported) {
     state.radar.height = 3;
-    select.value = '3';
-    select.disabled = true;
+    if (select) {
+      select.value = '3';
+      select.disabled = true;
+    }
   } else {
     const available = availableRadarHeights(state.radar.range);
     if (!available.includes(state.radar.height)) {
       const preferred = state.radar.range === 64 && localStorage.getItem('hkRainRadarHeight') === '2' ? 2 : 3;
       state.radar.height = available.includes(preferred) ? preferred : (available.includes(3) ? 3 : available[0]);
     }
-    select.value = String(state.radar.height);
-    select.disabled = radarMode === 'test' || available.length < 2;
-    const option2 = select.querySelector('option[value="2"]');
-    if (option2) option2.disabled = !available.includes(2);
+    if (select) {
+      select.value = String(state.radar.height);
+      select.disabled = radarMode === 'test' || available.length < 2;
+      const option2 = select.querySelector('option[value="2"]');
+      if (option2) option2.disabled = !available.includes(2);
+    }
   }
 
   const modeChip = document.getElementById('radar-mode-chip');
   if (modeChip) modeChip.textContent = radarModeChipText();
+  syncRadarQuickControls();
 }
 
 function setRadarMode(value) {
@@ -439,7 +512,7 @@ function setRadarMode(value) {
   const select = document.getElementById('radar-data-mode');
   if (select) select.value = radarMode;
   syncRadarHeightUi();
-  if (state.layers.radar) loadRadarFrames({ preserveTime:false });
+  if (state.layers.radar) void loadRadarFrames({ preserveTime:false, fitBounds:false });
   else configureTimeline(null);
 }
 
@@ -448,10 +521,6 @@ function setPlaybackSpeed(value) {
   localStorage.setItem('hkRainRadarSpeed', String(playbackDelay));
   const select = document.getElementById('radar-speed');
   if (select) select.value = String(playbackDelay);
-  if (playTimer) {
-    stopPlayback();
-    togglePlayback();
-  }
 }
 
 function normalizePlaybackDelay(value) {
@@ -463,11 +532,11 @@ function scheduleRadarRefresh() {
   clearTimeout(refreshTimer);
   if (!state.layers.radar || radarMode !== 'live') return;
   refreshTimer = setTimeout(() => {
-    if (document.visibilityState === 'hidden' || !state.layers.radar) {
+    if (document.visibilityState === 'hidden' || !state.layers.radar || playing || radarBusy) {
       scheduleRadarRefresh();
       return;
     }
-    loadRadarFrames({ preserveTime:true, quiet:true });
+    void loadRadarFrames({ preserveTime:true, quiet:true, fitBounds:false });
   }, RADAR_REFRESH_MS);
 }
 
@@ -480,8 +549,8 @@ function preloadRecentFrames(frames) {
   })).catch(() => {});
 }
 
-function preloadAdjacentFrames() {
-  const indexes = [state.radar.index - 2, state.radar.index - 1, state.radar.index + 1, state.radar.index + 2]
+function preloadAdjacentFrames(centerIndex = state.radar.index) {
+  const indexes = [centerIndex - 2, centerIndex - 1, centerIndex + 1, centerIndex + 2]
     .filter(index => index >= 0 && index < state.radar.frames.length);
   indexes.forEach(index => preloadImage(resolveImageUrl(state.radar.frames[index].imageUrl)).catch(() => false));
 }
@@ -507,19 +576,106 @@ function preloadImage(url) {
 }
 
 function setRadarBusy(busy) {
-  document.getElementById('radar-timeline')?.classList.toggle('is-loading', Boolean(busy));
+  radarBusy = Boolean(busy);
+  document.getElementById('radar-timeline')?.classList.toggle('is-loading', radarBusy);
   const toggle = document.getElementById('toggle-radar');
-  if (toggle) toggle.setAttribute('aria-busy', busy ? 'true' : 'false');
+  if (toggle) toggle.setAttribute('aria-busy', radarBusy ? 'true' : 'false');
+  syncRadarQuickControls();
 }
 
 function setTimelineLoading(loading) {
   document.getElementById('radar-timeline')?.classList.toggle('frame-loading', Boolean(loading));
 }
 
+function ensureRadarQuickControls() {
+  let root = document.getElementById('radar-quick-controls');
+  if (root) return root;
+  const mapContainer = document.getElementById('map-container');
+  if (!mapContainer) return null;
+
+  root = document.createElement('div');
+  root.id = 'radar-quick-controls';
+  root.className = 'radar-quick-controls';
+  root.setAttribute('role', 'group');
+  root.setAttribute('aria-label', '雷達顯示設定');
+  root.innerHTML = `
+    <span class="radar-quick-label">範圍</span>
+    <button type="button" data-radar-range="64">64 km</button>
+    <button type="button" data-radar-range="256">256 km</button>
+    <span class="radar-quick-divider" aria-hidden="true"></span>
+    <span class="radar-quick-label">高度</span>
+    <button type="button" data-radar-height="2">2 km高</button>
+    <button type="button" data-radar-height="3">3 km高</button>`;
+
+  root.addEventListener('click', event => {
+    const rangeButton = event.target.closest('[data-radar-range]');
+    const heightButton = event.target.closest('[data-radar-height]');
+    if (!rangeButton && !heightButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (rangeButton && !rangeButton.disabled) changeRadarRange(rangeButton.dataset.radarRange);
+    if (heightButton && !heightButton.disabled) changeRadarHeight(heightButton.dataset.radarHeight);
+  });
+  mapContainer.append(root);
+  return root;
+}
+
+function syncRadarQuickControls(forceVisible = state.layers.radar) {
+  const root = ensureRadarQuickControls();
+  if (!root) return;
+  const visible = Boolean(forceVisible) && state.worker.capabilities.radarFrames;
+  root.classList.toggle('visible', visible);
+  root.setAttribute('aria-hidden', visible ? 'false' : 'true');
+
+  root.querySelectorAll('[data-radar-range]').forEach(button => {
+    const active = Number(button.dataset.radarRange) === state.radar.range;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.disabled = radarBusy;
+  });
+
+  const available = availableRadarHeights(state.radar.range);
+  root.querySelectorAll('[data-radar-height]').forEach(button => {
+    const height = Number(button.dataset.radarHeight);
+    const active = height === state.radar.height;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    button.disabled = radarBusy || radarMode === 'test' || !available.includes(height);
+  });
+}
+
+function bindRadarSliderCommit() {
+  const slider = document.getElementById('radar-slider');
+  if (!slider || slider.dataset.radarV2Bound === '1') return;
+  slider.dataset.radarV2Bound = '1';
+
+  slider.addEventListener('pointerdown', () => {
+    sliderScrubbing = true;
+    stopPlayback();
+  });
+  slider.addEventListener('pointerup', () => { sliderScrubbing = false; });
+  slider.addEventListener('pointercancel', () => {
+    sliderScrubbing = false;
+    clearRadarPreview({ restore:true });
+  });
+  slider.addEventListener('input', event => {
+    if (!sliderScrubbing) return;
+    event.stopImmediatePropagation();
+    previewRadarIndex(event.currentTarget.value);
+  }, { capture:true });
+  slider.addEventListener('change', event => {
+    if (sliderPreviewIndex === null) return;
+    event.stopImmediatePropagation();
+    sliderScrubbing = false;
+    void setRadarIndex(event.currentTarget.value);
+  }, { capture:true });
+}
+
 function ensureRadarUi() {
   if (controlsReady) return;
   controlsReady = true;
   ensureRadarStyles();
+  ensureRadarQuickControls();
   document.title = `香港定點雨量預報 v${APP_VERSION}`;
 
   const timeline = document.getElementById('radar-timeline');
@@ -566,9 +722,10 @@ function ensureRadarUi() {
       latest.className = 'radar-timeline-btn radar-latest-button';
       latest.type = 'button';
       latest.textContent = '最新';
-      latest.addEventListener('click', jumpToLatest);
+      latest.addEventListener('click', () => void jumpToLatest());
       control.append(latest);
     }
+    bindRadarSliderCommit();
   }
 
   const note = document.getElementById('radar-status-note');
@@ -594,6 +751,12 @@ function ensureRadarUi() {
     speedSelect.value = String(playbackDelay);
     speedSelect.addEventListener('change', event => setPlaybackSpeed(event.target.value));
   }
+
+  window.addEventListener('rain:map-mode-change', event => {
+    const visible = event.detail?.mode === 'radar';
+    syncRadarQuickControls(visible);
+    if (!visible) clearRadarPreview();
+  });
 }
 
 function ensureRadarStyles() {
@@ -601,8 +764,9 @@ function ensureRadarStyles() {
   const style = document.createElement('style');
   style.id = 'radar-runtime-style';
   style.textContent = `
-    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-age-label{margin-left:auto;color:#9a9a9a;font-size:.66rem;white-space:nowrap}.radar-frame-counter{color:#818181;font-size:.68rem}.radar-legend{display:flex;align-items:center;gap:6px;margin:7px 0 4px;color:#909090;font-size:.62rem}.radar-legend.hidden{display:none}.radar-legend-title{color:#bdbdbd;margin-right:2px}.radar-legend-scale{width:86px;height:5px;border-radius:2px;background:linear-gradient(90deg,#00b9df 0%,#00c96b 35%,#d6d600 60%,#f28b20 78%,#d73545 100%)}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.rain-radar-overlay{image-rendering:auto}
-    @media(max-width:700px){.radar-timeline{bottom:calc(96px + var(--safe-bottom))}.radar-timeline-btn{height:34px}.radar-head-left{gap:5px}.radar-mode-chip{font-size:.62rem}.radar-age-label{font-size:.6rem}.radar-legend{gap:5px;margin-top:6px}.radar-legend-scale{width:68px}.timeline-head{align-items:center}.timeline-control{gap:6px}}
+    .radar-head-left{display:inline-flex;align-items:center;gap:7px;min-width:0}.radar-mode-chip{padding:2px 5px;border:1px solid #3d5664;color:#9bdcff;font-size:.66rem;line-height:1.2}.radar-mode-chip.test{border-color:#8b6b20;color:#ffd06a}.radar-age-label{margin-left:auto;color:#9a9a9a;font-size:.66rem;white-space:nowrap}.radar-frame-counter{color:#818181;font-size:.68rem}.radar-legend{display:flex;align-items:center;gap:6px;margin:7px 0 4px;color:#909090;font-size:.62rem}.radar-legend.hidden{display:none}.radar-legend-title{color:#bdbdbd;margin-right:2px}.radar-legend-scale{width:86px;height:5px;border-radius:2px;background:linear-gradient(90deg,#00b9df 0%,#00c96b 35%,#d6d600 60%,#f28b20 78%,#d73545 100%)}.radar-timeline-btn{flex:none;height:32px;min-width:36px;padding:0 8px;border:1px solid #4a4a4a;background:#0b0b0b;color:#ddd}.radar-latest-button{min-width:48px}.radar-timeline-btn:disabled{opacity:.4}.radar-timeline.frame-loading::after{content:'載入中';position:absolute;right:10px;top:-24px;padding:3px 6px;border:1px solid #3d3d3d;background:rgba(0,0,0,.88);color:#9ccce8;font-size:.68rem}.radar-timeline.is-loading{opacity:.82}.radar-timeline.is-preview #radar-timeline-time{color:#8fd9ff}.rain-radar-overlay{image-rendering:auto}
+    .radar-quick-controls{position:absolute;z-index:1200;top:12px;right:12px;display:none;align-items:center;gap:4px;padding:5px;border:1px solid #3f464a;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px)}.radar-quick-controls.visible{display:flex}.radar-quick-controls button{min-height:34px;padding:0 9px;border:1px solid #3f464a;background:#090b0c;color:#c8d0d4;font-size:.68rem;white-space:nowrap}.radar-quick-controls button.active{border-color:#277ca6;background:#08202c;color:#f4fbff;box-shadow:inset 0 -2px 0 #22a7e0}.radar-quick-controls button:disabled{opacity:.38}.radar-quick-label{padding:0 3px;color:#7f8a90;font-size:.6rem}.radar-quick-divider{width:1px;height:22px;margin:0 2px;background:#30383c}
+    @media(max-width:700px){.radar-timeline{left:8px!important;right:8px!important;bottom:calc(8px + var(--safe-bottom))!important;width:auto!important}.radar-timeline-btn{height:34px}.radar-head-left{gap:5px}.radar-mode-chip{font-size:.62rem}.radar-age-label{font-size:.6rem}.radar-legend{gap:5px;margin-top:6px}.radar-legend-scale{width:68px}.timeline-head{align-items:center}.timeline-control{gap:6px}.radar-quick-controls{top:8px;right:8px;max-width:calc(100% - 96px);overflow-x:auto;scrollbar-width:none;padding:3px;gap:3px}.radar-quick-controls::-webkit-scrollbar{display:none}.radar-quick-label{display:none}.radar-quick-controls button{min-height:31px;padding:0 7px;font-size:.64rem}.radar-quick-divider{height:19px}}
   `;
   document.head.append(style);
 }
