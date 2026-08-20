@@ -6,6 +6,10 @@ const MOVE_KM = 15;
 const STEADY_KM = 10;
 const REGIONAL_SHARE_DELTA = 0.08;
 const REGIONAL_ACTIVE_SHARE = 0.12;
+const REGIONAL_TREND_MIN_POINTS = 4;
+const REGIONAL_TREND_MAX_INDEX_GAP = 2;
+const REGIONAL_TREND_CONSISTENCY = 0.7;
+const REGIONAL_TREND_NOISE = 0.02;
 
 function finite(value, fallback = 0) {
   const number = Number(value);
@@ -60,11 +64,13 @@ function groupSummary(frames) {
           label:zone.label,
           parent:zone.parent,
           wetShare:0,
-          score:0
+          score:0,
+          contributionShare:0
         };
       }
       productAggregate[zone.key].wetShare += Math.max(0, finite(zone.wetShare));
       productAggregate[zone.key].score += Math.max(0, finite(zone.score));
+      productAggregate[zone.key].contributionShare += Math.max(0, finite(zone.contributionShare));
     });
 
     const lat = Number(summary?.centroid?.lat);
@@ -85,9 +91,11 @@ function groupSummary(frames) {
   const productZones = Object.fromEntries(Object.entries(productAggregate).map(([key, zone]) => [key, {
     ...zone,
     wetShare:zone.wetShare / count,
-    score:zone.score / count
+    score:zone.score / count,
+    contributionShare:zone.contributionShare / count
   }]));
-  const dominantProduct = Object.values(productZones).sort((a, b) => b.score - a.score)[0] || null;
+  const dominantProduct = Object.values(productZones)
+    .sort((a, b) => b.contributionShare - a.contributionShare || b.score - a.score)[0] || null;
 
   return {
     activity:activity / count,
@@ -100,7 +108,29 @@ function groupSummary(frames) {
   };
 }
 
-function regionalDevelopment(early, late) {
+function trendIsContinuous(frames, key, direction) {
+  const series = frames
+    .map(frame => ({
+      index:finite(frame?.index, NaN),
+      value:finite(frame?.spatialSummary?.productZones?.[key]?.wetShare, NaN)
+    }))
+    .filter(point => Number.isFinite(point.index) && Number.isFinite(point.value));
+  if (series.length < REGIONAL_TREND_MIN_POINTS) return false;
+
+  let consistent = 0;
+  let pairs = 0;
+  for (let i = 1; i < series.length; i += 1) {
+    const previous = series[i - 1];
+    const current = series[i];
+    if (current.index - previous.index > REGIONAL_TREND_MAX_INDEX_GAP) return false;
+    const delta = current.value - previous.value;
+    pairs += 1;
+    if (direction === 'increasing' ? delta >= -REGIONAL_TREND_NOISE : delta <= REGIONAL_TREND_NOISE) consistent += 1;
+  }
+  return pairs > 0 && consistent / pairs >= REGIONAL_TREND_CONSISTENCY;
+}
+
+function regionalDevelopment(frames, early, late) {
   const keys = new Set([...Object.keys(early?.productZones || {}), ...Object.keys(late?.productZones || {})]);
   const candidates = [...keys].map(key => {
     const earlyZone = early?.productZones?.[key];
@@ -124,10 +154,13 @@ function regionalDevelopment(early, late) {
   const strongest = candidates[0];
   if (!strongest) return null;
   const increasing = strongest.delta > 0;
+  const direction = increasing ? 'increasing' : 'decreasing';
+  const continuous = trendIsContinuous(frames, strongest.key, direction);
   return {
     ...strongest,
-    direction:increasing ? 'increasing' : 'decreasing',
-    text:`${strongest.label}雨區逐步${increasing ? '增多' : '減少'}`
+    direction,
+    continuous,
+    text:`${strongest.label}雨區${continuous ? '逐步' : '較早段'}${increasing ? '增多' : '減少'}`
   };
 }
 
@@ -200,7 +233,7 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
   const activityRatio = early.activity > 0 ? late.activity / early.activity : (late.activity > 0 ? Infinity : 1);
   const wetCellRatio = early.wetCells > 0 ? late.wetCells / early.wetCells : (late.wetCells > 0 ? Infinity : 1);
   const hkShareDelta = late.hkShare - early.hkShare;
-  const development = regionalDevelopment(early, late);
+  const development = regionalDevelopment(frames, early, late);
 
   if (early.activity > 0 && activityRatio <= 0.55 && wetCellRatio <= 0.7) {
     const specific = development?.direction === 'decreasing' ? development.text : null;
