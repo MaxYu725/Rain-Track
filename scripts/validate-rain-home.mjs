@@ -29,12 +29,10 @@ assert.match(home, /FRAME_COUNT\s*=\s*16/);
 assert.match(home, /RAIN_HOME_CADENCE_MINUTES/);
 assert.match(home, /Number\(data\.accumulationMinutes\) !== 30/);
 assert.match(home, /expectedRainHomeLeadMinutes/);
-assert.match(home, /每 6 分鐘一點/);
 assert.match(home, /每點為 30 分鐘累積雨量/);
 assert.match(home, /rainfallScaleMax/);
 assert.match(home, /rainfallTickStep/);
 assert.match(home, /rainfallTickValues/);
-assert.match(home, /rain-home-verdict-kicker/);
 assert.match(home, /rain-home-timing/);
 assert.match(home, /rain-home-chart-summary/);
 assert.match(home, /rain-home-unavailable-zone/);
@@ -45,9 +43,23 @@ assert.match(home, /guide\.classList\.add\('is-active'\)/);
 assert.match(home, /title = Number\(first\.frameIndex\) === 0 \? '30 分鐘內可能有雨' : '稍後可能有雨'/);
 assert.match(home, /endRatio <= 0\.7/);
 assert.match(home, /峰值後逐步減弱/);
+
+// Fourth-pass product-language invariants.
+assert.ok(!home.includes('<div class="rain-home-verdict-kicker">未來 2 小時</div>'), 'normal Rain Home summary must not repeat the two-hour horizon kicker');
+assert.ok(!home.includes('每 6 分鐘一點 · 每點為 30 分鐘累積雨量'), 'chart header must avoid repeating cadence details already encoded by the axis');
+assert.match(home, /const terminalPeak = data\.complete && Number\(peak\.frameIndex\) === FRAME_COUNT - 1/);
+assert.match(home, /預報結束時仍呈上升/);
+assert.match(home, /截至 \$\{peakClock\}，30 分鐘累積預測雨量升至約 \$\{peakRain\} mm/);
+assert.match(home, /`至 \$\{peakClock\} 升至 \$\{peakRain\} mm \/ 30 min`/);
+assert.match(home, /chartMarkup\(data\.points, data\.runTime, \{ seriesComplete:data\.complete \}\)/);
+assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete series must use a concise chart interaction hint');
+assert.ok(home.includes('部分時間資料暫缺，圖表會以空白表示'), 'partial series must explain gaps in user language');
+assert.ok(!home.includes('缺失 frame 不會以直線跨接'), 'implementation terminology must not be visible in the chart help');
+assert.ok(!home.includes('rain-home-chart-caption'), 'normal chart must not repeat accumulation semantics in a second caption row');
 assert.ok(!home.includes('開始出現訊號'), 'headline must use human weather language instead of signal-analysis language');
 assert.ok(!home.includes('香港有效時間優先'), 'internal presentation principles must not be user-facing copy');
 assert.ok(!home.includes('rain-home-peak-label'), 'peak text annotation must stay outside the plotted curve');
+
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
 assert.ok(!home.includes('loadSeriesViaFrames'), 'Rain Home must not reconstruct a series through 16 /point requests');
@@ -90,4 +102,4 @@ assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 
-console.log('Rain Home zero-base one-request architecture + human presentation validation passed');
+console.log('Rain Home zero-base one-request architecture + fourth-pass product language validation passed');
