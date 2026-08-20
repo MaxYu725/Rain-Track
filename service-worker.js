@@ -1,10 +1,11 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa32';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa33';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
 
-// Full local dependency inventory. CI validates that every local entry/import
-// remains represented here, but only CORE_SHELL is required for installation.
+// Full local dependency inventory for CI and offline diagnostics. pwa33 does
+// not prefetch this list during install: the live page gets network priority,
+// and successfully used same-origin assets are cached progressively.
 const APP_SHELL = [
   './',
   './index.html',
@@ -49,44 +50,10 @@ const APP_SHELL = [
   './icons/icon-maskable-512.png'
 ];
 
-// Only assets required to paint and start Rain Home are installation-critical.
-// Forecast Map, Radar and settings stay in APP_SHELL but never gate Home boot.
-const CORE_SHELL = [
-  './',
-  './index.html',
-  './css/app.css',
-  './css/settings-phase1a.css',
-  './css/rain-home-first-paint.css',
-  './js/boot-watchdog.js',
-  './js/rain-home.js',
-  './js/rain-home-time.js',
-  './js/rain-home-shell.js',
-  './js/rain-map-mode.js',
-  './js/api.js',
-  './js/config.js',
-  './js/state.js',
-  './js/utils.js',
-  './manifest.webmanifest',
-  './offline.html',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-maskable-512.png'
-];
-
 self.addEventListener('install', event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(APP_CACHE);
-
-    for (const path of CORE_SHELL) {
-      const url = new URL(path, self.location.href).href;
-      const request = new Request(url, { cache:'reload' });
-      const response = await fetch(request);
-      if (!response?.ok) throw new Error(`Unable to precache core shell ${path}`);
-      await cache.put(new Request(url), response.clone());
-    }
-
-    await self.skipWaiting();
-  })());
+  // Do not compete with the foreground Rain Home for GitHub Pages requests.
+  // The shell is cached progressively only after the browser actually uses it.
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', event => {
@@ -112,7 +79,7 @@ self.addEventListener('fetch', event => {
   if (url.hostname.endsWith('workers.dev') || url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(navigationFromCurrentShell(request));
+    event.respondWith(navigationNetworkFirst(request));
     return;
   }
 
@@ -122,7 +89,7 @@ self.addEventListener('fetch', event => {
   }
 
   if (url.origin === self.location.origin) {
-    event.respondWith(currentShellAsset(request));
+    event.respondWith(shellAssetNetworkFirst(request));
     return;
   }
 
@@ -131,25 +98,24 @@ self.addEventListener('fetch', event => {
   }
 });
 
-async function navigationFromCurrentShell(request) {
+async function navigationNetworkFirst(request) {
   const cache = await caches.open(APP_CACHE);
-  const indexUrl = new URL('./index.html', self.location.href).href;
-  const cached = await cache.match(indexUrl);
-  if (cached) return cached;
-
   try {
     const response = await fetch(request, { cache:'no-store' });
-    if (response?.ok) return response;
+    if (response?.ok) {
+      const indexUrl = new URL('./index.html', self.location.href).href;
+      cache.put(new Request(indexUrl), response.clone()).catch(() => {});
+      return response;
+    }
   } catch {}
 
-  return (await cache.match(new URL('./offline.html', self.location.href).href)) || Response.error();
+  return (await cache.match(new URL('./index.html', self.location.href).href)) ||
+    (await cache.match(new URL('./offline.html', self.location.href).href)) ||
+    Response.error();
 }
 
-async function currentShellAsset(request) {
+async function shellAssetNetworkFirst(request) {
   const cache = await caches.open(APP_CACHE);
-  const cached = await cache.match(request, { ignoreSearch:true });
-  if (cached) return cached;
-
   try {
     const response = await fetch(request, { cache:'no-store' });
     if (response?.ok) {
@@ -158,7 +124,7 @@ async function currentShellAsset(request) {
     }
   } catch {}
 
-  return Response.error();
+  return (await cache.match(request, { ignoreSearch:true })) || Response.error();
 }
 
 async function staleWhileRevalidate(request) {
@@ -191,5 +157,5 @@ async function trimCache(name, maxEntries) {
   const cache = await caches.open(name);
   const keys = await cache.keys();
   if (keys.length <= maxEntries) return;
-  await Promise.all(keys.slice(0, keys.length - maxEntries).map(key => caches.delete(key)));
+  await Promise.all(keys.slice(0, keys.length - maxEntries).map(key => cache.delete(key)));
 }
