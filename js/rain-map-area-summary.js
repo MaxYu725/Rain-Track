@@ -89,6 +89,9 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   panel.setAttribute('aria-hidden', visible ? 'false' : 'true');
   if (!visible) return;
 
+  // Regional context preserves the v2.1 fallbacks:
+  // summary.regionalLabel || summary.label
+  // summary.regionalDetail || summary.detail
   const scoped = summarizeForecastRainContext(summary, {
     scope:analysisScope,
     selected:state.selected
