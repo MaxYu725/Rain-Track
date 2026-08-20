@@ -20,8 +20,8 @@ function ensureStyles() {
     .rain-map-area-label{display:block;margin-top:4px;color:#f1f8fb;font-size:1rem;font-weight:680;line-height:1.35}
     .rain-map-area-detail{display:block;margin-top:5px;color:#91a0a7;font-size:.67rem;line-height:1.45;font-variant-numeric:tabular-nums}
     @media(max-width:700px){
-      .rain-map-area-summary{top:58px;left:10px;width:min(330px,calc(100% - 20px));padding:9px 11px}
-      .rain-map-area-kicker{font-size:.65rem}.rain-map-area-label{font-size:.92rem}.rain-map-area-detail{font-size:.64rem}
+      .rain-map-area-summary{top:50px;left:8px;width:min(330px,calc(100% - 16px));padding:7px 9px}
+      .rain-map-area-kicker{font-size:.61rem}.rain-map-area-label{margin-top:2px;font-size:.86rem;line-height:1.3}.rain-map-area-detail{margin-top:3px;font-size:.61rem;line-height:1.35}
     }
   `;
   document.head.append(style);
