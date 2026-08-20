@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { summarizeForecastRainArea } from '../js/forecast-map-spatial.js';
+import { RAIN_AREA_PRODUCT_ZONES, summarizeForecastRainArea } from '../js/forecast-map-spatial.js';
 
 const latitudes = [22.75, 22.65, 22.55, 22.45, 22.30, 21.80];
 const longitudes = [113.9, 114.1, 114.3, 114.5];
 const grid = { latitudes, longitudes };
 const cellCount = latitudes.length * longitudes.length;
 
-function frameWith(wetIndexes = [], amount = 1) {
-  const values = Array(cellCount).fill(0);
+function frameWith(wetIndexes = [], amount = 1, count = cellCount) {
+  const values = Array(count).fill(0);
   wetIndexes.forEach(index => { values[index] = amount; });
   return { values };
 }
@@ -37,6 +37,39 @@ assert.equal(sea.status, 'south-sea');
 assert.equal(sea.zones.southSea.wetShare, 1);
 assert.match(sea.detail, /香港 0% · 深圳 0% · 南面海域 100%/);
 
+const productZones = Object.values(RAIN_AREA_PRODUCT_ZONES);
+assert.equal(productZones.length, 13, 'regional model must expose 13 product zones');
+assert.equal(productZones.filter(zone => zone.parent === 'hongKong').length, 7, 'Hong Kong must have seven product zones');
+assert.equal(productZones.filter(zone => zone.parent === 'shenzhen').length, 3, 'Shenzhen must have three product zones');
+assert.equal(productZones.filter(zone => zone.parent === 'southSea').length, 3, 'south sea must have three product zones');
+
+const regionalGrid = {
+  latitudes:[22.75,22.53,22.40,22.32,22.25,21.80],
+  longitudes:[113.5,113.9,114.18,114.38,114.70]
+};
+const regionalCount = regionalGrid.latitudes.length * regionalGrid.longitudes.length;
+const regionalWetIndexes = [
+  1,2,3,      // Shenzhen west / central / east
+  6,7,8,      // NT west / north / Sai Kung-east
+  11,12,13,   // NT west / east / Sai Kung-east
+  17,          // Kowloon
+  21,22,23,   // Lantau / HK Island / Sai Kung-east
+  25,27,29    // SW sea / south sea / SE sea
+];
+const regional = summarizeForecastRainArea(frameWith(regionalWetIndexes, 1, regionalCount), regionalGrid);
+for (const key of ['szWest','szCentral','szEast','hkNtWest','hkNtNorth','hkNtEast','hkSaiKungEast','hkKowloon','hkLantauIslands','hkIsland','seaWest','seaSouth','seaEast']) {
+  assert.ok(regional.productZones[key].wetCellCount >= 1, `regional product zone not classified: ${key}`);
+}
+assert.ok(regional.regionalLabel, 'regional label must be available');
+assert.ok(regional.regionalDetail, 'regional detail must be available');
+
+const eastSeaValues = Array(regionalCount).fill(0);
+[24,29].forEach(index => { eastSeaValues[index] = 1.2; });
+const eastSea = summarizeForecastRainArea({ values:eastSeaValues }, regionalGrid);
+assert.equal(eastSea.productZones.seaEast.wetCellCount, 2);
+assert.match(eastSea.regionalLabel, /東南海域/);
+assert.match(eastSea.regionalDetail, /東南海域/);
+
 assert.equal(summarizeForecastRainArea({ values:[1] }, grid), null, 'incomplete grids must fail closed');
 
 const runtime = readFileSync(new URL('../js/forecast-map-runtime.js', import.meta.url), 'utf8');
@@ -53,8 +86,8 @@ for (const marker of [
 for (const marker of [
   'data-rain-area-time',
   'selectedTimeText(snapshot)',
-  'summary.label',
-  'detail.textContent = summary.detail',
+  'summary.regionalLabel || summary.label',
+  'summary.regionalDetail || summary.detail',
   'panel.dataset.rainAreaStatus',
   "activeMode === 'forecast'",
   "rain:forecast-map-frame-change",
@@ -77,6 +110,6 @@ assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI mi
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 41, `Forecast Map disclosure polish requires PWA generation at least pwa41, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 44, `Forecast Map regional v2 requires PWA generation at least pwa44, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area compact summary + explicit disclosure validation passed');
+console.log('Forecast rain-area regional v2 summary validation passed');
