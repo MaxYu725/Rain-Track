@@ -22,7 +22,14 @@ assert.equal(rainHomeLeadRatio(120), 1);
 const run = Date.parse('2026-08-19T14:00:00.000Z');
 const points = Array.from({ length:16 }, (_, frameIndex) => {
   const leadMinutes = expectedRainHomeLeadMinutes(frameIndex);
-  return { frameIndex, leadMinutes, validTime:new Date(run + leadMinutes * 60_000).toISOString(), amountMm:frameIndex === 3 ? 0.2 : 0 };
+  return {
+    frameIndex,
+    leadMinutes,
+    validTime:new Date(run + leadMinutes * 60_000).toISOString(),
+    windowStart:new Date(run + (leadMinutes - 30) * 60_000).toISOString(),
+    windowEnd:new Date(run + leadMinutes * 60_000).toISOString(),
+    amountMm:frameIndex === 3 ? 0.2 : 0
+  };
 });
 const transition = findFirstWetSignalTransition(points);
 assert.equal(transition.index, 3);
@@ -30,7 +37,7 @@ assert.equal(transition.previous.frameIndex, 2);
 assert.equal(transition.first.frameIndex, 3);
 assert.equal(transition.transitionStartValidTime, '2026-08-19T14:42:00.000Z');
 assert.equal(transition.transitionEndValidTime, '2026-08-19T14:48:00.000Z');
-assert.equal((Date.parse(transition.transitionEndValidTime) - Date.parse(transition.transitionStartValidTime)) / 60_000, 6, 'onset wording must use adjacent valid times');
+assert.equal((Date.parse(transition.transitionEndValidTime) - Date.parse(transition.transitionStartValidTime)) / 60_000, 6, 'onset wording must use adjacent valid times when a dry predecessor exists');
 
 const firstWet = findFirstWetSignalTransition(points.map((point, index) => ({ ...point, amountMm:index === 0 ? 0.2 : 0 })));
 assert.equal(firstWet.index, 0);
@@ -50,11 +57,15 @@ assert.ok(home.includes('rain-home-unavailable-zone'));
 assert.ok(home.includes('`預報由 ${firstAvailableClock} 開始`'));
 assert.ok(home.includes('const axisPoint = points.find(point => Number(point.leadMinutes) === lead)'));
 assert.ok(home.includes('axisPoint?.validTime || validTimeForLead(runTime, lead)'), 'missing major tick frames must still derive the true valid clock from runTime');
-assert.ok(home.includes('formatClock(firstWet.transitionStartValidTime)'));
-assert.ok(home.includes('formatClock(firstWet.transitionEndValidTime)'));
-assert.ok(home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'frame-zero onset must describe the future valid time naturally');
-assert.ok(home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial onset must describe the earliest available valid time naturally');
-assert.ok(!home.includes('首個預報時間 ${formatClock(first.validTime)} 已有雨勢'), 'future onset must not be worded as current rain');
+assert.ok(home.includes('const nowMs = Date.now()'), 'Rain Home summary must compare the forecast run with the actual current clock');
+assert.ok(home.includes('const relevantPoints = firstFutureIndex >= 0 ? points.slice(firstFutureIndex) : []'), 'summary must ignore forecast points whose valid times are already in the past');
+assert.ok(home.includes("title:'等待下一輪預報'"), 'expired runs must not be presented as a current two-hour forecast');
+assert.ok(home.includes("title = nowInsideFirstWindow ? '目前預報窗有雨訊號' : '短時預報有雨訊號'"), 'first +30 wet sample must describe its accumulation window instead of inventing an onset at the window end');
+assert.ok(home.includes('`${formatClock(firstWindowStart)}–${formatClock(firstWindowEnd)} 預報窗有雨`'), 'frame-zero wet copy must show the actual 30-minute forecast window');
+assert.ok(home.includes("title = '目前預報仍有雨訊號'"), 'a wet sample before and after now must be described as continuing forecast signal');
+assert.ok(home.includes('`約 ${formatClock(previous.validTime)}–${formatClock(first.validTime)} 開始`'), 'later onset wording must still use adjacent six-minute valid times');
+assert.ok(!home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'the +30 accumulation-window end must never be presented as the earliest rain start');
+assert.ok(!home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'missing predecessors must not invent an onset time');
 assert.ok(home.includes('Number(point.leadMinutes) !== expectedLead'));
 assert.ok(home.includes('const adjacent = previous && Number(previous.frameIndex) === Number(first.frameIndex) - 1'), 'partial data must only use a bracket for adjacent six-minute frames');
 assert.ok(home.includes('contiguousSegments(points)'), 'partial chart must split around missing frames');
@@ -66,7 +77,6 @@ assert.ok(home.includes('if (yMax <= 0.5) return 0.1'), '0.5 mm scale must use h
 assert.ok(home.includes('rainfallTickValues(yMax, yStep)'), 'chart must derive nice tick values from the chosen scale');
 assert.ok(home.includes('chartMarkup(data.points, data.runTime, { seriesComplete:data.complete })'), 'chart wording must know whether the full horizon is available');
 assert.ok(!home.includes('index / Math.max(1, points.length - 1)'), 'chart must not space samples by array index');
-assert.ok(!home.includes('firstWindowStart'), 'onset wording must not reuse the 30-minute rolling accumulation window');
 
 // Mobile chart readability invariants.
 assert.ok(home.includes('const height = 300'), 'Rain Home chart must use the taller fifth-pass geometry');
@@ -78,6 +88,6 @@ assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'mobile c
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 38);
+assert.ok(Number(shellVersion[1]) >= 49);
 
-console.log('Rain Home true time-axis + final onset wording gate PASS');
+console.log('Rain Home current-aware time-axis + accumulation-window onset gate PASS');
