@@ -16,6 +16,10 @@ function finite(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, finite(value)));
+}
+
 function totalWetMm(summary) {
   if (Number.isFinite(Number(summary?.totalWetMm))) return Number(summary.totalWetMm);
   return Object.values(summary?.zones || {}).reduce((sum, zone) => sum + finite(zone?.sumMm), 0);
@@ -130,37 +134,64 @@ function trendIsContinuous(frames, key, direction) {
   return pairs > 0 && consistent / pairs >= REGIONAL_TREND_CONSISTENCY;
 }
 
-function regionalDevelopment(frames, early, late) {
+function currentPrimaryProduct(summary, fallback) {
+  const ranked = Object.values(summary?.productZones || {})
+    .filter(zone => finite(zone?.wetCellCount) > 0 && finite(zone?.sumMm) > 0)
+    .sort((a, b) => finite(b.contributionShare) - finite(a.contributionShare) || finite(b.sumMm) - finite(a.sumMm));
+  return ranked[0] || fallback || null;
+}
+
+function regionalDevelopment(frames, early, late, currentSummary) {
   const keys = new Set([...Object.keys(early?.productZones || {}), ...Object.keys(late?.productZones || {})]);
   const candidates = [...keys].map(key => {
     const earlyZone = early?.productZones?.[key];
     const lateZone = late?.productZones?.[key];
     const earlyShare = finite(earlyZone?.wetShare);
     const lateShare = finite(lateZone?.wetShare);
+    const delta = lateShare - earlyShare;
+    const label = lateZone?.label || earlyZone?.label || key;
+    const parent = lateZone?.parent || earlyZone?.parent || null;
+    const direction = delta >= REGIONAL_SHARE_DELTA && lateShare >= REGIONAL_ACTIVE_SHARE
+      ? 'increasing'
+      : delta <= -REGIONAL_SHARE_DELTA && earlyShare >= REGIONAL_ACTIVE_SHARE
+        ? 'decreasing'
+        : null;
+    if (!direction) return null;
+    const continuous = trendIsContinuous(frames, key, direction);
+    const magnitude = Math.min(1, Math.abs(delta) / 0.30);
+    const confidence = clamp01(0.45 + magnitude * 0.35 + (continuous ? 0.20 : 0.08));
     return {
       key,
-      label:lateZone?.label || earlyZone?.label || key,
-      parent:lateZone?.parent || earlyZone?.parent || null,
+      label,
+      parent,
       earlyShare,
       lateShare,
-      delta:lateShare - earlyShare
+      delta,
+      direction,
+      continuous,
+      confidence,
+      text:`${label}雨區${continuous ? '逐步' : '較早段'}${direction === 'increasing' ? '增多' : '減少'}`
     };
-  }).filter(item => {
-    if (item.delta >= REGIONAL_SHARE_DELTA) return item.lateShare >= REGIONAL_ACTIVE_SHARE;
-    if (item.delta <= -REGIONAL_SHARE_DELTA) return item.earlyShare >= REGIONAL_ACTIVE_SHARE;
-    return false;
-  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
+  }).filter(Boolean);
 
-  const strongest = candidates[0];
-  if (!strongest) return null;
-  const increasing = strongest.delta > 0;
-  const direction = increasing ? 'increasing' : 'decreasing';
-  const continuous = trendIsContinuous(frames, strongest.key, direction);
+  const primaryProduct = currentPrimaryProduct(currentSummary, late?.dominantProduct);
+  candidates.forEach(candidate => {
+    const currentZone = currentSummary?.productZones?.[candidate.key];
+    const relevance = Math.max(clamp01(currentZone?.wetShare), clamp01(currentZone?.contributionShare));
+    candidate.score = candidate.confidence * (0.65 + relevance * 0.35);
+  });
+  candidates.sort((a, b) => b.score - a.score || Math.abs(b.delta) - Math.abs(a.delta));
+  const primaryDevelopment = primaryProduct ? candidates.find(candidate => candidate.key === primaryProduct.key) || null : null;
+  const selected = primaryDevelopment || candidates[0] || null;
+  if (!selected) return { primaryProduct, primaryDevelopment:null, selected:null };
+  const isPrimary = Boolean(primaryProduct && selected.key === primaryProduct.key);
+  const contextText = isPrimary || !primaryProduct
+    ? selected.text
+    : `${primaryProduct.label}目前較明顯，${selected.text}`;
   return {
-    ...strongest,
-    direction,
-    continuous,
-    text:`${strongest.label}雨區${continuous ? '逐步' : '較早段'}${increasing ? '增多' : '減少'}`
+    primaryProduct,
+    primaryDevelopment,
+    selected:{ ...selected, isPrimary, contextText }
   };
 }
 
@@ -187,8 +218,8 @@ function resultBase(frames, frameCount) {
   };
 }
 
-function withDevelopment(label, development) {
-  return development ? `${label}，${development.text}` : label;
+function withDevelopment(label, developmentText) {
+  return developmentText ? `${label}，${developmentText}` : label;
 }
 
 function sourceApproachLabel(early) {
@@ -200,7 +231,7 @@ function sourceApproachLabel(early) {
   return '雨區正向香港靠近';
 }
 
-export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {}) {
+export function summarizeForecastRainMotion(frameSummaries, { frameCount, currentSummary } = {}) {
   const frames = (Array.isArray(frameSummaries) ? frameSummaries : [])
     .filter(frame => frame?.loaded && frame?.spatialSummary)
     .sort((a, b) => finite(a.index) - finite(b.index));
@@ -208,7 +239,7 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
   const base = resultBase(frames, totalFrameCount);
 
   if (frames.length < MIN_MOTION_FRAMES) {
-    return { ...base, ready:false, status:'observing', label:'正在觀察雨區移動' };
+    return { ...base, ready:false, status:'observing', label:'正在觀察雨區移動', confidence:0 };
   }
 
   const activeFrames = frames.filter(frame => finite(frame?.spatialSummary?.totalWetCellCount) > 0);
@@ -221,22 +252,26 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
       displacementKm:0,
       distanceToHongKongChangeKm:0,
       activityRatio:0,
-      development:null
+      development:null,
+      confidence:0.8,
+      focus:'regional-total'
     };
   }
 
   const groupSize = Math.min(3, Math.max(1, Math.floor(frames.length / 3)));
   const early = groupSummary(frames.slice(0, groupSize));
   const late = groupSummary(frames.slice(-groupSize));
-  if (!early || !late) return { ...base, ready:false, status:'observing', label:'正在觀察雨區移動' };
+  if (!early || !late) return { ...base, ready:false, status:'observing', label:'正在觀察雨區移動', confidence:0 };
 
   const activityRatio = early.activity > 0 ? late.activity / early.activity : (late.activity > 0 ? Infinity : 1);
   const wetCellRatio = early.wetCells > 0 ? late.wetCells / early.wetCells : (late.wetCells > 0 ? Infinity : 1);
   const hkShareDelta = late.hkShare - early.hkShare;
-  const development = regionalDevelopment(frames, early, late);
+  const developmentState = regionalDevelopment(frames, early, late, currentSummary);
+  const primaryDevelopment = developmentState.primaryDevelopment;
+  const selectedDevelopment = developmentState.selected;
 
   if (early.activity > 0 && activityRatio <= 0.55 && wetCellRatio <= 0.7) {
-    const specific = development?.direction === 'decreasing' ? development.text : null;
+    const specific = primaryDevelopment?.direction === 'decreasing' ? primaryDevelopment.text : null;
     return {
       ...base,
       ready:true,
@@ -244,7 +279,9 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
       label:specific || (early.hkShare >= 0.08 ? '香港附近雨區逐步減弱' : '雨區整體逐步減弱'),
       activityRatio,
       wetCellRatio,
-      development
+      development:primaryDevelopment || selectedDevelopment,
+      confidence:0.85,
+      focus:primaryDevelopment ? 'primary-zone' : 'regional-total'
     };
   }
 
@@ -260,19 +297,22 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
     const distanceChange = Number.isFinite(earlyDistance) && Number.isFinite(lateDistance)
       ? earlyDistance - lateDistance
       : 0;
+    const primaryText = primaryDevelopment?.text || '';
 
     if (distanceChange >= APPROACH_KM) {
       return {
         ...base,
         ready:true,
         status:'approaching-hong-kong',
-        label:withDevelopment(sourceApproachLabel(early), development),
+        label:withDevelopment(sourceApproachLabel(early), primaryText),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
         hkShareDelta,
-        development
+        development:primaryDevelopment || selectedDevelopment,
+        confidence:0.9,
+        focus:primaryDevelopment ? 'primary-zone' : 'regional-motion'
       };
     }
 
@@ -281,13 +321,15 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
         ...base,
         ready:true,
         status:'moving-away',
-        label:withDevelopment('雨區逐步遠離香港', development),
+        label:withDevelopment('雨區逐步遠離香港', primaryText),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
         hkShareDelta,
-        development
+        development:primaryDevelopment || selectedDevelopment,
+        confidence:0.9,
+        focus:primaryDevelopment ? 'primary-zone' : 'regional-motion'
       };
     }
 
@@ -296,34 +338,39 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
         ...base,
         ready:true,
         status:'moving',
-        label:withDevelopment(`雨區主要向${directionLabel(dxKm, dyKm)}移動`, development),
+        label:withDevelopment(`雨區主要向${directionLabel(dxKm, dyKm)}移動`, primaryText),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
         hkShareDelta,
-        development
+        development:primaryDevelopment || selectedDevelopment,
+        confidence:0.82,
+        focus:primaryDevelopment ? 'primary-zone' : 'regional-motion'
       };
     }
 
     if (displacementKm <= STEADY_KM && activityRatio >= 0.6 && activityRatio <= 1.6) {
+      const developmentText = selectedDevelopment?.contextText || '';
       return {
         ...base,
         ready:true,
         status:'steady',
-        label:withDevelopment('雨區位置變化不大', development),
+        label:withDevelopment('雨區位置變化不大', developmentText),
         displacementKm,
         distanceToHongKongChangeKm:distanceChange,
         activityRatio,
         wetCellRatio,
         hkShareDelta,
-        development
+        development:selectedDevelopment,
+        confidence:selectedDevelopment?.confidence || 0.7,
+        focus:selectedDevelopment?.isPrimary ? 'primary-zone' : selectedDevelopment ? 'secondary-zone' : 'regional-total'
       };
     }
   }
 
   if ((early.activity <= 0 && late.activity > 0) || (Number.isFinite(activityRatio) && activityRatio >= 1.7 && wetCellRatio >= 1.3)) {
-    const specific = development?.direction === 'increasing' ? development.text : null;
+    const specific = primaryDevelopment?.direction === 'increasing' ? primaryDevelopment.text : null;
     return {
       ...base,
       ready:true,
@@ -332,7 +379,9 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
       activityRatio,
       wetCellRatio,
       hkShareDelta,
-      development
+      development:primaryDevelopment || selectedDevelopment,
+      confidence:0.85,
+      focus:primaryDevelopment ? 'primary-zone' : 'regional-total'
     };
   }
 
@@ -340,10 +389,12 @@ export function summarizeForecastRainMotion(frameSummaries, { frameCount } = {})
     ...base,
     ready:true,
     status:'variable',
-    label:withDevelopment('雨區位置有變化，移動方向未明顯', development),
+    label:withDevelopment('雨區位置有變化，移動方向未明顯', primaryDevelopment?.text || ''),
     activityRatio,
     wetCellRatio,
     hkShareDelta,
-    development
+    development:primaryDevelopment || selectedDevelopment,
+    confidence:primaryDevelopment?.confidence || 0.55,
+    focus:primaryDevelopment ? 'primary-zone' : 'regional-total'
   };
 }
