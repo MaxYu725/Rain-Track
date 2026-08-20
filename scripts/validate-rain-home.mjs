@@ -43,12 +43,20 @@ assert.match(time, /RAIN_HOME_HORIZON_MINUTES\s*=\s*120/);
 for (const marker of [
   "localStorage.removeItem('hkRainSheetMode')",
   "localStorage.removeItem('hkRainSheetUserMode')",
-  "document.getElementById('sheet-handle')?.remove()",
-  "document.getElementById('forecast-toggle')?.remove()",
-  "panel.removeAttribute('data-sheet')",
-  "document.body.classList.remove('sheet-peek-active', 'sheet-expanded-active')",
+  'panelHasLegacySheetState',
+  'bodyHasLegacySheetState',
+  'new MutationObserver(restorePanelIfNeeded)',
+  'new MutationObserver(restoreBodyIfNeeded)',
   "attributeFilter:['class', 'style', 'data-sheet']"
 ]) assert.ok(shell.includes(marker), `Rain Home shell cleanup marker missing: ${marker}`);
+
+assert.ok(!shell.includes('new MutationObserver(stripLegacySheetState)'), 'an observer must never call the mutating cleanup function unconditionally');
+const stripShell = shell.match(/function stripLegacySheetState\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+assert.ok(stripShell, 'stripLegacySheetState body missing');
+assert.ok(stripShell.includes('if (panel && panelHasLegacySheetState(panel))'), 'panel mutations must be guarded by actual legacy state');
+assert.ok(stripShell.includes("if (panel.hasAttribute('data-sheet')) panel.removeAttribute('data-sheet')"), 'data-sheet removal must be conditional');
+assert.ok(stripShell.includes("if (panel.style.getPropertyValue('height')) panel.style.removeProperty('height')"), 'style removal must be conditional');
+assert.ok(stripShell.includes('if (bodyHasLegacySheetState())'), 'body class cleanup must be conditional');
 
 assert.match(smoke, /import '\.\/rain-home\.js';/);
 assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
