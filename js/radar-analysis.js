@@ -25,12 +25,6 @@ const HK_POLYGONS = Object.freeze([
   [[114.28,22.22],[114.28,22.48],[114.40,22.50],[114.50,22.42],[114.50,22.24],[114.40,22.20]]
 ]);
 
-const REGIONAL_BOUNDS = Object.freeze({ north:23.05, south:21.45, east:115.20, west:113.35 });
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function round(value, digits = 3) {
   const factor = 10 ** digits;
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
@@ -74,10 +68,6 @@ function isHongKong(lat, lon) {
   return HK_POLYGONS.some(polygon => pointInPolygon(lat, lon, polygon));
 }
 
-function insideBounds(lat, lon, bounds) {
-  return lat >= bounds.south && lat <= bounds.north && lon >= bounds.west && lon <= bounds.east;
-}
-
 function blankAccumulator() {
   return {
     sampleCount:0,
@@ -86,13 +76,11 @@ function blankAccumulator() {
     maxStrength:0,
     weightedLat:0,
     weightedLon:0,
-    weightSum:0,
-    weightedDistanceToLocation:0,
-    distanceWeight:0
+    weightSum:0
   };
 }
 
-function addSample(stats, { echo, strength, lat, lon, distanceToLocationKm = null }) {
+function addSample(stats, { echo, strength, lat, lon }) {
   stats.sampleCount += 1;
   if (!echo) return;
   stats.echoCount += 1;
@@ -102,10 +90,6 @@ function addSample(stats, { echo, strength, lat, lon, distanceToLocationKm = nul
   stats.weightedLat += lat * weight;
   stats.weightedLon += lon * weight;
   stats.weightSum += weight;
-  if (Number.isFinite(distanceToLocationKm)) {
-    stats.weightedDistanceToLocation += distanceToLocationKm * weight;
-    stats.distanceWeight += weight;
-  }
 }
 
 function finalizeStats(stats) {
@@ -119,10 +103,7 @@ function finalizeStats(stats) {
     centroid:stats.weightSum ? {
       lat:round(stats.weightedLat / stats.weightSum, 5),
       lon:round(stats.weightedLon / stats.weightSum, 5)
-    } : null,
-    meanDistanceToLocationKm:stats.distanceWeight
-      ? round(stats.weightedDistanceToLocation / stats.distanceWeight, 2)
-      : null
+    } : null
   };
 }
 
@@ -184,27 +165,24 @@ export function analyzeRadarPixels(imageData, frame, { location = null, radiusKm
   const normalizedLocation = normalizeLocation(location, radiusKm);
   const hk = blankAccumulator();
   const nearby = blankAccumulator();
-  const regional = blankAccumulator();
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const offset = (y * width + x) * 4;
       const classified = classifyRadarPixel(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
       const point = framePointFromPixel(x, y, width, height, bounds);
-      const distanceToLocationKm = normalizedLocation
-        ? distanceKm(point.lat, point.lon, normalizedLocation.lat, normalizedLocation.lon)
-        : null;
       const sample = {
         echo:Boolean(classified),
         strength:classified?.strength || 0,
         lat:point.lat,
-        lon:point.lon,
-        distanceToLocationKm
+        lon:point.lon
       };
 
-      if (insideBounds(point.lat, point.lon, REGIONAL_BOUNDS)) addSample(regional, sample);
       if (isHongKong(point.lat, point.lon)) addSample(hk, sample);
-      if (normalizedLocation && distanceToLocationKm <= normalizedLocation.radiusKm) addSample(nearby, sample);
+      if (normalizedLocation) {
+        const distanceToLocationKm = distanceKm(point.lat, point.lon, normalizedLocation.lat, normalizedLocation.lon);
+        if (distanceToLocationKm <= normalizedLocation.radiusKm) addSample(nearby, sample);
+      }
     }
   }
 
@@ -215,8 +193,7 @@ export function analyzeRadarPixels(imageData, frame, { location = null, radiusKm
     heightKm:Number(heightKm) || null,
     sampleSize:{ width, height },
     hongKong:finalizeStats(hk),
-    nearby:finalizeStats(nearby),
-    regional:finalizeStats(regional)
+    nearby:finalizeStats(nearby)
   };
 }
 
@@ -252,94 +229,17 @@ export function hongKongEchoLocationLabel(centroid) {
   return '香港中部';
 }
 
-function trendDirection(values, { minDelta, tolerance = 0 } = {}) {
-  if (!Array.isArray(values) || values.length < 3) return null;
-  const finite = values.map(Number).filter(Number.isFinite);
-  if (finite.length !== values.length) return null;
-  const delta = finite.at(-1) - finite[0];
-  if (Math.abs(delta) < minDelta) return null;
-  const sign = delta > 0 ? 1 : -1;
-  let aligned = 0;
-  let compared = 0;
-  for (let index = 1; index < finite.length; index += 1) {
-    const diff = finite[index] - finite[index - 1];
-    if (Math.abs(diff) <= tolerance) continue;
-    compared += 1;
-    if (Math.sign(diff) === sign) aligned += 1;
-  }
-  if (compared < 2 || aligned / compared < 0.67) return null;
-  return sign;
-}
-
-function bearingDirection(from, to) {
-  if (!from || !to) return null;
-  const dLat = to.lat - from.lat;
-  const dLon = (to.lon - from.lon) * Math.cos(toRadians((to.lat + from.lat) / 2));
-  const angle = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
-  const labels = ['北','東北','東','東南','南','西南','西','西北'];
-  return labels[Math.round(angle / 45) % 8];
-}
-
-export function summarizeRadarHistory(analyses, { location = null } = {}) {
-  const rows = (Array.isArray(analyses) ? analyses : [])
-    .filter(item => item?.time && Number.isFinite(Date.parse(item.time)))
-    .sort((a, b) => Date.parse(a.time) - Date.parse(b.time))
-    .slice(-6);
-  if (rows.length < 3) return { text:'正在觀察回波變化', confidence:'low', focus:'insufficient' };
-
-  const spanMinutes = (Date.parse(rows.at(-1).time) - Date.parse(rows[0].time)) / 60000;
-  if (spanMinutes < 12) return { text:'正在觀察回波變化', confidence:'low', focus:'insufficient' };
-
-  const nearbyRows = rows.filter(item => item.nearby?.sampleCount >= 3);
-  if (nearbyRows.length >= 3) {
-    const sign = trendDirection(nearbyRows.map(item => item.nearby.coverage), { minDelta:0.075, tolerance:0.012 });
-    if (sign > 0) return { text:'所在地附近回波逐步增多', confidence:'high', focus:'nearby' };
-    if (sign < 0) return { text:'所在地附近回波逐步減少', confidence:'high', focus:'nearby' };
-  }
-
-  const locationLat = Number(location?.lat);
-  const locationLon = Number(location?.lon);
-  const hasLocation = Number.isFinite(locationLat) && Number.isFinite(locationLon);
-  const distanceRows = hasLocation
-    ? rows.filter(item => Number.isFinite(item.regional?.meanDistanceToLocationKm) && item.regional?.echoCount >= 5)
-    : [];
-  if (distanceRows.length >= 3) {
-    const sign = trendDirection(distanceRows.map(item => item.regional.meanDistanceToLocationKm), { minDelta:8, tolerance:2 });
-    if (sign < 0) return { text:'主要回波整體向所在地靠近', confidence:'medium', focus:'approach' };
-    if (sign > 0) return { text:'主要回波整體逐步遠離所在地', confidence:'medium', focus:'approach' };
-  }
-
-  const centroidRows = rows.filter(item => item.regional?.centroid && item.regional?.echoCount >= 5);
-  if (centroidRows.length >= 3) {
-    const first = centroidRows[0].regional.centroid;
-    const last = centroidRows.at(-1).regional.centroid;
-    const displacement = distanceKm(first.lat, first.lon, last.lat, last.lon);
-    if (displacement >= 8) {
-      const direction = bearingDirection(first, last);
-      if (direction) return {
-        text:`主要回波向${direction}移動`,
-        confidence:displacement >= 16 ? 'high' : 'medium',
-        focus:'motion',
-        displacementKm:round(displacement, 1)
-      };
-    }
-  }
-
-  return { text:'主要回波位置變化不大', confidence:'medium', focus:'stable' };
-}
-
-export function describeRadarAnalysis(current, history, { locationName = '所在地' } = {}) {
+export function describeRadarAnalysis(current, { locationName = '所在地' } = {}) {
   if (!current) return {
-    hongKongText:'正在分析香港雷達回波',
-    nearbyText:`正在分析${locationName}附近回波`,
-    motionText:history?.text || '正在觀察回波變化'
+    hongKongText:'正在分析香港目前回波',
+    nearbyText:`正在分析${locationName}附近目前回波`
   };
 
   const hk = current.hongKong;
   const nearby = current.nearby;
   const hkCoverage = radarCoverageLabel(hk?.coverage);
   const hkPlace = hongKongEchoLocationLabel(hk?.centroid);
-  const hkText = hkCoverage === '暫未見明顯'
+  const hongKongText = hkCoverage === '暫未見明顯'
     ? '香港大部分地區暫未見明顯回波'
     : `${hkPlace}回波較明顯 · ${hkCoverage} · ${radarStrengthLabel(hk?.meanStrength, hk?.maxStrength)}`;
 
@@ -351,11 +251,5 @@ export function describeRadarAnalysis(current, history, { locationName = '所在
       : `${locationName}附近有${nearbyCoverage}回波 · ${radarStrengthLabel(nearby.meanStrength, nearby.maxStrength)}`;
   }
 
-  return {
-    hongKongText:hkText,
-    nearbyText,
-    motionText:history?.text || '正在觀察回波變化',
-    confidence:history?.confidence || 'low',
-    focus:history?.focus || 'insufficient'
-  };
+  return { hongKongText, nearbyText };
 }
