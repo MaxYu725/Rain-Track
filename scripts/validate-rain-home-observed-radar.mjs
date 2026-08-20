@@ -130,8 +130,8 @@ assert.ok(imageHelper.includes('export async function analyzeRadarFrameImage'), 
 assert.ok(radarRuntime.includes("from './radar-analysis-image.js'"), 'Radar page must reuse shared image analysis helper');
 assert.ok(!radarRuntime.includes("image.crossOrigin = 'anonymous'"), 'Radar page must not keep a duplicate image decoder');
 assert.ok(smoke.includes("'./rain-home-observed-radar.js'"), 'Home Radar history must remain an optional enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa58'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa59'/);
 assert.ok(sw.includes("'./js/radar-analysis-image.js'"));
 assert.ok(sw.includes("'./js/rain-home-observed-radar.js'"));
 
-console.log('Rain Home Now + Next + Radar freshness + SWIRLS separation + pwa58 gate PASS');
+console.log('Rain Home Now + Next + Radar freshness + SWIRLS separation + pwa59 gate PASS');
