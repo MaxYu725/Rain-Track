@@ -87,8 +87,8 @@ assert.ok(!/\.scrollLeft\s*=/.test(fixedYSource), 'Y-axis gutter must never chan
 
 assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
 assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'Y-axis gutter must load as a best-effort optional Home enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa56'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa57'/);
 assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'chart intensity must be included in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'Y-axis gutter must be included in the PWA dependency inventory');
 
-console.log('Rain Home fixed intensity bands + horizontal chart + Y-axis gutter v2 + pwa56 regression gate PASS');
+console.log('Rain Home fixed intensity bands + horizontal chart + Y-axis gutter v2 + pwa57 regression gate PASS');
