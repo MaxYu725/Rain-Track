@@ -1,0 +1,22 @@
+main_sha=e021df44a3f4b8bd28d5c670138ceca0436675ff
+workflow_sha=f5f8c5d0f42cc25cc161d2b3c3647080ecc2399a
+job_status=success
+recorded_at=2026-08-20T02:32:15Z
+
+--- stable smoke ---
+PASS health v2.5.0
+PASS capabilities
+PASS SWIRLS probe 2026-08-20T02:42:00.000Z -> 2026-08-20T04:12:00.000Z
+PASS SWIRLS frame 0 valid=2026-08-20T02:42:00.000Z
+PASS SWIRLS frame 15 valid=2026-08-20T04:12:00.000Z
+PASS point forecast periods=4
+PASS nowcast frames=4 coverage=21.328,112.956..23.487,115.291
+PASS radar 64km/2km frames=20 latest=2026-08-20T02:24:01.000Z imageBytes=36697
+PASS radar 64km/3km frames=20 latest=2026-08-20T02:24:01.000Z imageBytes=40654
+PASS radar 256km/3km frames=20 latest=2026-08-20T02:24:01.000Z imageBytes=167211
+Production Worker smoke PASS
+
+--- point smoke ---
+SWIRLS production point PASS frame=3 valid=2026-08-20T03:00:00.000Z amount=0.033 mm / 30 min
+
+--- point-series smoke ---
