@@ -8,6 +8,7 @@ import {
 } from '../js/radar-analysis.js';
 
 const runtime = readFileSync('js/radar-analysis-runtime.js', 'utf8');
+const imageHelper = readFileSync('js/radar-analysis-image.js', 'utf8');
 const analysisSource = readFileSync('js/radar-analysis.js', 'utf8');
 const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
@@ -45,12 +46,8 @@ function paint(x, y, rgba) {
 for (let y = 0; y < height; y += 1) {
   for (let x = 0; x < width; x += 1) {
     const point = coords(x, y);
-    if (point.lon >= 114.30 && point.lat >= 22.25 && point.lat <= 22.45 && (x + y) % 2 === 0) {
-      paint(x, y, [0, 201, 107, 255]);
-    }
-    if (Math.abs(point.lat - 22.32) < 0.035 && Math.abs(point.lon - 114.17) < 0.04) {
-      paint(x, y, [0, 185, 223, 255]);
-    }
+    if (point.lon >= 114.30 && point.lat >= 22.25 && point.lat <= 22.45 && (x + y) % 2 === 0) paint(x, y, [0, 201, 107, 255]);
+    if (Math.abs(point.lat - 22.32) < 0.035 && Math.abs(point.lon - 114.17) < 0.04) paint(x, y, [0, 185, 223, 255]);
   }
 }
 
@@ -72,15 +69,20 @@ assert.match(described.nearbyText, /粉嶺附近/);
 assert.equal(Object.hasOwn(described, 'motionText'), false, 'final Radar UI must not expose historical motion analysis');
 
 for (const marker of [
-  "from './radar-analysis.js'",
+  "from './radar-analysis-image.js'",
+  'analyzeRadarFrameImage(frame',
   "window.addEventListener('rain:radar-frame-change'",
-  'RADAR_ANALYSIS_SAMPLE_MAX_DIMENSION',
-  "image.crossOrigin = 'anonymous'",
   "id = 'radar-analysis-card'",
-  'analyzeRadarPixels(imageData, frame',
   '<div class="radar-analysis-kicker">目前回波</div>',
   "describeRadarAnalysis(current, { locationName:state.selected?.name || '所在地' })"
 ]) assert.ok(runtime.includes(marker), `Radar current-frame analysis marker missing: ${marker}`);
+
+for (const marker of [
+  'RADAR_ANALYSIS_SAMPLE_MAX_DIMENSION',
+  "image.crossOrigin = 'anonymous'",
+  "context.drawImage(image, 0, 0, width, height)",
+  'return analyzeRadarPixels(imageData, frame'
+]) assert.ok(imageHelper.includes(marker), `shared Radar image helper marker missing: ${marker}`);
 
 for (const forbidden of [
   'fetchRadarFrames',
@@ -99,8 +101,9 @@ for (const forbidden of ['summarizeRadarHistory', 'trendDirection(', 'bearingDir
 }
 
 assert.ok(smoke.includes("'./radar-analysis-runtime.js'"), 'Radar analysis must remain an optional enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa56'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa57'/);
 assert.ok(sw.includes("'./js/radar-analysis.js'"));
+assert.ok(sw.includes("'./js/radar-analysis-image.js'"));
 assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"));
 
-console.log('Radar current-frame summary + nearby radius + pwa56 regression gate PASS');
+console.log('Radar current-frame summary + shared image analysis + nearby radius + pwa57 regression gate PASS');
