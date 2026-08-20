@@ -1,8 +1,5 @@
-import {
-  RADAR_ANALYSIS_SAMPLE_MAX_DIMENSION,
-  analyzeRadarPixels,
-  describeRadarAnalysis
-} from './radar-analysis.js';
+import { describeRadarAnalysis } from './radar-analysis.js';
+import { analyzeRadarFrameImage } from './radar-analysis-image.js';
 import { state } from './state.js';
 
 const analysisCache = new Map();
@@ -13,56 +10,18 @@ function frameKey(frame) {
   return `${state.radar.range}|${state.radar.height}|${frame?.time || ''}|${frame?.id || ''}`;
 }
 
-function resolveImageUrl(imageUrl) {
-  return /^https?:/i.test(imageUrl)
-    ? imageUrl
-    : state.apiBase + (imageUrl.startsWith('/') ? '' : '/') + imageUrl;
-}
-
-function loadAnalysisImage(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.crossOrigin = 'anonymous';
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error('雷達分析影像載入失敗'));
-    image.src = url;
-  });
-}
-
-function imageDataForAnalysis(image) {
-  const naturalWidth = Number(image?.naturalWidth || image?.width);
-  const naturalHeight = Number(image?.naturalHeight || image?.height);
-  if (!Number.isFinite(naturalWidth) || !Number.isFinite(naturalHeight) || naturalWidth <= 0 || naturalHeight <= 0) {
-    throw new Error('雷達分析影像尺寸無效');
-  }
-  const scale = Math.min(1, RADAR_ANALYSIS_SAMPLE_MAX_DIMENSION / Math.max(naturalWidth, naturalHeight));
-  const width = Math.max(1, Math.round(naturalWidth * scale));
-  const height = Math.max(1, Math.round(naturalHeight * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d', { willReadFrequently:true });
-  if (!context) throw new Error('瀏覽器不支援雷達影像分析');
-  context.clearRect(0, 0, width, height);
-  context.drawImage(image, 0, 0, width, height);
-  return context.getImageData(0, 0, width, height);
-}
-
 async function analyzeFrame(frame) {
   const key = frameKey(frame);
   if (!key || !frame?.imageUrl) return null;
   if (analysisCache.has(key)) return analysisCache.get(key);
 
-  const promise = (async () => {
-    const image = await loadAnalysisImage(resolveImageUrl(frame.imageUrl));
-    const imageData = imageDataForAnalysis(image);
-    return analyzeRadarPixels(imageData, frame, {
-      location:state.selected,
-      radiusKm:state.radiusKm,
-      rangeKm:state.radar.range,
-      heightKm:state.radar.height
-    });
-  })().catch(error => {
+  const promise = analyzeRadarFrameImage(frame, {
+    apiBase:state.apiBase,
+    location:state.selected,
+    radiusKm:state.radiusKm,
+    rangeKm:state.radar.range,
+    heightKm:state.radar.height
+  }).catch(error => {
     analysisCache.delete(key);
     console.warn('Radar analysis skipped:', error?.message || error);
     return null;
