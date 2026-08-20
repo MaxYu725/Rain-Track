@@ -52,6 +52,9 @@ assert.ok(home.includes('const axisPoint = points.find(point => Number(point.lea
 assert.ok(home.includes('axisPoint?.validTime || validTimeForLead(runTime, lead)'), 'missing major tick frames must still derive the true valid clock from runTime');
 assert.ok(home.includes('formatClock(firstWet.transitionStartValidTime)'));
 assert.ok(home.includes('formatClock(firstWet.transitionEndValidTime)'));
+assert.ok(home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'frame-zero onset must describe the future valid time naturally');
+assert.ok(home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial onset must describe the earliest available valid time naturally');
+assert.ok(!home.includes('首個預報時間 ${formatClock(first.validTime)} 已有雨勢'), 'future onset must not be worded as current rain');
 assert.ok(home.includes('Number(point.leadMinutes) !== expectedLead'));
 assert.ok(home.includes('const adjacent = previous && Number(previous.frameIndex) === Number(first.frameIndex) - 1'), 'partial data must only use a bracket for adjacent six-minute frames');
 assert.ok(home.includes('contiguousSegments(points)'), 'partial chart must split around missing frames');
@@ -65,7 +68,7 @@ assert.ok(home.includes('chartMarkup(data.points, data.runTime, { seriesComplete
 assert.ok(!home.includes('index / Math.max(1, points.length - 1)'), 'chart must not space samples by array index');
 assert.ok(!home.includes('firstWindowStart'), 'onset wording must not reuse the 30-minute rolling accumulation window');
 
-// Fifth-pass mobile chart readability invariants.
+// Mobile chart readability invariants.
 assert.ok(home.includes('const height = 300'), 'Rain Home chart must use the taller fifth-pass geometry');
 assert.ok(home.includes('const pad = { left:42, right:12, top:18, bottom:60 }'), 'taller chart must preserve enough room for two-line time labels');
 assert.ok(home.includes('.rain-home-axis-label{font-size:14px}'), 'mobile Y-axis labels must be enlarged');
@@ -75,6 +78,6 @@ assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'mobile c
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 37);
+assert.ok(Number(shellVersion[1]) >= 38);
 
-console.log('Rain Home true time-axis + fifth-pass mobile chart readability gate PASS');
+console.log('Rain Home true time-axis + final onset wording gate PASS');
