@@ -5,6 +5,7 @@ import './rain-home.js';
 import './rain-home-shell.js';
 
 const OPTIONAL_MAP_MODULES = [
+  './rain-home-chart-intensity.js',
   './radar-entry.js',
   './radar-settings-mirror.js',
   './radar-analysis-runtime.js',
