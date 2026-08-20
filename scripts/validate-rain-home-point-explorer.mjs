@@ -19,6 +19,8 @@ for (const marker of [
   'selectNearestAtClientX',
   'readout.hidden = false',
   "guide.classList.add('is-active')",
+  "const help = content.querySelector('.rain-home-chart-help:not(.is-partial)')",
+  'if (help) help.hidden = true',
   '30 分鐘累積時窗',
   'mm / 30 min',
   '有效時間',
@@ -32,12 +34,14 @@ assert.ok(home.includes('data-rain-home-readout aria-live="polite" hidden'), 'ch
 assert.ok(!home.includes('selectPoint(firstWet?.index ?? 0)'), 'chart inspector must not auto-select a point on first render');
 assert.ok(!home.includes('6 分鐘雨量'), 'Rain Home must not relabel rolling 30-minute accumulation as 6-minute rainfall');
 assert.ok(home.includes('每點為 30 分鐘累積雨量'), 'rolling accumulation semantics must remain visible once in the chart header');
-assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete chart should use a concise interaction hint');
+assert.ok(home.includes('點按圖表查看各時間雨量'), 'complete chart should use a concise interaction hint before selection');
+assert.ok(home.includes('.rain-home-chart-help[hidden]{display:none}'), 'complete interaction hint must leave no layout gap after selection');
+assert.ok(home.includes('部分時間資料暫缺，圖表會以空白表示'), 'partial-data warning must remain available independently of the complete interaction hint');
 assert.ok(!home.includes('rain-home-chart-caption'), 'normal chart should not duplicate accumulation semantics below the plot');
-assert.ok(home.includes('.rain-home-chart-help{font-size:.7rem}'), 'mobile interaction hint must remain readable after the chart grows');
+assert.ok(home.includes('.rain-home-chart-help{font-size:.7rem}'), 'mobile interaction hint must remain readable before selection');
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 37, `Rain Home fifth-pass mobile polish requires PWA generation at least pwa37, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 38, `Rain Home final polish requires PWA generation at least pwa38, got pwa${shellVersion[1]}`);
 
-console.log('Rain Home 16-point explorer + fifth-pass mobile readability validation passed');
+console.log('Rain Home 16-point explorer + final interaction polish validation passed');
