@@ -55,7 +55,8 @@ function frameSummary(frame, frameIndex) {
     leadMinutes:frame.leadMinutes,
     window:forecastWindow(frame),
     loaded:Array.isArray(frame.values),
-    diagnostics:frame.diagnostics || null
+    diagnostics:frame.diagnostics || null,
+    spatialSummary:frame.spatialSummary || null
   };
 }
 
@@ -118,13 +119,15 @@ function renderForecastMapFrame(frameIndex) {
     opacity
   });
   visible = true;
+  const spatialSummary = summarizeForecastRainArea(frame, forecast.grid);
+  frame.spatialSummary = spatialSummary;
   lastRender = {
     width:rendered.width,
     height:rendered.height,
     wetCellCount:rendered.wetCellCount,
     dryCellCount:rendered.dryCellCount,
     maxMm:rendered.maxMm,
-    spatialSummary:summarizeForecastRainArea(frame, forecast.grid)
+    spatialSummary
   };
   const snapshot = getForecastMapRuntimeSnapshot();
   notifyFrameChange(snapshot);
@@ -215,6 +218,7 @@ export async function setForecastMapIndex(frameIndex) {
       ...target,
       values:frame.values,
       diagnostics:frame.diagnostics,
+      spatialSummary:null,
       loaded:true
     };
     return renderForecastMapFrame(targetIndex);
