@@ -1,7 +1,6 @@
 import { DEFAULT_API_BASE, DEFAULT_POINT, LEGACY_API_BASES } from './config.js';
 import { automaticLocationName, isSupportedPoint, loadJSON } from './utils.js';
 
-
 function normalizeApiBase(value) {
   return String(value || '').trim().replace(/\/$/, '');
 }
@@ -58,10 +57,25 @@ function loadSavedPoints() {
 
 const initialPoint = loadInitialPoint();
 if (['自選位置','目前位置','分享位置'].includes(initialPoint.name)) initialPoint.name = automaticLocationName(initialPoint.lat, initialPoint.lon);
+let selectedPoint = { lat:initialPoint.lat, lon:initialPoint.lon, name:initialPoint.name };
+
+function dispatchLocationChange(previous, current) {
+  if (typeof globalThis.window?.dispatchEvent !== 'function' || typeof globalThis.CustomEvent !== 'function') return;
+  queueMicrotask(() => {
+    globalThis.window.dispatchEvent(new CustomEvent('rain:location-change', {
+      detail: { previous, current }
+    }));
+  });
+}
 
 export const state = {
   apiBase: normalizeApiBase(localStorage.getItem('hkRainApiBase') || localStorage.getItem('hkRadarApiBase') || DEFAULT_API_BASE),
-  selected: { lat:initialPoint.lat, lon:initialPoint.lon, name:initialPoint.name },
+  get selected() { return selectedPoint; },
+  set selected(value) {
+    const previous = selectedPoint;
+    selectedPoint = value;
+    dispatchLocationChange(previous, value);
+  },
   initialSource: initialPoint.source,
   saved: loadSavedPoints(),
   radiusKm: [1,2,3,5].includes(Number(localStorage.getItem('hkRainRadiusKm'))) ? Number(localStorage.getItem('hkRainRadiusKm')) : 2,

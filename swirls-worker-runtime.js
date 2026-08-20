@@ -7,8 +7,7 @@ import {
 export const SWIRLS_FETCH_POLICY = Object.freeze({
   indexTtlSeconds: 45,
   mdlTtlSeconds: 45,
-  timeoutMs: 12_000,
-  retryOnRollover: true
+  timeoutMs: 12_000
 });
 
 export function createSwirlsRuntime({
@@ -38,19 +37,8 @@ export function createSwirlsRuntime({
 
   async function loadFrame(frameIndex, { bypassCache = false } = {}) {
     const normalizedIndex = normalizeFrameIndex(frameIndex);
-    let indexData = await loadIndex({ bypassCache });
-
-    try {
-      return await loadBoundFrame(indexData, normalizedIndex, { bypassCache });
-    } catch (error) {
-      if (!policy.retryOnRollover || bypassCache || !isRolloverMismatch(error)) throw error;
-
-      // HKO reuses the same asset filenames for every SWIRLS run. Around an
-      // upstream publication rollover, index and MDL can briefly belong to
-      // different runs. Refresh both once, then fail closed if still mixed.
-      indexData = await loadIndex({ bypassCache: true });
-      return await loadBoundFrame(indexData, normalizedIndex, { bypassCache: true });
-    }
+    const indexData = await loadIndex({ bypassCache });
+    return loadBoundFrame(indexData, normalizedIndex, { bypassCache });
   }
 
   async function loadBoundFrame(indexData, frameIndex, { bypassCache = false } = {}) {
@@ -112,15 +100,17 @@ export function createNetworkFetchText({
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
     try {
-      const response = await fetchImpl(url, {
+      const requestOptions = {
         redirect: 'follow',
-        cache: options.bypassCache ? 'no-store' : 'no-cache',
         headers: {
           Accept: 'text/plain,*/*',
           'User-Agent': userAgent
         },
         signal: controller.signal
-      });
+      };
+      if (options.bypassCache === true) requestOptions.cache = 'no-store';
+
+      const response = await fetchImpl(url, requestOptions);
       if (!response.ok) throw new Error(`SWIRLS upstream HTTP ${response.status}`);
       const body = await response.text();
       return {
@@ -212,8 +202,4 @@ function normalizeFetchResult(result, label) {
     updatedAt: result.updatedAt || null,
     cacheStatus: result.cacheStatus || null
   };
-}
-
-function isRolloverMismatch(error) {
-  return error instanceof Error && /SWIRLS run time mismatch/.test(error.message);
 }
