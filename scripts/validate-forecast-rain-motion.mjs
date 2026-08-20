@@ -24,7 +24,13 @@ function spatial({
   scores[dominant] = 1;
   const productZones = Object.fromEntries(Object.entries(product).map(([key, wetShare]) => {
     const meta = PRODUCT_META[key] || { key, label:key, parent:null };
-    return [key, { ...meta, wetShare, score:wetShare, sumMm:totalWetMm * wetShare }];
+    return [key, {
+      ...meta,
+      wetShare,
+      score:wetShare,
+      contributionShare:wetShare,
+      sumMm:totalWetMm * wetShare
+    }];
   }));
   return {
     totalWetCellCount:wet,
@@ -120,6 +126,7 @@ assert.equal(regionalGrowth.status, 'steady');
 assert.equal(regionalGrowth.label, '雨區位置變化不大，東南海域雨區逐步增多');
 assert.equal(regionalGrowth.development?.key, 'seaEast');
 assert.equal(regionalGrowth.development?.direction, 'increasing');
+assert.equal(regionalGrowth.development?.continuous, true);
 
 const regionalDecrease = summarizeForecastRainMotion(frames([
   spatial({ lat:22.38, lon:114.18, totalWetMm:100, hk:0.3, product:{ hkNtEast:0.32 } }),
@@ -129,6 +136,31 @@ const regionalDecrease = summarizeForecastRainMotion(frames([
   spatial({ lat:22.38, lon:114.18, totalWetMm:80, hk:0.14, product:{ hkNtEast:0.10 } })
 ]));
 assert.match(regionalDecrease.label, /新界東雨區逐步減少/);
+assert.equal(regionalDecrease.development?.continuous, true);
+
+// A large early-vs-late difference is not enough for the word "逐步" when
+// the intermediate frames repeatedly reverse direction.
+const oscillatingGrowth = summarizeForecastRainMotion(frames([
+  spatial({ lat:22.1, lon:114.1, totalWetMm:100, product:{ seaEast:0.12 } }),
+  spatial({ lat:22.1, lon:114.1, totalWetMm:100, product:{ seaEast:0.32 } }),
+  spatial({ lat:22.1, lon:114.1, totalWetMm:100, product:{ seaEast:0.15 } }),
+  spatial({ lat:22.1, lon:114.1, totalWetMm:100, product:{ seaEast:0.38 } }),
+  spatial({ lat:22.1, lon:114.1, totalWetMm:100, product:{ seaEast:0.35 } })
+]));
+assert.equal(oscillatingGrowth.status, 'steady');
+assert.equal(oscillatingGrowth.label, '雨區位置變化不大，東南海域雨區較早段增多');
+assert.equal(oscillatingGrowth.development?.continuous, false);
+
+// Sparse manual scrubbing can establish an early-vs-late difference but must
+// not imply a continuous trend across unloaded time gaps.
+const sparseItems = [];
+sparseItems[0] = spatial({ lat:22.1, lon:114.1, product:{ seaEast:0.12 } });
+sparseItems[1] = spatial({ lat:22.1, lon:114.1, product:{ seaEast:0.16 } });
+sparseItems[6] = spatial({ lat:22.1, lon:114.1, product:{ seaEast:0.31 } });
+sparseItems[7] = spatial({ lat:22.1, lon:114.1, product:{ seaEast:0.35 } });
+const sparseGrowth = summarizeForecastRainMotion(frames(sparseItems));
+assert.match(sparseGrowth.label, /東南海域雨區較早段增多/);
+assert.equal(sparseGrowth.development?.continuous, false);
 
 const completeFrames = Array.from({ length:16 }, (_, index) => spatial({ lat:22.1, lon:114.0 + index * 0.001 }));
 const complete = summarizeForecastRainMotion(frames(completeFrames));
@@ -136,12 +168,16 @@ assert.equal(complete.complete, true);
 assert.equal(complete.loadedFrameCount, 16);
 
 const spatialSource = readFileSync('js/forecast-map-spatial.js', 'utf8');
+const motionSource = readFileSync('js/forecast-map-motion.js', 'utf8');
 const runtime = readFileSync('js/forecast-map-runtime.js', 'utf8');
 const ui = readFileSync('js/rain-map-area-summary.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
-for (const marker of ['totalWetMm', 'weightedLat', 'weightedLon', 'centroid', 'RAIN_AREA_PRODUCT_ZONES', 'productZones']) {
+for (const marker of ['totalWetMm', 'weightedLat', 'weightedLon', 'centroid', 'RAIN_AREA_PRODUCT_ZONES', 'productZones', 'contributionShare']) {
   assert.ok(spatialSource.includes(marker), `spatial regional marker missing: ${marker}`);
+}
+for (const marker of ['REGIONAL_TREND_MIN_POINTS', 'REGIONAL_TREND_MAX_INDEX_GAP', 'REGIONAL_TREND_CONSISTENCY', 'trendIsContinuous', "continuous ? '逐步' : '較早段'"]) {
+  assert.ok(motionSource.includes(marker), `motion continuity marker missing: ${marker}`);
 }
 for (const marker of ['spatialSummary:frame.spatialSummary || null', 'frame.spatialSummary = spatialSummary']) {
   assert.ok(runtime.includes(marker), `runtime motion cache marker missing: ${marker}`);
@@ -159,6 +195,6 @@ for (const marker of [
 assert.ok(!ui.includes('/api/'), 'motion UI must not create its own network path');
 assert.ok(sw.includes("'./js/forecast-map-motion.js'"), 'motion analyzer missing from PWA app shell inventory');
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
-assert.ok(shellVersion && Number(shellVersion[1]) >= 44, 'Forecast Map regional motion insight requires PWA generation at least pwa44');
+assert.ok(shellVersion && Number(shellVersion[1]) >= 45, 'Forecast Map regional v2.1 motion insight requires PWA generation at least pwa45');
 
-console.log('Forecast Map regional v2 motion insight validation passed');
+console.log('Forecast Map regional v2.1 contribution + continuity motion validation passed');
