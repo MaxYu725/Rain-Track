@@ -46,6 +46,7 @@ jobs:
           node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/probe-swirls-point-series-production.mjs
           node --check scripts/benchmark-swirls-series.mjs
+          node --check scripts/probe-zero-base-postdeploy.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
           node --check scripts/validate-rain-home.mjs
           node --check scripts/validate-rain-map-quickviews.mjs
@@ -92,6 +93,9 @@ jobs:
         if: github.event_name == 'pull_request'
         continue-on-error: true
         run: node scripts/benchmark-swirls-series.mjs
+      - name: Probe deployed production latency
+        if: github.event_name == 'pull_request'
+        run: node scripts/probe-zero-base-postdeploy.mjs
       # This checks the already-deployed Worker, not the PR under test. Keep it
       # informational on main; deploy-worker.yml owns blocking production smoke.
       - name: Probe current production SWIRLS frontend contract
