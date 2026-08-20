@@ -186,9 +186,8 @@ async function loadObservedForRoot(root) {
   root.dataset.rainHomeObservedLoading = '1';
   try {
     const height = [2,3].includes(Number(state.radar.height)) ? Number(state.radar.height) : 3;
-    const sourceFrames = state.radar.range === HOME_RADAR_RANGE_KM && state.radar.height === height && state.radar.frames.length
-      ? state.radar.frames
-      : (await fetchRadarFrames(HOME_RADAR_RANGE_KM, 'live', height, { signal:controller.signal, timeoutMs:15_000 })).frames;
+    const data = await fetchRadarFrames(HOME_RADAR_RANGE_KM, 'live', height, { signal:controller.signal, timeoutMs:15_000 });
+    const sourceFrames = Array.isArray(data?.frames) ? data.frames : [];
     if (token !== loadToken || controller.signal.aborted || !root.isConnected) return;
     const frames = selectObservedRadarFrames(sourceFrames);
     if (frames.length < 3 || !latestFrameIsFresh(frames)) return;
