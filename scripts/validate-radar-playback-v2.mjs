@@ -58,9 +58,9 @@ for (const marker of [
 assert.ok(!mirror.includes('fetchRadarFrames'), 'Radar settings mirror must never load Radar data');
 assert.ok(smoke.includes("'./radar-settings-mirror.js'"), 'Radar settings mirror must remain an optional map enhancement');
 
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa56'/);
 assert.ok(sw.includes("'./js/radar.js'"), 'Radar runtime must remain in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must remain in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-settings-mirror.js'"), 'Radar settings mirror must remain in the PWA dependency inventory');
 
-console.log('Radar commit-based playback + direct controls + synchronized settings + pwa55 regression gate PASS');
+console.log('Radar commit-based playback + direct controls + synchronized settings + pwa56 regression gate PASS');
