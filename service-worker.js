@@ -32,6 +32,7 @@ const APP_SHELL = [
   './js/forecast-map-timeline-core.js',
   './js/forecast-map-smoke.js',
   './js/radar-entry.js',
+  './js/radar-settings-mirror.js',
   './js/rain-home.js',
   './js/rain-home-time.js',
   './js/rain-home-shell.js',
