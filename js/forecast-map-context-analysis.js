@@ -1,5 +1,3 @@
-import { RAIN_AREA_PRODUCT_ZONES } from './forecast-map-spatial.js';
-
 const MIN_MOTION_FRAMES = 3;
 const SHARE_DELTA = 0.08;
 const ACTIVE_SHARE = 0.12;
@@ -21,41 +19,9 @@ function percentage(value) {
   return `${Math.round(Math.max(0, Math.min(1, finite(value))) * 100)}%`;
 }
 
-function pointOnSegment(x, y, ax, ay, bx, by) {
-  const cross = (x - ax) * (by - ay) - (y - ay) * (bx - ax);
-  if (Math.abs(cross) > 1e-9) return false;
-  return (x - ax) * (x - bx) + (y - ay) * (y - by) <= 1e-9;
-}
-
-function pointInPolygon(lat, lon, polygon) {
-  const x = lon;
-  const y = lat;
-  let inside = false;
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [xi, yi] = polygon[i];
-    const [xj, yj] = polygon[j];
-    if (pointOnSegment(x, y, xi, yi, xj, yj)) return true;
-    const intersects = ((yi > y) !== (yj > y))
-      && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function selectedProductZone(selected) {
-  const lat = Number(selected?.lat);
-  const lon = Number(selected?.lon);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  return Object.values(RAIN_AREA_PRODUCT_ZONES)
-    .find(zone => pointInPolygon(lat, lon, zone.polygon)) || null;
-}
-
-function scopeZones(summary, scope, selected) {
+function scopeZones(summary, scope) {
+  if (scope === 'location') return summary?.nearby ? [summary.nearby] : [];
   const productZones = summary?.productZones || {};
-  if (scope === 'location') {
-    const zone = selectedProductZone(selected);
-    return zone && productZones[zone.key] ? [productZones[zone.key]] : [];
-  }
   const meta = SCOPE_META[scope];
   if (!meta) return [];
   return Object.values(productZones).filter(zone => zone?.parent === meta.parent);
@@ -75,8 +41,8 @@ function scopedName(scope, selected) {
   return SCOPE_META[scope]?.label || '所選範圍';
 }
 
-function scopedMetric(summary, scope, selected) {
-  const zones = scopeZones(summary, scope, selected);
+function scopedMetric(summary, scope) {
+  const zones = scopeZones(summary, scope);
   const wetZones = rankedWetZones(zones);
   return {
     zones,
@@ -99,18 +65,29 @@ export function summarizeForecastRainContext(summary, { scope = 'regional', sele
   }
 
   const name = scopedName(scope, selected);
-  const metric = scopedMetric(summary, scope, selected);
+  const metric = scopedMetric(summary, scope);
   const ranked = metric.wetZones;
 
   if (scope === 'location') {
-    const zone = metric.zones[0];
-    if (!zone || !ranked.length) {
-      return { scope, status:'scope-dry', label:`${name}暫未見明顯雨區`, detail:zone ? `${zone.label} ${percentage(zone.wetShare)}` : '' };
+    const nearby = metric.zones[0];
+    if (!nearby) return { scope, status:'scope-unavailable', label:`${name}資料暫不可用`, detail:'' };
+    if (!ranked.length) {
+      return {
+        scope,
+        status:'scope-dry',
+        label:`${name}暫未見明顯雨區`,
+        detail:`附近雨區覆蓋 ${percentage(nearby.wetShare)}`
+      };
     }
-    const label = finite(zone.wetShare) >= 0.45
+    const label = finite(nearby.wetShare) >= 0.45
       ? `${name}雨區較明顯`
       : `${name}有局部雨區`;
-    return { scope, status:'scope-wet', label, detail:`${zone.label} ${percentage(zone.wetShare)}` };
+    return {
+      scope,
+      status:'scope-wet',
+      label,
+      detail:`附近雨區覆蓋 ${percentage(nearby.wetShare)}`
+    };
   }
 
   const meta = SCOPE_META[scope];
@@ -153,13 +130,15 @@ function trendIsContinuous(points, direction) {
   return meaningful >= 2 && aligned / meaningful >= TREND_RATIO;
 }
 
-function scopedDevelopment(frames, scope, selected) {
+function scopedDevelopment(frames, scope) {
   const keys = new Set();
-  frames.forEach(frame => scopeZones(frame.spatialSummary, scope, selected).forEach(zone => keys.add(zone.key)));
+  frames.forEach(frame => scopeZones(frame.spatialSummary, scope).forEach(zone => keys.add(zone.key)));
   const candidates = [];
   keys.forEach(key => {
     const points = frames.map(frame => {
-      const zone = frame.spatialSummary?.productZones?.[key];
+      const zone = scope === 'location'
+        ? frame.spatialSummary?.nearby
+        : frame.spatialSummary?.productZones?.[key];
       return zone ? { index:frame.index, share:finite(zone.wetShare), label:zone.label } : null;
     }).filter(Boolean);
     if (points.length < 3) return;
@@ -197,7 +176,7 @@ export function summarizeForecastRainContextMotion(frameSummaries, { frameCount,
   if (scope === 'regional') return { ...base, ready:false, status:'regional-delegated', label:'' };
   if (frames.length < MIN_MOTION_FRAMES) return { ...base, ready:false, status:'observing', label:'正在觀察雨區變化' };
 
-  const metrics = frames.map(frame => ({ index:frame.index, ...scopedMetric(frame.spatialSummary, scope, selected) }));
+  const metrics = frames.map(frame => ({ index:frame.index, ...scopedMetric(frame.spatialSummary, scope) }));
   const groupSize = Math.min(3, Math.max(1, Math.floor(metrics.length / 3)));
   const early = metrics.slice(0, groupSize);
   const late = metrics.slice(-groupSize);
@@ -209,13 +188,15 @@ export function summarizeForecastRainContextMotion(frameSummaries, { frameCount,
   const activityRatio = earlyActivity > 0 ? lateActivity / earlyActivity : (lateActivity > 0 ? Infinity : 1);
   const wetCellRatio = earlyWetCells > 0 ? lateWetCells / earlyWetCells : (lateWetCells > 0 ? Infinity : 1);
   const name = scopedName(scope, selected);
-  const development = scopedDevelopment(frames, scope, selected);
+  const development = scopedDevelopment(frames, scope);
 
   if (earlyActivity > 0 && activityRatio <= 0.55 && wetCellRatio <= 0.72) {
-    return { ...base, ready:true, status:'weakening', label:development?.direction === 'decreasing' ? development.text : `${name}雨區逐步減弱`, development };
+    const fallback = scope === 'location' ? `${name}雨區逐步減弱` : `${name}雨區逐步減弱`;
+    return { ...base, ready:true, status:'weakening', label:development?.direction === 'decreasing' ? development.text : fallback, development };
   }
   if ((earlyActivity <= 0 && lateActivity > 0) || (Number.isFinite(activityRatio) && activityRatio >= 1.7 && wetCellRatio >= 1.3)) {
-    return { ...base, ready:true, status:'strengthening', label:development?.direction === 'increasing' ? development.text : `${name}雨區逐步增強`, development };
+    const fallback = scope === 'location' ? `${name}雨區逐步增強` : `${name}雨區逐步增強`;
+    return { ...base, ready:true, status:'strengthening', label:development?.direction === 'increasing' ? development.text : fallback, development };
   }
   if (development) return { ...base, ready:true, status:'developing', label:development.text, development };
   return { ...base, ready:true, status:'steady', label:`${name}雨區變化不大`, development:null };

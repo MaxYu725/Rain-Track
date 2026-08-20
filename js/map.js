@@ -132,6 +132,9 @@ export function changeRadius(radiusKm) {
   state.radiusKm = [1,2,3,5].includes(Number(radiusKm)) ? Number(radiusKm) : 2;
   localStorage.setItem('hkRainRadiusKm', String(state.radiusKm));
   renderPointLayers();
+  if (typeof window?.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+    window.dispatchEvent(new CustomEvent('rain:radius-change', { detail:{ radiusKm:state.radiusKm } }));
+  }
 }
 
 export function centerHongKong() { state.map?.setView([22.35,114.15], 11); }

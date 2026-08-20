@@ -75,11 +75,6 @@ assert.equal(eastSea.productZones.seaEast.wetCellCount, 4);
 assert.match(eastSea.regionalLabel, /東南海域/);
 assert.match(eastSea.regionalDetail, /東南海域/);
 
-// A small product zone can be fully wet without being the main part of the
-// whole rain field. Regional headline ranking must use whole-field rainfall
-// contribution, while visible percentages remain within-zone affected share.
-// Extra dry HK cells keep the macro HK coverage below the widespread shortcut
-// so this fixture isolates regional ranking rather than the coarse headline.
 const contributionGrid = {
   latitudes:[22.50,22.48,21.90,21.80],
   longitudes:[113.0,113.2,113.4,113.6,113.7,113.9,114.0,114.18,114.20]
@@ -97,13 +92,20 @@ assert.ok(contribution.productZones.seaWest.contributionShare > contribution.pro
 assert.equal(contribution.regionalLabel, '雨區較集中在西南海域');
 assert.match(contribution.regionalDetail, /^西南海域 80%/);
 
-// Coarse HK coverage deliberately extends slightly offshore. The refined
-// product geometry should fail open at the coast instead of forcing a nearshore
-// grid cell into Hong Kong Island.
 const nearshore = summarizeForecastRainArea({ values:[1] }, { latitudes:[22.17], longitudes:[114.18] });
 assert.equal(nearshore.zones.hongKong.wetCellCount, 1);
 assert.equal(nearshore.productZones.hkIsland.wetCellCount, 0);
 assert.equal(Object.values(nearshore.productZones).reduce((sum, zone) => sum + zone.wetCellCount, 0), 0);
+
+const nearbyGrid = { latitudes:[22.50], longitudes:[114.18,114.23,114.28] };
+const nearby = summarizeForecastRainArea({ values:[0,1,1] }, nearbyGrid, {
+  nearby:{ lat:22.50, lon:114.18, radiusKm:2 }
+});
+assert.ok(nearby.nearby, 'same spatial pass must expose Nearby statistics when a selected point is provided');
+assert.equal(nearby.nearby.radiusKm, 2);
+assert.equal(nearby.nearby.cellCount, 1);
+assert.equal(nearby.nearby.wetCellCount, 0);
+assert.equal(nearby.productZones.hkNtNorth.wetCellCount, 2, 'broader product-zone rain must remain independent from Nearby');
 
 assert.equal(summarizeForecastRainArea({ values:[1] }, grid), null, 'incomplete grids must fail closed');
 
@@ -114,7 +116,8 @@ const spatialSource = readFileSync(new URL('../js/forecast-map-spatial.js', impo
 const sw = readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8');
 
 for (const marker of [
-  "summarizeForecastRainArea(frame, forecast.grid)",
+  'summarizeForecastRainArea(frame, forecast?.grid, { nearby:nearbyOptions() })',
+  'refreshForecastMapSpatialAnalysis',
   "spatialSummary:lastRender?.spatialSummary || null",
   "rain:forecast-map-frame-change"
 ]) assert.ok(runtime.includes(marker), `runtime spatial summary marker missing: ${marker}`);
@@ -123,14 +126,16 @@ for (const marker of [
   'contributionShare',
   'SECONDARY_CONTRIBUTION',
   'b.contributionShare - a.contributionShare',
-  'Percentages remain within-zone affected share'
-]) assert.ok(spatialSource.includes(marker), `regional v2.1 contribution marker missing: ${marker}`);
+  'normalizeNearbyConfig',
+  'distanceKm(nearbyConfig.lat, nearbyConfig.lon, lat, lon)',
+  'nearby:nearbyStats'
+]) assert.ok(spatialSource.includes(marker), `regional/Nearby spatial marker missing: ${marker}`);
 
 for (const marker of [
   'data-rain-area-time',
   'selectedTimeText(snapshot)',
-  'summary.regionalLabel || summary.label',
-  'summary.regionalDetail || summary.detail',
+  'const analysisScope = getForecastAnalysisScope()',
+  'summarizeForecastRainContext(summary',
   'panel.dataset.rainAreaStatus',
   "activeMode === 'forecast'",
   "rain:forecast-map-frame-change",
@@ -141,6 +146,7 @@ for (const marker of [
   "panel.removeAttribute('title')"
 ]) assert.ok(ui.includes(marker), `rain-area summary UI marker missing: ${marker}`);
 
+assert.ok(!ui.includes('let analysisScope'), 'area summary must not maintain stale local scope state');
 assert.ok(!ui.includes('detail.textContent = `${summary.detail} · 判讀門檻'), 'engineering threshold text must not be appended to the visible product summary');
 assert.ok(!ui.includes('panel.title = `雨區判讀門檻'), 'engineering threshold tooltip must not bypass the explicit info disclosure');
 assert.ok(!ui.includes('fitBounds'), 'rain-area summary must not change map viewport');
@@ -150,9 +156,10 @@ assert.ok(smoke.includes("'./rain-map-area-summary.js'"), 'rain-area summary is 
 assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'rain-area summary must be isolated from the Rain Home critical module graph');
 assert.ok(sw.includes("'./js/forecast-map-spatial.js'"), 'spatial analyzer missing from PWA app shell inventory');
 assert.ok(sw.includes("'./js/rain-map-area-summary.js'"), 'spatial summary UI missing from PWA app shell inventory');
+assert.ok(sw.includes("'./js/forecast-map-analysis-scope.js'"), 'analysis scope store missing from PWA app shell inventory');
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 45, `Forecast Map regional v2.1 requires PWA generation at least pwa45, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 47, `Forecast Map Nearby v2 requires PWA generation at least pwa47, got pwa${shellVersion[1]}`);
 
-console.log('Forecast rain-area regional v2.1 contribution + geometry validation passed');
+console.log('Forecast rain-area regional v2.1 + true Nearby radius validation passed');

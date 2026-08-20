@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const quick = readFileSync(new URL('../js/rain-map-quickviews.js', import.meta.url), 'utf8');
+const scopeStore = readFileSync(new URL('../js/forecast-map-analysis-scope.js', import.meta.url), 'utf8');
 const smoke = readFileSync(new URL('../js/forecast-map-smoke.js', import.meta.url), 'utf8');
 const serviceWorker = readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8');
 
@@ -23,10 +24,10 @@ for (const marker of [
   "activeMode === 'forecast'",
   "state.map?.invalidateSize?.({ pan:false, animate:false })",
   "applyView('regional', button, { animate:false })",
-  "rain:forecast-analysis-scope-change",
-  "notifyAnalysisScope('location')",
-  'notifyAnalysisScope(id)',
-  "activeScope = 'regional'",
+  "setForecastAnalysisScope('location', { forceNotify:true })",
+  'setForecastAnalysisScope(id, { forceNotify:true })',
+  'getForecastAnalysisScope()',
+  'resetForecastAnalysisScope({ notify:false })',
   'body.rain-home-v2.rain-map-view .radius-label{display:none!important}',
   "button.textContent = '← 預報'",
   'max-width:calc(100% - 96px)'
@@ -34,6 +35,14 @@ for (const marker of [
   assert.ok(quick.includes(marker), `quick-view marker missing: ${marker}`);
 }
 
+for (const marker of [
+  "let activeScope = 'regional'",
+  'getForecastAnalysisScope',
+  'setForecastAnalysisScope',
+  "rain:forecast-analysis-scope-change"
+]) assert.ok(scopeStore.includes(marker), `shared analysis-scope marker missing: ${marker}`);
+
+assert.ok(!quick.includes('let activeScope'), 'quick views must not keep a second analysis-scope state');
 assert.ok(!quick.includes("label:'全域'"), 'product quick views should prefer a regional orientation view over an engineering full-grid preset');
 assert.ok(!quick.includes("state.map.on?.('movestart'"), 'manual map pan must not clear the selected analysis scope');
 assert.ok(!quick.includes("state.map.on?.('zoomstart'"), 'manual map zoom must not clear the selected analysis scope');
@@ -45,8 +54,9 @@ assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => im
 
 const shellVersion = serviceWorker.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 46, `Context-aware Forecast Map requires PWA generation at least pwa46, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 47, `Race-safe context Forecast Map requires PWA generation at least pwa47, got pwa${shellVersion[1]}`);
 assert.ok(serviceWorker.includes("'./js/rain-map-quickviews.js'"), 'quick views are missing from the PWA app shell inventory');
 assert.ok(serviceWorker.includes("'./js/forecast-map-context-analysis.js'"), 'context analyzer is missing from the PWA app shell inventory');
+assert.ok(serviceWorker.includes("'./js/forecast-map-analysis-scope.js'"), 'analysis-scope store is missing from the PWA app shell inventory');
 
-console.log('Forecast Map context-aware quick-view validation passed');
+console.log('Forecast Map shared-scope quick-view validation passed');

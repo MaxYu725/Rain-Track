@@ -28,6 +28,8 @@ const MIN_PRODUCT_WET_CELLS = 2;
 const MIN_PRODUCT_CONTRIBUTION = 0.035;
 const SECONDARY_CONTRIBUTION = 0.12;
 const SECONDARY_RELATIVE_CONTRIBUTION = 0.65;
+const EARTH_RADIUS_KM = 6371.0088;
+const NEARBY_ZONE = Object.freeze({ key:'nearby', parent:null, label:'附近' });
 
 function blankStats(zone) {
   return {
@@ -46,9 +48,6 @@ function blankStats(zone) {
 }
 
 function zoneFor(lat, lon) {
-  // HK takes priority in the narrow border overlap with Shenzhen so the
-  // territory is not double counted. These are deliberately coarse product
-  // regions for weather orientation, not administrative-boundary claims.
   if (lat >= 22.15 && lat <= 22.56 && lon >= 113.82 && lon <= 114.50) return RAIN_AREA_ZONES.hongKong;
   if (lat >= 22.52 && lat <= 22.90 && lon >= 113.72 && lon <= 114.65) return RAIN_AREA_ZONES.shenzhen;
   if (lat >= 21.328 && lat < 22.15 && lon >= 112.956 && lon <= 115.291) return RAIN_AREA_ZONES.southSea;
@@ -85,6 +84,43 @@ function productZoneFor(lat, lon, parentZone) {
 function round(value, digits = 3) {
   const factor = 10 ** digits;
   return Math.round((Number(value) + Number.EPSILON) * factor) / factor;
+}
+
+function toRadians(value) {
+  return Number(value) * Math.PI / 180;
+}
+
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+function minimumStep(values) {
+  let step = Infinity;
+  for (let i = 1; i < values.length; i += 1) {
+    const delta = Math.abs(Number(values[i]) - Number(values[i - 1]));
+    if (Number.isFinite(delta) && delta > 0) step = Math.min(step, delta);
+  }
+  return Number.isFinite(step) ? step : 0;
+}
+
+function normalizeNearbyConfig(nearby, latitudes, longitudes) {
+  const lat = Number(nearby?.lat);
+  const lon = Number(nearby?.lon);
+  const radiusKm = Number(nearby?.radiusKm);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(radiusKm) || radiusKm <= 0) return null;
+  const latHalfKm = minimumStep(latitudes) * 111.32 / 2;
+  const lonHalfKm = minimumStep(longitudes) * 111.32 * Math.max(0.1, Math.cos(toRadians(lat))) / 2;
+  const cellPaddingKm = Math.hypot(latHalfKm, lonHalfKm);
+  return {
+    lat,
+    lon,
+    radiusKm,
+    sampleRadiusKm:radiusKm + cellPaddingKm
+  };
 }
 
 function finalizeStats(stats) {
@@ -165,14 +201,11 @@ function makeRegionalPresentation(headline, productZones) {
   const regionalLabel = combine
     ? `雨區主要在${first.label}及${second.label}`
     : `雨區較集中在${first.label}`;
-  // Percentages remain within-zone affected share. Ranking above is based on
-  // contribution to the whole wet field so a small zone cannot dominate only
-  // because a large fraction of that small zone is wet.
   const regionalDetail = ranked.slice(0, 3).map(zone => `${zone.label} ${percentage(zone.wetShare)}`).join(' · ');
   return { regionalLabel, regionalDetail };
 }
 
-export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA_THRESHOLD_MM } = {}) {
+export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA_THRESHOLD_MM, nearby = null } = {}) {
   const latitudes = grid?.latitudes;
   const longitudes = grid?.longitudes;
   const values = frame?.values;
@@ -181,6 +214,8 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
   if (!Array.isArray(values) || values.length !== latitudes.length * longitudes.length) return null;
   if (!Number.isFinite(threshold) || threshold < 0) return null;
 
+  const nearbyConfig = normalizeNearbyConfig(nearby, latitudes, longitudes);
+  const mutableNearby = nearbyConfig ? blankStats(NEARBY_ZONE) : null;
   const mutable = {
     hongKong:blankStats(RAIN_AREA_ZONES.hongKong),
     shenzhen:blankStats(RAIN_AREA_ZONES.shenzhen),
@@ -206,8 +241,12 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
       const stats = mutable[zone.key];
       const productZone = productZoneFor(lat, lon, zone);
       const productStats = productZone ? mutableProduct[productZone.key] : null;
+      const inNearby = nearbyConfig
+        ? distanceKm(nearbyConfig.lat, nearbyConfig.lon, lat, lon) <= nearbyConfig.sampleRadiusKm
+        : false;
       stats.cellCount += 1;
       if (productStats) productStats.cellCount += 1;
+      if (inNearby) mutableNearby.cellCount += 1;
       maxMm = Math.max(maxMm, value);
       if (value < threshold) continue;
       stats.wetCellCount += 1;
@@ -217,6 +256,11 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
         productStats.wetCellCount += 1;
         productStats.sumMm += value;
         productStats.maxMm = Math.max(productStats.maxMm, value);
+      }
+      if (inNearby) {
+        mutableNearby.wetCellCount += 1;
+        mutableNearby.sumMm += value;
+        mutableNearby.maxMm = Math.max(mutableNearby.maxMm, value);
       }
       totalWetCellCount += 1;
       totalWetMm += value;
@@ -228,6 +272,13 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
 
   const zones = Object.fromEntries(Object.entries(mutable).map(([key, stats]) => [key, addContribution(finalizeStats(stats), totalWetMm)]));
   const productZones = Object.fromEntries(Object.entries(mutableProduct).map(([key, stats]) => [key, addContribution(finalizeStats(stats), totalWetMm)]));
+  const nearbyStats = nearbyConfig
+    ? {
+        ...finalizeStats(mutableNearby),
+        radiusKm:round(nearbyConfig.radiusKm, 2),
+        center:{ lat:round(nearbyConfig.lat, 5), lon:round(nearbyConfig.lon, 5) }
+      }
+    : null;
   const headline = makeLabel(zones, totalWetCellCount);
   const regional = makeRegionalPresentation(headline, productZones);
   const detail = `香港 ${percentage(zones.hongKong.wetShare)} · 深圳 ${percentage(zones.shenzhen.wetShare)} · 南面海域 ${percentage(zones.southSea.wetShare)}`;
@@ -245,6 +296,7 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
     centroid,
     maxMm:round(maxMm),
     zones,
-    productZones
+    productZones,
+    nearby:nearbyStats
   };
 }
