@@ -14,14 +14,15 @@ function ensureStyles() {
   const style = document.createElement('style');
   style.id = 'rain-map-area-summary-style';
   style.textContent = `
-    .rain-map-area-summary{position:absolute;z-index:1190;top:62px;left:12px;display:none;width:min(340px,calc(100% - 24px));padding:11px 13px;border:1px solid #39454b;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px);pointer-events:none}
+    .rain-map-area-summary{position:absolute;z-index:1190;top:62px;left:12px;display:none;width:min(460px,calc(100% - 24px));padding:10px 12px;border:1px solid #39454b;background:rgba(0,0,0,.9);box-shadow:0 3px 12px rgba(0,0,0,.4);backdrop-filter:blur(8px);pointer-events:none}
     .rain-map-area-summary.visible{display:block}
-    .rain-map-area-kicker{display:block;color:#8ca0a9;font-size:.64rem;font-weight:650;letter-spacing:.03em;font-variant-numeric:tabular-nums}
-    .rain-map-area-label{display:block;margin-top:4px;color:#f1f8fb;font-size:1rem;font-weight:680;line-height:1.35}
-    .rain-map-area-detail{display:block;margin-top:5px;color:#91a0a7;font-size:.67rem;line-height:1.45;font-variant-numeric:tabular-nums}
+    .rain-map-area-kicker{display:inline;color:#8ca0a9;font-size:.64rem;font-weight:650;letter-spacing:.03em;font-variant-numeric:tabular-nums}
+    .rain-map-area-kicker::after{content:' · '}
+    .rain-map-area-label{display:inline;color:#f1f8fb;font-size:.95rem;font-weight:680;line-height:1.35}
+    .rain-map-area-detail{display:block;margin-top:4px;color:#91a0a7;font-size:.66rem;line-height:1.4;font-variant-numeric:tabular-nums}
     @media(max-width:700px){
-      .rain-map-area-summary{top:50px;left:8px;width:min(330px,calc(100% - 16px));padding:7px 9px}
-      .rain-map-area-kicker{font-size:.61rem}.rain-map-area-label{margin-top:2px;font-size:.86rem;line-height:1.3}.rain-map-area-detail{margin-top:3px;font-size:.61rem;line-height:1.35}
+      .rain-map-area-summary{top:50px;left:8px;width:calc(100% - 16px);max-width:560px;padding:7px 9px}
+      .rain-map-area-kicker{font-size:.6rem}.rain-map-area-label{font-size:.82rem;line-height:1.3}.rain-map-area-detail{margin-top:3px;font-size:.6rem;line-height:1.32}
     }
   `;
   document.head.append(style);
@@ -70,7 +71,7 @@ function syncSummary(snapshot = getForecastMapRuntimeSnapshot()) {
   if (label) label.textContent = summary.label;
   if (detail) detail.textContent = summary.detail;
   panel.dataset.rainAreaStatus = summary.status || '';
-  panel.title = `雨區判讀門檻 ≥ ${summary.thresholdMm} mm / 30 min`;
+  panel.removeAttribute('title');
 }
 
 function initRainAreaSummary() {
