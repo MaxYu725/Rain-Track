@@ -77,9 +77,9 @@ assert.ok(!radarEntry.includes('fetchRadarFrames'), 'Radar entry must not become
 
 assert.ok(!pwa.includes('hadControllerAtStart'), 'background controller changes must not force reload');
 assert.ok(pwa.includes("if (!updateInProgress) return;\n    reloadForNewController();"), 'PWA reload must require explicit update application');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa57'/);
-assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa57 must remain zero-prefetch');
-assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa57 install must remain zero-prefetch');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa58'/);
+assert.ok(!sw.includes('const CORE_SHELL = ['), 'pwa58 must remain zero-prefetch');
+assert.ok(sw.includes('event.waitUntil(self.skipWaiting())'), 'pwa58 install must remain zero-prefetch');
 assert.ok(sw.includes('navigationNetworkFirst(request)'), 'navigation must prefer the live network');
 assert.ok(sw.includes('shellAssetNetworkFirst(request)'), 'same-origin assets must prefer the live network');
 assert.ok(sw.includes("fetch(request, { cache:'no-store' })"), 'shell network fetches must bypass stale HTTP cache');
@@ -91,4 +91,4 @@ assert.ok(sw.includes("'./js/radar-analysis-image.js'"), 'shared Radar image ana
 assert.ok(sw.includes("'./js/radar-entry.js'"), 'Radar entry must stay in the PWA dependency inventory');
 assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"), 'Radar analysis runtime must stay in the PWA dependency inventory');
 
-console.log('Boot isolation + optional Rain Home observed Radar/chart polish + Radar current-frame analysis + pwa57 resilience PASS');
+console.log('Boot isolation + optional Rain Home Now + Next/chart polish + Radar current-frame analysis + pwa58 resilience PASS');
