@@ -5,7 +5,7 @@ import {
   buildSteppedIntensityStops,
   rainfallIntensityStyle
 } from '../js/rain-home-chart-intensity.js';
-import { scrollPixelsToSvgUnits } from '../js/rain-home-chart-fixed-y.js';
+import { axisLabelCenterPx } from '../js/rain-home-chart-fixed-y.js';
 
 const source = readFileSync('js/rain-home-chart-intensity.js', 'utf8');
 const fixedYSource = readFileSync('js/rain-home-chart-fixed-y.js', 'utf8');
@@ -32,9 +32,9 @@ assert.equal(stops.at(-1).offset, 1, 'gradient must extend the final point colou
 const duplicateOffsets = stops.filter((stop, index) => index > 0 && stop.offset === stops[index - 1].offset);
 assert.ok(duplicateOffsets.length >= 3, 'adjacent point bands must change colour at midpoint boundaries instead of blending arbitrary hues');
 
-assert.equal(scrollPixelsToSvgUnits(0, 860, 700), 0, 'zero horizontal scroll must not move the Y axis');
-assert.ok(Math.abs(scrollPixelsToSvgUnits(200, 860, 700) - (200 * 700 / 860)) < 1e-9, 'Y-axis compensation must convert CSS scroll pixels through the live SVG scale');
-assert.equal(scrollPixelsToSvgUnits(200, 0, 700), 0, 'invalid rendered width must fail soft');
+assert.equal(axisLabelCenterPx(100, 20, 40), 70, 'gutter labels must preserve the rendered SVG label centre');
+assert.equal(axisLabelCenterPx(40, 0, 40), 0, 'zero-height labels at chart top must remain aligned');
+assert.equal(axisLabelCenterPx(Number.NaN, 20, 40), 0, 'invalid label geometry must fail soft');
 
 for (const marker of [
   "const CHART_MIN_WIDTH_PX = 840",
@@ -52,15 +52,19 @@ for (const marker of [
 
 for (const marker of [
   "const CHART_SELECTOR = '.rain-home-chart-scroll .rain-home-chart'",
-  "const FIXED_LABEL_SELECTOR = '.rain-home-axis-label'",
-  "chart.dataset.rainHomeFixedYAxis = '1'",
-  "label.dataset.rainHomeFixedYLabel = '1'",
-  "viewport.addEventListener('scroll'",
-  'scrollPixelsToSvgUnits(binding.viewport.scrollLeft, renderedWidth, viewBoxWidth(binding.chart))',
-  "label.setAttribute('transform', transform)",
-  'paint-order:stroke fill',
+  "const AXIS_LABEL_SELECTOR = '.rain-home-axis-label'",
+  'const GUTTER_WIDTH_PX = 48',
+  "stage.className = 'rain-home-chart-stage'",
+  "gutter.className = 'rain-home-chart-y-gutter'",
+  "clone.className = 'rain-home-chart-y-gutter-label'",
+  "chart.dataset.rainHomeFixedYAxis = '2'",
+  '.rain-home-chart[data-rain-home-fixed-y-axis="2"] .rain-home-axis-label{opacity:0}',
+  'label.removeAttribute(\'transform\')',
+  'axisLabelCenterPx(rect.top, rect.height, chartRect.top)',
+  'binding.gutter.style.height',
+  'new ResizeObserver(() => scheduleSync(binding))',
   "MutationObserver(() => enhanceCurrentChart())"
-]) assert.ok(fixedYSource.includes(marker), `Rain Home fixed Y-axis marker missing: ${marker}`);
+]) assert.ok(fixedYSource.includes(marker), `Rain Home Y-axis gutter marker missing: ${marker}`);
 
 for (const forbidden of [
   'fetchSwirlsPointSeries',
@@ -70,14 +74,21 @@ for (const forbidden of [
   '/api/rain/swirls'
 ]) {
   assert.ok(!source.includes(forbidden), `chart intensity enhancement must not become a second weather client: ${forbidden}`);
-  assert.ok(!fixedYSource.includes(forbidden), `fixed Y-axis polish must remain presentation-only: ${forbidden}`);
+  assert.ok(!fixedYSource.includes(forbidden), `Y-axis gutter must remain presentation-only: ${forbidden}`);
 }
 
-assert.ok(!/\.scrollLeft\s*=/.test(fixedYSource), 'fixed Y-axis polish must never change the user chart scroll position');
-assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
-assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'fixed Y axis must load as a best-effort optional Home enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa55'/);
-assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'chart intensity must be included in the PWA dependency inventory');
-assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'fixed Y-axis polish must be included in the PWA dependency inventory');
+for (const forbidden of [
+  "viewport.addEventListener('scroll'",
+  'scrollPixelsToSvgUnits',
+  "label.setAttribute('transform'",
+  'paint-order:stroke fill'
+]) assert.ok(!fixedYSource.includes(forbidden), `Y-axis gutter must not use the old scroll-translation approach: ${forbidden}`);
+assert.ok(!/\.scrollLeft\s*=/.test(fixedYSource), 'Y-axis gutter must never change the user chart scroll position');
 
-console.log('Rain Home fixed intensity bands + horizontal chart + fixed Y axis + pwa55 regression gate PASS');
+assert.ok(smoke.includes("'./rain-home-chart-intensity.js'"), 'chart intensity must load as a best-effort optional Home enhancement');
+assert.ok(smoke.includes("'./rain-home-chart-fixed-y.js'"), 'Y-axis gutter must load as a best-effort optional Home enhancement');
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa56'/);
+assert.ok(sw.includes("'./js/rain-home-chart-intensity.js'"), 'chart intensity must be included in the PWA dependency inventory');
+assert.ok(sw.includes("'./js/rain-home-chart-fixed-y.js'"), 'Y-axis gutter must be included in the PWA dependency inventory');
+
+console.log('Rain Home fixed intensity bands + horizontal chart + Y-axis gutter v2 + pwa56 regression gate PASS');
