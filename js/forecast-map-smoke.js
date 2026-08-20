@@ -7,6 +7,7 @@ import './rain-home-shell.js';
 const OPTIONAL_MAP_MODULES = [
   './radar-entry.js',
   './radar-settings-mirror.js',
+  './radar-analysis-runtime.js',
   './rain-map-quickviews.js',
   './rain-map-area-summary.js'
 ];

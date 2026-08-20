@@ -48,6 +48,7 @@ jobs:
           node --check scripts/benchmark-swirls-series.mjs
           node --check scripts/validate-forecast-playback-settings.mjs
           node --check scripts/validate-radar-playback-v2.mjs
+          node --check scripts/validate-radar-analysis-v1.mjs
           node --check scripts/validate-rain-home.mjs
           node --check scripts/validate-rain-map-quickviews.mjs
           node --check scripts/validate-rain-home-point-explorer.mjs
@@ -83,6 +84,8 @@ jobs:
         run: node scripts/validate-forecast-playback-settings.mjs
       - name: Validate Radar commit-based playback and direct controls
         run: node scripts/validate-radar-playback-v2.mjs
+      - name: Validate Radar client-side analysis
+        run: node scripts/validate-radar-analysis-v1.mjs
       - name: Validate Rain Home location-first UI
         run: node scripts/validate-rain-home.mjs
       - name: Validate forecast map quick views
