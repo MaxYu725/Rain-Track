@@ -1,9 +1,9 @@
-const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa41';
+const CACHE_VERSION = 'point-rain-pwa-v1.6.4-pwa42';
 const APP_CACHE = `${CACHE_VERSION}-app`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const TILE_CACHE = `${CACHE_VERSION}-tiles`;
 
-// Full local dependency inventory for CI and offline diagnostics. pwa41 does
+// Full local dependency inventory for CI and offline diagnostics. pwa42 does
 // not prefetch this list during install: the live page gets network priority,
 // and successfully used same-origin assets are cached progressively.
 const APP_SHELL = [
