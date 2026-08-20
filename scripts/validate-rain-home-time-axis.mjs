@@ -45,7 +45,7 @@ assert.ok(home.includes('const xLeads = [0,30,60,90,120]'));
 assert.ok(home.includes('xLead(point.leadMinutes)'));
 assert.ok(home.includes('rain-home-axis-clock'));
 assert.ok(home.includes('rain-home-axis-lead'));
-assert.ok(home.includes("<tspan class=\"rain-home-axis-lead\" x=\"${x}\" dy=\"13\">基準</tspan>"), 'x=0 must be labeled as the SWIRLS run basis, not literal now');
+assert.ok(home.includes("<tspan class=\"rain-home-axis-lead\" x=\"${x}\" dy=\"15\">基準</tspan>"), 'x=0 must be labeled as the SWIRLS run basis, not literal now');
 assert.ok(home.includes('rain-home-unavailable-zone'));
 assert.ok(home.includes('`預報由 ${firstAvailableClock} 開始`'));
 assert.ok(home.includes('const axisPoint = points.find(point => Number(point.leadMinutes) === lead)'));
@@ -65,8 +65,16 @@ assert.ok(home.includes('chartMarkup(data.points, data.runTime, { seriesComplete
 assert.ok(!home.includes('index / Math.max(1, points.length - 1)'), 'chart must not space samples by array index');
 assert.ok(!home.includes('firstWindowStart'), 'onset wording must not reuse the 30-minute rolling accumulation window');
 
+// Fifth-pass mobile chart readability invariants.
+assert.ok(home.includes('const height = 300'), 'Rain Home chart must use the taller fifth-pass geometry');
+assert.ok(home.includes('const pad = { left:42, right:12, top:18, bottom:60 }'), 'taller chart must preserve enough room for two-line time labels');
+assert.ok(home.includes('.rain-home-axis-label{font-size:14px}'), 'mobile Y-axis labels must be enlarged');
+assert.ok(home.includes('.rain-home-axis-clock{font-size:16px}'), 'mobile clock labels must be enlarged');
+assert.ok(home.includes('.rain-home-axis-lead{font-size:13px}'), 'mobile lead labels must be enlarged');
+assert.ok(home.includes('.rain-home-unavailable-label{display:none}'), 'mobile chart must hide the redundant in-plot first-forecast label');
+
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 36);
+assert.ok(Number(shellVersion[1]) >= 37);
 
-console.log('Rain Home true time-axis + nice ticks + human partial-gap gate PASS');
+console.log('Rain Home true time-axis + fifth-pass mobile chart readability gate PASS');
