@@ -35,6 +35,6 @@ assert.ok(home.includes('每點＝截至該時間的 30 分鐘累積預測雨量
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 34, `Rain Home visual hierarchy requires PWA generation at least pwa34, got pwa${shellVersion[1]}`);
+assert.ok(Number(shellVersion[1]) >= 35, `Rain Home human-language polish requires PWA generation at least pwa35, got pwa${shellVersion[1]}`);
 
 console.log('Rain Home 16-point explorer + interaction-only inspector validation passed');

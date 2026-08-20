@@ -45,9 +45,9 @@ assert.ok(home.includes('const xLeads = [0,30,60,90,120]'));
 assert.ok(home.includes('xLead(point.leadMinutes)'));
 assert.ok(home.includes('rain-home-axis-clock'));
 assert.ok(home.includes('rain-home-axis-lead'));
-assert.ok(home.includes('香港有效時間優先'));
-assert.ok(home.includes('首個預報點 +30'));
+assert.ok(home.includes("<tspan class=\"rain-home-axis-lead\" x=\"${x}\" dy=\"13\">基準</tspan>"), 'x=0 must be labeled as the SWIRLS run basis, not literal now');
 assert.ok(home.includes('rain-home-unavailable-zone'));
+assert.ok(home.includes('`預報由 ${firstAvailableClock} 開始`'));
 assert.ok(home.includes('const axisPoint = points.find(point => Number(point.leadMinutes) === lead)'));
 assert.ok(home.includes('axisPoint?.validTime || validTimeForLead(runTime, lead)'), 'missing major tick frames must still derive the true valid clock from runTime');
 assert.ok(home.includes('formatClock(firstWet.transitionStartValidTime)'));
@@ -58,11 +58,13 @@ assert.ok(home.includes('contiguousSegments(points)'), 'partial chart must split
 assert.ok(home.includes('缺失 frame 不會以直線跨接'), 'partial chart must explain visible gaps');
 assert.ok(home.includes('rainfallScaleMax(peak)'), 'chart must use a rainfall-aware dynamic vertical scale');
 assert.ok(home.includes('if (!Number.isFinite(peak) || peak <= 0.2) return 0.3'), 'weak rain signals must not be flattened under a 1 mm ceiling');
+assert.ok(home.includes('if (yMax <= 0.5) return 0.1'), '0.5 mm scale must use human-readable 0.1 mm ticks');
+assert.ok(home.includes('rainfallTickValues(yMax, yStep)'), 'chart must derive nice tick values from the chosen scale');
 assert.ok(!home.includes('index / Math.max(1, points.length - 1)'), 'chart must not space samples by array index');
 assert.ok(!home.includes('firstWindowStart'), 'onset wording must not reuse the 30-minute rolling accumulation window');
 
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion, 'PWA shell version marker is missing');
-assert.ok(Number(shellVersion[1]) >= 34);
+assert.ok(Number(shellVersion[1]) >= 35);
 
-console.log('Rain Home true time-axis + dynamic scale + partial gap gate PASS');
+console.log('Rain Home true time-axis + nice ticks + partial gap gate PASS');
