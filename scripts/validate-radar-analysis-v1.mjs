@@ -101,9 +101,9 @@ for (const forbidden of ['summarizeRadarHistory', 'trendDirection(', 'bearingDir
 }
 
 assert.ok(smoke.includes("'./radar-analysis-runtime.js'"), 'Radar analysis must remain an optional enhancement');
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa59'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa60'/);
 assert.ok(sw.includes("'./js/radar-analysis.js'"));
 assert.ok(sw.includes("'./js/radar-analysis-image.js'"));
 assert.ok(sw.includes("'./js/radar-analysis-runtime.js'"));
 
-console.log('Radar current-frame summary + shared image analysis + nearby radius + pwa59 regression gate PASS');
+console.log('Radar current-frame summary + shared image analysis + nearby radius + pwa60 regression gate PASS');
