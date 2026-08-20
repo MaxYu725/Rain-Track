@@ -5,6 +5,7 @@ import {
   toggleForecastPlayback
 } from './forecast-map-timeline-core.js';
 import { getForecastMapFrameSummaries, getForecastMapRuntimeSnapshot } from './forecast-map-runtime.js';
+import { state } from './state.js';
 
 export {
   getForecastPlaybackState,
@@ -100,8 +101,7 @@ function syncMobileScrubber() {
 }
 
 function refreshForecastMapViewport() {
-  const map = window?.rainMapState?.map;
-  map?.invalidateSize?.({ pan:false, animate:false });
+  state.map?.invalidateSize?.({ pan:false, animate:false });
 }
 
 function initForecastTimelinePolish() {
