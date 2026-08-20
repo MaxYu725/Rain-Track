@@ -98,6 +98,10 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
     other:blankStats(RAIN_AREA_ZONES.other)
   };
   let totalWetCellCount = 0;
+  let totalWetMm = 0;
+  let weightedLat = 0;
+  let weightedLon = 0;
+  let centroidWeight = 0;
   let maxMm = 0;
 
   for (let row = 0; row < latitudes.length; row += 1) {
@@ -116,18 +120,27 @@ export function summarizeForecastRainArea(frame, grid, { thresholdMm = RAIN_AREA
       stats.sumMm += value;
       stats.maxMm = Math.max(stats.maxMm, value);
       totalWetCellCount += 1;
+      totalWetMm += value;
+      centroidWeight += value;
+      weightedLat += lat * value;
+      weightedLon += lon * value;
     }
   }
 
   const zones = Object.fromEntries(Object.entries(mutable).map(([key, stats]) => [key, finalizeStats(stats)]));
   const headline = makeLabel(zones, totalWetCellCount);
   const detail = `香港 ${percentage(zones.hongKong.wetShare)} · 深圳 ${percentage(zones.shenzhen.wetShare)} · 南面海域 ${percentage(zones.southSea.wetShare)}`;
+  const centroid = centroidWeight > 0
+    ? { lat:round(weightedLat / centroidWeight, 4), lon:round(weightedLon / centroidWeight, 4) }
+    : null;
 
   return {
     ...headline,
     detail,
     thresholdMm:threshold,
     totalWetCellCount,
+    totalWetMm:round(totalWetMm),
+    centroid,
     maxMm:round(maxMm),
     zones
   };
