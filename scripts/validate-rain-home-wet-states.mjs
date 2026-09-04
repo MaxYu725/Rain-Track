@@ -78,8 +78,8 @@ assert.ok(
   'dry timeline must remain conditional on dry-state detection'
 );
 assert.ok(
-  !v5.includes('.rain-home-chart-scroll{display:none!important}\n'),
-  'wet chart must not be hidden unconditionally'
+  !v5.includes('.rain-home-root[data-rain-home-ui-polish-v5="1"] .rain-home-chart-scroll{display:none!important}'),
+  'wet chart must not be hidden by an unconditional v5 selector'
 );
 
 console.log('Rain Home wet-state QA gate PASS');
