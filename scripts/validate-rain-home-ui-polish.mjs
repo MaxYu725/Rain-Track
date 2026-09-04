@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  forecastDisplayRatio,
   observedRadarLooksDry,
   splitNowNextTimingText
 } from '../js/rain-home-ui-polish.js';
@@ -18,16 +19,32 @@ assert.equal(observedRadarLooksDry(['rain-home-observed-segment level-0', 'rain-
 assert.equal(observedRadarLooksDry(['rain-home-observed-segment level-0', 'rain-home-observed-segment level-2']), false);
 assert.equal(observedRadarLooksDry([]), false);
 
+assert.equal(forecastDisplayRatio(30), 0, '+30 must become the visible left edge');
+assert.equal(forecastDisplayRatio(60), 1 / 3, '+60 must sit one third across the visible forecast span');
+assert.equal(forecastDisplayRatio(90), 2 / 3, '+90 must sit two thirds across the visible forecast span');
+assert.equal(forecastDisplayRatio(120), 1, '+120 must become the visible right edge');
+assert.equal(forecastDisplayRatio(75, { firstLeadMinutes:30, horizonMinutes:120 }), 0.5);
+assert.equal(forecastDisplayRatio(30, { firstLeadMinutes:120, horizonMinutes:120 }), null, 'invalid span must fail soft');
+
 for (const marker of [
-  'data-rain-home-ui-polish="2"',
+  'data-rain-home-ui-polish="3"',
+  '.is-dry-now-next .rain-home-detail{display:none}',
+  "verdict.textContent = '暫無明顯降雨'",
   '.rain-home-now-next-item',
+  "const nextText = dry ? '未見明顯回波'",
   '.rain-home-observed.is-dry .rain-home-observed-track',
   '.rain-home-chart-scroll{width:100%;overflow:visible!important',
   '.rain-home-chart-scroll .rain-home-chart{display:block;width:100%!important',
   '.rain-home-chart-scroll-hint{display:none!important}',
   '.rain-home-chart-y-gutter{display:none!important}',
   '.rain-home-axis-label{opacity:1!important}',
-  "String(label.textContent || '').trim() === '基準'",
+  "chart.dataset.rainHomeForecastAxis === '3'",
+  'forecastDisplayRatio(leadMinutes',
+  "if (text === '基準')",
+  "text.match(/^\\+(\\d+)$/)",
+  "leadMinutes === firstLead ? 'start' : leadMinutes === horizon ? 'end' : 'middle'",
+  "chart.addEventListener('pointerdown'",
+  "nearest.hit.click()",
   "MutationObserver(schedulePolish)",
   "window.addEventListener('rain:location-change', schedulePolish)",
   "window.addEventListener('rain:refresh', schedulePolish)"
@@ -47,4 +64,4 @@ assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => im
 assert.ok(sw.includes("'./js/rain-home-ui-polish.js'"), 'Rain Home UI polish must be present in PWA dependency inventory');
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa61'/);
 
-console.log('Rain Home compact Now/Next + dry Radar + fit-width chart presentation gate PASS');
+console.log('Rain Home compact dry hero + concise Radar + full-width +30..+120 chart axis gate PASS');
