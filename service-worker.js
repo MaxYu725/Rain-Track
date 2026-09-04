@@ -44,6 +44,7 @@ const APP_SHELL = [
   './js/rain-home-chart-intensity.js',
   './js/rain-home-chart-fixed-y.js',
   './js/rain-home-observed-radar.js',
+  './js/rain-home-ui-polish.js',
   './js/rain-map-mode.js',
   './js/rain-map-mode-heavy.js',
   './js/rain-map-quickviews.js',
