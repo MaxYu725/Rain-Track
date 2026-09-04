@@ -8,6 +8,7 @@ import {
 } from '../js/rain-home-ui-polish.js';
 
 const source = readFileSync('js/rain-home-ui-polish.js', 'utf8');
+const v5 = readFileSync('js/rain-home-ui-polish-v5.js', 'utf8');
 const smoke = readFileSync('js/forecast-map-smoke.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
@@ -60,18 +61,37 @@ for (const marker of [
   "window.addEventListener('rain:refresh', schedulePolish)"
 ]) assert.ok(source.includes(marker), `Rain Home UI polish marker missing: ${marker}`);
 
-for (const forbidden of [
-  "from './api.js'",
-  'fetchSwirlsPointSeries',
-  'fetchRadarFrames',
-  'fetch(',
-  '/api/rain/',
-  '/api/radar/'
-]) assert.ok(!source.includes(forbidden), `Rain Home UI polish must remain presentation-only: ${forbidden}`);
+for (const marker of [
+  "import './rain-home-ui-polish.js'",
+  'data-rain-home-ui-polish-v5="1"',
+  '.is-dry-chart .rain-home-intensity-legend',
+  '.is-dry-chart .rain-home-chart-scroll{display:none!important}',
+  '.rain-home-dry-timeline-points',
+  'grid-template-columns:repeat(16,minmax(0,1fr))',
+  "const majorLeads = [30, 60, 90, 120]",
+  "row.hit.click()",
+  'body.rain-home-v2:not(.rain-map-view) #locate-button{display:none!important}',
+  '.rain-home-location-coord{display:none}',
+  "new MutationObserver(schedule).observe(content",
+  "window.addEventListener('rain:location-change', schedule)",
+  "window.addEventListener('rain:refresh', schedule)"
+]) assert.ok(v5.includes(marker), `Rain Home v5 polish marker missing: ${marker}`);
+
+for (const [label, text] of [['v4', source], ['v5', v5]]) {
+  for (const forbidden of [
+    "from './api.js'",
+    'fetchSwirlsPointSeries',
+    'fetchRadarFrames',
+    'fetch(',
+    '/api/rain/',
+    '/api/radar/'
+  ]) assert.ok(!text.includes(forbidden), `Rain Home ${label} polish must remain presentation-only: ${forbidden}`);
+}
 
 assert.ok(smoke.includes("'./rain-home-ui-polish.js'"), 'Rain Home UI polish must load as a best-effort optional enhancement');
+assert.ok(smoke.includes("'./rain-home-ui-polish-v5.js'"), 'Rain Home v5 dry timeline polish must load as a best-effort optional enhancement');
 assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => import(path)))'), 'UI polish must remain isolated behind optional module loading');
 assert.ok(sw.includes("'./js/rain-home-ui-polish.js'"), 'Rain Home UI polish must be present in PWA dependency inventory');
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa61'/);
 
-console.log('Rain Home final mobile proportions + compact dry chart + full-width +30..+120 axis gate PASS');
+console.log('Rain Home dry timeline + simplified mobile location + full-width +30..+120 axis gate PASS');
