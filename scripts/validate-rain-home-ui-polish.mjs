@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  forecastAmountsLookDry,
   forecastDisplayRatio,
   observedRadarLooksDry,
   splitNowNextTimingText
@@ -26,25 +27,34 @@ assert.equal(forecastDisplayRatio(120), 1, '+120 must become the visible right e
 assert.equal(forecastDisplayRatio(75, { firstLeadMinutes:30, horizonMinutes:120 }), 0.5);
 assert.equal(forecastDisplayRatio(30, { firstLeadMinutes:120, horizonMinutes:120 }), null, 'invalid span must fail soft');
 
+assert.equal(forecastAmountsLookDry([0, 0, 0]), true, 'all-zero forecast should use the compact dry chart');
+assert.equal(forecastAmountsLookDry([0, 0.04, 0]), true, 'sub-display-threshold rain may remain in compact dry mode');
+assert.equal(forecastAmountsLookDry([0, 0.05, 0]), false, 'visible rain must preserve full chart height');
+assert.equal(forecastAmountsLookDry([]), false, 'missing forecast amounts must fail soft');
+
 for (const marker of [
-  'data-rain-home-ui-polish="3"',
+  'data-rain-home-ui-polish="4"',
   '.is-dry-now-next .rain-home-detail{display:none}',
   "verdict.textContent = '暫無明顯降雨'",
   '.rain-home-now-next-item',
-  "const nextText = dry ? '未見明顯回波'",
-  '.rain-home-observed.is-dry .rain-home-observed-track',
+  "未見明顯回波` : summary.dataset.rainHomeUiOriginalSummary",
+  '.rain-home-observed.is-dry .rain-home-observed-times{display:none}',
   '.rain-home-chart-scroll{width:100%;overflow:visible!important',
   '.rain-home-chart-scroll .rain-home-chart{display:block;width:100%!important',
-  '.rain-home-chart-scroll-hint{display:none!important}',
   '.rain-home-chart-y-gutter{display:none!important}',
-  '.rain-home-axis-label{opacity:1!important}',
-  "chart.dataset.rainHomeForecastAxis === '3'",
+  "chart.dataset.rainHomeForecastAxis = '4'",
   'forecastDisplayRatio(leadMinutes',
   "if (text === '基準')",
   "text.match(/^\\+(\\d+)$/)",
   "leadMinutes === firstLead ? 'start' : leadMinutes === horizon ? 'end' : 'middle'",
   "chart.addEventListener('pointerdown'",
   "nearest.hit.click()",
+  'const targetHeight = 210',
+  'const targetBottom = 128',
+  "chart.dataset.rainHomeDryChart = '1'",
+  "help.textContent = '點按時間查看雨量'",
+  'body.rain-home-v2:not(.rain-map-view) .header-top-bar',
+  '.global-controls .radar-entry-button',
   "MutationObserver(schedulePolish)",
   "window.addEventListener('rain:location-change', schedulePolish)",
   "window.addEventListener('rain:refresh', schedulePolish)"
@@ -64,4 +74,4 @@ assert.ok(smoke.includes('Promise.allSettled(OPTIONAL_MAP_MODULES.map(path => im
 assert.ok(sw.includes("'./js/rain-home-ui-polish.js'"), 'Rain Home UI polish must be present in PWA dependency inventory');
 assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa61'/);
 
-console.log('Rain Home compact dry hero + concise Radar + full-width +30..+120 chart axis gate PASS');
+console.log('Rain Home final mobile proportions + compact dry chart + full-width +30..+120 axis gate PASS');
