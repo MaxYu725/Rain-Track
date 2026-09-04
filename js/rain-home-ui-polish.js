@@ -149,7 +149,8 @@ function polishRadar(root) {
   const summary = observed.querySelector('.rain-home-observed-summary');
   if (!summary) return;
   if (!summary.dataset.rainHomeUiOriginalSummary) summary.dataset.rainHomeUiOriginalSummary = summary.textContent || '';
-  summary.textContent = dry ? '未見明顯回波' : summary.dataset.rainHomeUiOriginalSummary;
+  const nextText = dry ? '未見明顯回波' : summary.dataset.rainHomeUiOriginalSummary;
+  if (summary.textContent !== nextText) summary.textContent = nextText;
 }
 
 function xForLead(leadMinutes, plotLeft, plotWidth, firstLead, horizon) {
