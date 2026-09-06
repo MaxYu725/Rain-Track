@@ -7,8 +7,20 @@ import {
   rainfallIntensityStyle
 } from '../js/rain-home-chart-intensity.js';
 import { forecastAmountsLookDry } from '../js/rain-home-ui-polish.js';
+import {
+  RAIN_HOME_LIGHT_RAIN_THRESHOLD_MM,
+  RAIN_HOME_SIGNIFICANT_RAIN_THRESHOLD_MM,
+  classifyRainHomeFutureAmounts
+} from '../js/rain-home-ui-polish-v5.js';
 
 assert.deepEqual(RAIN_HOME_INTENSITY_THRESHOLDS, [0.5, 2, 5, 10]);
+assert.equal(RAIN_HOME_LIGHT_RAIN_THRESHOLD_MM, 0.01);
+assert.equal(RAIN_HOME_SIGNIFICANT_RAIN_THRESHOLD_MM, 0.2);
+assert.equal(classifyRainHomeFutureAmounts([]), 'unknown');
+assert.equal(classifyRainHomeFutureAmounts([0, 0.009, 0]), 'dry');
+assert.equal(classifyRainHomeFutureAmounts([0, 0.01, 0.04]), 'light-rain');
+assert.equal(classifyRainHomeFutureAmounts([0, 0.05, 0.19]), 'light-rain');
+assert.equal(classifyRainHomeFutureAmounts([0, 0.2, 0.12]), 'rain');
 
 const scenarios = [
   {
@@ -55,7 +67,7 @@ for (const scenario of scenarios) {
 }
 
 assert.equal(forecastAmountsLookDry(new Array(16).fill(0)), true, 'all-zero series must stay on the compact dry timeline');
-assert.equal(forecastAmountsLookDry([0, 0.04, 0]), true, 'sub-display-threshold series may stay compact');
+assert.equal(forecastAmountsLookDry([0, 0.04, 0]), true, 'sub-display-threshold light rain may stay on the compact timeline');
 assert.equal(forecastAmountsLookDry([0, 0.05, 0]), false, '0.05 mm must switch back to the quantitative wet chart');
 
 const stops = buildSteppedIntensityStops([
@@ -81,5 +93,8 @@ assert.ok(
   !v5.includes('.rain-home-root[data-rain-home-ui-polish-v5="1"] .rain-home-chart-scroll{display:none!important}'),
   'wet chart must not be hidden by an unconditional v5 selector'
 );
+assert.ok(v5.includes("verdict.textContent = '接下來有小雨'"), 'light rain must not be collapsed into the dry headline');
+assert.ok(v5.includes("copy.textContent = 'SWIRLS 接下來有小雨'"), 'Now/Next copy must expose the light-rain state');
+assert.ok(v5.includes('button.dataset.lightRain'), 'compact timeline must mark sub-display-threshold light-rain points');
 
-console.log('Rain Home wet-state QA gate PASS');
+console.log('Rain Home wet-state + light-rain semantics QA gate PASS');
