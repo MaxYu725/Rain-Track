@@ -1,5 +1,20 @@
 import './rain-home-ui-polish.js';
 
+export const RAIN_HOME_LIGHT_RAIN_THRESHOLD_MM = 0.01;
+export const RAIN_HOME_SIGNIFICANT_RAIN_THRESHOLD_MM = 0.2;
+
+export function classifyRainHomeFutureAmounts(values, {
+  lightRainThresholdMm = RAIN_HOME_LIGHT_RAIN_THRESHOLD_MM,
+  significantRainThresholdMm = RAIN_HOME_SIGNIFICANT_RAIN_THRESHOLD_MM
+} = {}) {
+  const rows = (Array.isArray(values) ? values : []).map(Number).filter(Number.isFinite);
+  if (!rows.length) return 'unknown';
+  const peak = Math.max(...rows);
+  if (peak >= Number(significantRainThresholdMm)) return 'rain';
+  if (peak >= Number(lightRainThresholdMm)) return 'light-rain';
+  return 'dry';
+}
+
 function injectStyles() {
   if (document.getElementById('rain-home-ui-polish-v5-style')) return;
   const style = document.createElement('style');
@@ -13,6 +28,7 @@ function injectStyles() {
     .rain-home-dry-timeline-points::before{content:"";position:absolute;left:2px;right:2px;top:50%;height:2px;transform:translateY(-50%);background:#148dc5;opacity:.9}
     .rain-home-dry-timeline-point{position:relative;z-index:1;width:100%;height:34px;padding:0;border:0;background:transparent;color:inherit}
     .rain-home-dry-timeline-point::before{content:"";position:absolute;left:50%;top:50%;width:7px;height:7px;transform:translate(-50%,-50%);border:2px solid #1ba1e2;border-radius:50%;background:#061018}
+    .rain-home-root[data-rain-home-ui-polish-v5="1"].is-light-rain .rain-home-dry-timeline-point[data-light-rain="1"]::before{background:#1ba1e2;box-shadow:0 0 0 2px rgba(27,161,226,.10)}
     .rain-home-dry-timeline-point.selected::before{width:11px;height:11px;background:#1ba1e2;box-shadow:0 0 0 3px rgba(27,161,226,.12)}
     .rain-home-dry-timeline-labels{position:relative;height:34px;margin-top:0;color:#76858c;font-variant-numeric:tabular-nums}
     .rain-home-dry-timeline-label{position:absolute;top:0;display:flex;flex-direction:column;gap:1px;white-space:nowrap;font-size:.61rem;line-height:1.15}
@@ -22,6 +38,7 @@ function injectStyles() {
     .rain-home-dry-timeline-label[data-edge="end"]{right:0;text-align:right}
     .rain-home-root[data-rain-home-ui-polish-v5="1"].is-dry-chart .rain-home-chart-wrap{padding-top:7px}
     .rain-home-root[data-rain-home-ui-polish-v5="1"].is-dry-chart .rain-home-chart-help{margin-top:1px}
+    .rain-home-root[data-rain-home-ui-polish-v5="1"].is-light-rain .rain-home-detail{display:none!important}
 
     @media(max-width:700px){
       body.rain-home-v2:not(.rain-map-view) #locate-button{display:none!important}
@@ -38,6 +55,12 @@ function injectStyles() {
 function clockFromHit(hit) {
   const label = String(hit?.getAttribute('aria-label') || '');
   return label.match(/\b\d{1,2}:\d{2}\b/)?.[0] || '';
+}
+
+function amountFromHit(hit) {
+  const label = String(hit?.getAttribute('aria-label') || '');
+  const match = label.match(/[，,]\s*([0-9]+(?:\.[0-9]+)?)\s*mm\s*\/\s*30\s*min/i);
+  return match ? Number(match[1]) : NaN;
 }
 
 function leadFromDot(dot) {
@@ -57,24 +80,64 @@ function syncSelection(timeline, chart) {
   });
 }
 
-function buildDryTimeline(root) {
+function forecastRows(root) {
   const chart = root.querySelector('.rain-home-chart');
-  const wrap = chart?.closest('.rain-home-chart-wrap');
-  if (!chart || !wrap || !root.classList.contains('is-dry-chart')) return;
-
+  if (!chart) return [];
   const hits = [...chart.querySelectorAll('[data-rain-home-point]')];
   const dots = [...chart.querySelectorAll('.rain-home-dot')];
-  if (!hits.length || hits.length !== dots.length) return;
-
-  const rows = hits.map((hit, index) => ({
+  if (!hits.length || hits.length !== dots.length) return [];
+  return hits.map((hit, index) => ({
     hit,
     dot:dots[index],
     clock:clockFromHit(hit),
+    amountMm:amountFromHit(hit),
     lead:leadFromDot(dots[index])
-  }));
-  if (rows.some(row => row.lead === null)) return;
+  })).filter(row => row.lead !== null && Number.isFinite(row.amountMm));
+}
 
-  const signature = rows.map(row => `${row.lead}:${row.clock}`).join('|');
+function setLightRainCopy(root, rows) {
+  const state = classifyRainHomeFutureAmounts(rows.map(row => row.amountMm));
+  const lightRain = state === 'light-rain';
+  root.classList.toggle('is-light-rain', lightRain);
+  if (!lightRain) return;
+
+  root.dataset.rainHomeNowNext = 'light-rain';
+  root.classList.remove('is-dry-now-next');
+
+  const verdict = root.querySelector('.rain-home-verdict');
+  if (verdict && verdict.textContent !== '接下來有小雨') verdict.textContent = '接下來有小雨';
+
+  const timing = root.querySelector('.rain-home-timing');
+  if (timing) {
+    const items = [...timing.querySelectorAll('.rain-home-now-next-item')];
+    if (items.length) {
+      const nextItem = items.find(item => item.querySelector('.rain-home-now-next-label')?.textContent?.trim() === '接下來');
+      const copy = nextItem?.querySelector('.rain-home-now-next-copy');
+      if (copy && copy.textContent !== 'SWIRLS 接下來有小雨') copy.textContent = 'SWIRLS 接下來有小雨';
+    } else {
+      const text = String(timing.textContent || '').trim();
+      const parts = text.split(/\s+·\s+/).filter(Boolean);
+      const next = parts.length >= 2 ? `${parts[0]} · SWIRLS 接下來有小雨` : 'SWIRLS 接下來有小雨';
+      if (text !== next) timing.textContent = next;
+    }
+  }
+
+  const subtitle = document.getElementById('mobile-title-sub');
+  if (subtitle) {
+    const text = String(subtitle.textContent || '').trim();
+    const location = text.split(/\s+·\s+/)[0] || '';
+    const next = location ? `${location} · 接下來有小雨` : '接下來有小雨';
+    if (text !== next) subtitle.textContent = next;
+  }
+}
+
+function buildDryTimeline(root, rows = forecastRows(root)) {
+  const chart = root.querySelector('.rain-home-chart');
+  const wrap = chart?.closest('.rain-home-chart-wrap');
+  if (!chart || !wrap || !root.classList.contains('is-dry-chart')) return;
+  if (!rows.length) return;
+
+  const signature = rows.map(row => `${row.lead}:${row.clock}:${row.amountMm}`).join('|');
   let timeline = wrap.querySelector('.rain-home-dry-timeline');
   if (!timeline) {
     timeline = document.createElement('div');
@@ -92,6 +155,7 @@ function buildDryTimeline(root) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'rain-home-dry-timeline-point';
+      button.dataset.lightRain = row.amountMm >= RAIN_HOME_LIGHT_RAIN_THRESHOLD_MM ? '1' : '0';
       button.setAttribute('aria-label', row.hit.getAttribute('aria-label') || `${row.clock} +${row.lead}`);
       button.setAttribute('aria-pressed', 'false');
       button.addEventListener('click', () => {
@@ -129,7 +193,9 @@ function buildDryTimeline(root) {
 function apply(root) {
   if (!root || root.dataset?.viewKind !== 'ready') return;
   root.dataset.rainHomeUiPolishV5 = '1';
-  buildDryTimeline(root);
+  const rows = forecastRows(root);
+  setLightRainCopy(root, rows);
+  buildDryTimeline(root, rows);
 }
 
 let scheduled = false;
