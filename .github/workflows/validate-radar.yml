@@ -117,13 +117,14 @@ jobs:
         run: node scripts/validate-forecast-context-analysis.mjs
       - name: Probe production SWIRLS point-series endpoint
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         run: node scripts/probe-swirls-point-series-production.mjs
       - name: Benchmark SWIRLS zero-base series path
         if: github.event_name == 'pull_request'
         continue-on-error: true
         run: node scripts/benchmark-swirls-series.mjs
-      # This checks the already-deployed Worker, not the PR under test. Keep it
-      # informational on main; deploy-worker.yml owns blocking production smoke.
+      # These inspect the already-deployed Worker, not the PR source. Keep them
+      # informational here; deploy-worker.yml owns blocking production smoke.
       - name: Probe current production SWIRLS frontend contract
         if: github.event_name == 'push'
         continue-on-error: true
