@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { parseSwirlsIndex } from '../swirls-data.js';
-import { createSwirlsPointSeriesBatchLoader } from '../swirls-point-series-batch.js';
+import {
+  createSwirlsPointSeriesBatchLoader,
+  SWIRLS_POINT_SERIES_CONCURRENCY
+} from '../swirls-point-series-batch.js';
 import { createSwirlsPointSeriesRequestHandler } from '../swirls-point-series-request.js';
 import { SWIRLS_FETCH_POLICY } from '../swirls-worker-runtime.js';
 
@@ -78,28 +81,26 @@ assert.equal(new Set(partial.points.map(point => point.runTime).filter(Boolean))
 const parsedIndex = parseSwirlsIndex(makeIndex());
 const mdl = makeMdl();
 let indexCalls = 0;
+let activeFetches = 0;
+let maxActiveFetches = 0;
 let mdlStarts = 0;
-let releaseAll;
-const allStarted = new Promise(resolve => { releaseAll = resolve; });
-const pendingResolvers = [];
 const productionBatchLoader = createSwirlsPointSeriesBatchLoader({
   loadIndex: async () => { indexCalls += 1; return parsedIndex; },
   fetchText: async (url, options) => {
     assert.match(url, /\.af\.mdl$/);
     assert.equal(options.kind, 'mdl');
     mdlStarts += 1;
-    if (mdlStarts === 16) releaseAll();
-    await allStarted;
-    return new Promise(resolve => pendingResolvers.push(() => resolve({ body:mdl, cacheStatus:null })));
+    activeFetches += 1;
+    maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+    await new Promise(resolve => setTimeout(resolve, 8));
+    activeFetches -= 1;
+    return { body:mdl, cacheStatus:null };
   }
 });
-const batchPromise = productionBatchLoader(frameIndexes);
-await allStarted;
+const productionBatch = await productionBatchLoader(frameIndexes);
 assert.equal(indexCalls, 1, 'point-series must read exactly one index snapshot');
-assert.equal(mdlStarts, 16, 'all 16 MDL tasks must start without manual batch throttling');
-while (pendingResolvers.length < 16) await new Promise(resolve => setTimeout(resolve, 0));
-pendingResolvers.splice(0).forEach(resolve => resolve());
-const productionBatch = await batchPromise;
+assert.equal(mdlStarts, 16, 'all 16 MDL frames must still be attempted');
+assert.ok(maxActiveFetches <= SWIRLS_POINT_SERIES_CONCURRENCY, 'MDL concurrency must stay below the Worker connection ceiling');
 assert.equal(productionBatch.frames.length, 16);
 assert.equal(productionBatch.failures.length, 0);
 assert.deepEqual(productionBatch.frames.map(frame => frame.frameIndex), frameIndexes);
@@ -142,4 +143,4 @@ await assert.rejects(
 assert.throws(() => createSwirlsPointSeriesRequestHandler({}), /requires loadFrames\(frameIndexes\)/);
 assert.throws(() => createSwirlsPointSeriesBatchLoader({ loadIndex:async () => parsedIndex }), /requires fetchText\(\)/);
 
-console.log('SWIRLS zero-base point-series validation passed');
+console.log('SWIRLS bounded-concurrency point-series validation passed');
