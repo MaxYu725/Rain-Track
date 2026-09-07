@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { parseSwirlsIndex } from '../swirls-data.js';
 import {
   createSwirlsPointSeriesBatchLoader,
+  SWIRLS_POINT_SERIES_ATTEMPTS,
   SWIRLS_POINT_SERIES_CONCURRENCY
 } from '../swirls-point-series-batch.js';
 import { createSwirlsPointSeriesRequestHandler } from '../swirls-point-series-request.js';
@@ -49,11 +50,7 @@ function makeMdl(runIso = runTime) {
 }
 
 const completeHandler = createSwirlsPointSeriesRequestHandler({
-  loadFrames: async indexes => ({
-    index:{ runTime },
-    frames:indexes.map(makeFrame),
-    failures:[]
-  })
+  loadFrames: async indexes => ({ index:{ runTime }, frames:indexes.map(makeFrame), failures:[] })
 });
 const complete = await completeHandler(new URL('https://example.test/api/rain/swirls/point-series?lat=22.5&lon=113.5'));
 assert.equal(complete.ok, true);
@@ -99,12 +96,28 @@ const productionBatchLoader = createSwirlsPointSeriesBatchLoader({
 });
 const productionBatch = await productionBatchLoader(frameIndexes);
 assert.equal(indexCalls, 1, 'point-series must read exactly one index snapshot');
-assert.equal(mdlStarts, 16, 'all 16 MDL frames must still be attempted');
+assert.equal(mdlStarts, 16, 'all 16 MDL frames must still be attempted when first attempts succeed');
 assert.ok(maxActiveFetches <= SWIRLS_POINT_SERIES_CONCURRENCY, 'MDL concurrency must stay below the Worker connection ceiling');
 assert.equal(productionBatch.frames.length, 16);
 assert.equal(productionBatch.failures.length, 0);
 assert.deepEqual(productionBatch.frames.map(frame => frame.frameIndex), frameIndexes);
 assert.equal(new Set(productionBatch.frames.map(frame => frame.runTime)).size, 1, 'all successful frames must share the single index snapshot run');
+
+const flakyAttempts = new Map();
+const flakyLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: async () => parsedIndex,
+  fetchText: async (url, options) => {
+    const count = (flakyAttempts.get(options.frameIndex) || 0) + 1;
+    flakyAttempts.set(options.frameIndex, count);
+    if (options.frameIndex === 5 && count === 1) throw new Error('synthetic transient upstream failure');
+    return { body:mdl };
+  }
+});
+const flaky = await flakyLoader(frameIndexes);
+assert.equal(SWIRLS_POINT_SERIES_ATTEMPTS, 2);
+assert.equal(flaky.frames.filter(Boolean).length, 16, 'a transient frame failure must be recovered within the same index snapshot');
+assert.equal(flaky.failures.length, 0);
+assert.equal(flakyAttempts.get(5), 2, 'failed frame must be retried exactly once');
 
 let failedIndexCalls = 0;
 const oneFailureLoader = createSwirlsPointSeriesBatchLoader({
@@ -143,4 +156,4 @@ await assert.rejects(
 assert.throws(() => createSwirlsPointSeriesRequestHandler({}), /requires loadFrames\(frameIndexes\)/);
 assert.throws(() => createSwirlsPointSeriesBatchLoader({ loadIndex:async () => parsedIndex }), /requires fetchText\(\)/);
 
-console.log('SWIRLS bounded-concurrency point-series validation passed');
+console.log('SWIRLS bounded-concurrency + per-frame retry validation passed');
