@@ -1,7 +1,8 @@
-import { REQUEST_TIMEOUT_MS } from './config.js';
+import { DEFAULT_API_BASE, REQUEST_TIMEOUT_MS } from './config.js';
 import { state } from './state.js';
 
 const SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450;
+const SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS = 8_000;
 
 function linkedAbortController(externalSignal, timeoutMs) {
   const controller = new AbortController();
@@ -12,7 +13,11 @@ function linkedAbortController(externalSignal, timeoutMs) {
   return { controller, cleanup:() => { clearTimeout(timer); externalSignal?.removeEventListener('abort', abort); } };
 }
 
-export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache } = {}) {
+function normalizeApiBase(value) {
+  return String(value || '').trim().replace(/\/$/, '');
+}
+
+async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache } = {}) {
   const { controller, cleanup } = linkedAbortController(signal, timeoutMs);
   try {
     const fetchOptions = {
@@ -21,7 +26,7 @@ export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache 
     };
     if (cache) fetchOptions.cache = cache;
 
-    const response = await fetch(state.apiBase + path, fetchOptions);
+    const response = await fetch(normalizeApiBase(base) + path, fetchOptions);
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) {
@@ -41,6 +46,10 @@ export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache 
   } finally {
     cleanup();
   }
+}
+
+export function api(path, options = {}) {
+  return apiFromBase(state.apiBase, path, options);
 }
 
 function isTransientTransportError(error) {
@@ -66,20 +75,39 @@ function waitForTransportRetry(signal, delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_D
   });
 }
 
+async function fetchSeriesFromBase(base, path, requestOptions, signal) {
+  try {
+    return await apiFromBase(base, path, requestOptions);
+  } catch (error) {
+    if (!isTransientTransportError(error) || signal?.aborted) throw error;
+    await waitForTransportRetry(signal);
+    return await apiFromBase(base, path, requestOptions);
+  }
+}
+
 export function fetchPointForecast(point, radiusKm, options = {}) {
   return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
 }
 
 export async function fetchSwirlsPointSeries(point, options = {}) {
   const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:30_000, ...options };
-  try {
-    return await api(path, requestOptions);
-  } catch (error) {
-    if (!isTransientTransportError(error) || options.signal?.aborted) throw error;
-    await waitForTransportRetry(options.signal);
-    return await api(path, requestOptions);
+  const requestOptions = { timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS, ...options };
+  const configuredBase = normalizeApiBase(state.apiBase);
+  const canonicalBase = normalizeApiBase(DEFAULT_API_BASE);
+  const bases = configuredBase && configuredBase !== canonicalBase
+    ? [configuredBase, canonicalBase]
+    : [canonicalBase];
+
+  let lastError = null;
+  for (const base of bases) {
+    try {
+      return await fetchSeriesFromBase(base, path, requestOptions, options.signal);
+    } catch (error) {
+      if (options.signal?.aborted) throw error;
+      lastError = error;
+    }
   }
+  throw lastError || new Error('兩小時 SWIRLS 定位序列讀取失敗');
 }
 
 export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
