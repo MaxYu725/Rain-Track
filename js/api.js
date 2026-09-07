@@ -52,8 +52,15 @@ async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS,
   }
 }
 
-export function api(path, options = {}) {
-  return apiFromBase(state.apiBase, path, options);
+export async function api(path, options = {}) {
+  const configuredBase = normalizeApiBase(state.apiBase);
+  const canonicalBase = normalizeApiBase(DEFAULT_API_BASE);
+  try {
+    return await apiFromBase(configuredBase || canonicalBase, path, options);
+  } catch (error) {
+    if (!options.canonicalFallback || options.signal?.aborted || configuredBase === canonicalBase) throw error;
+    return apiFromBase(canonicalBase, path, options);
+  }
 }
 
 function isTransientTransportError(error) {
@@ -79,16 +86,6 @@ function waitForTransportRetry(signal, delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_D
   });
 }
 
-async function fetchSeriesFromBase(base, path, requestOptions, signal) {
-  try {
-    return await apiFromBase(base, path, requestOptions);
-  } catch (error) {
-    if (!isTransientTransportError(error) || signal?.aborted) throw error;
-    await waitForTransportRetry(signal);
-    return await apiFromBase(base, path, requestOptions);
-  }
-}
-
 function abortActiveSeriesTransport() {
   if (!activeSeriesTransportController || activeSeriesTransportController.signal.aborted) return;
   activeSeriesTransportController.abort(new DOMException('Rain Home refresh requested', 'TimeoutError'));
@@ -104,23 +101,19 @@ export function fetchPointForecast(point, radiusKm, options = {}) {
 
 export async function fetchSwirlsPointSeries(point, options = {}) {
   const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS, transportTag:SWIRLS_SERIES_TRANSPORT_TAG, ...options };
-  const configuredBase = normalizeApiBase(state.apiBase);
-  const canonicalBase = normalizeApiBase(DEFAULT_API_BASE);
-  const bases = configuredBase && configuredBase !== canonicalBase
-    ? [configuredBase, canonicalBase]
-    : [canonicalBase];
-
-  let lastError = null;
-  for (const base of bases) {
-    try {
-      return await fetchSeriesFromBase(base, path, requestOptions, options.signal);
-    } catch (error) {
-      if (options.signal?.aborted) throw error;
-      lastError = error;
-    }
+  const requestOptions = {
+    timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS,
+    transportTag:SWIRLS_SERIES_TRANSPORT_TAG,
+    canonicalFallback:true,
+    ...options
+  };
+  try {
+    return await api(path, requestOptions);
+  } catch (error) {
+    if (!isTransientTransportError(error) || options.signal?.aborted) throw error;
+    await waitForTransportRetry(options.signal);
+    return await api(path, requestOptions);
   }
-  throw lastError || new Error('兩小時 SWIRLS 定位序列讀取失敗');
 }
 
 export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
