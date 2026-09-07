@@ -36,9 +36,20 @@ for (const target of targets) {
   assert.equal(data.cadenceMinutes, 6);
   assert.equal(data.accumulationMinutes, 30);
   assert.equal(data.unit, 'mm / 30 min');
-  assert.equal(data.points?.length, 16);
-  assert.equal(data.points[0]?.leadMinutes, 30);
-  assert.equal(data.points.at(-1)?.leadMinutes, 120);
-  assert.ok(data.points.every((point, index) => point.frameIndex === index && Number.isFinite(point.amountMm) && point.amountMm >= 0));
-  console.log(`${target.name} SWIRLS point-series production probe PASS: ${data.points.length} points, ${data.points[0].validTime} -> ${data.points.at(-1).validTime}`);
+  assert.ok(Array.isArray(data.points) && data.points.length > 0, `${target.name} point-series needs at least one usable point`);
+
+  const seen = new Set();
+  for (const point of data.points) {
+    assert.ok(Number.isInteger(point.frameIndex) && point.frameIndex >= 0 && point.frameIndex < 16, `${target.name} frame index must be 0..15`);
+    assert.equal(seen.has(point.frameIndex), false, `${target.name} frame indexes must be unique`);
+    seen.add(point.frameIndex);
+    assert.equal(point.leadMinutes, 30 + point.frameIndex * 6, `${target.name} lead time must match frame index`);
+    assert.ok(Number.isFinite(point.amountMm) && point.amountMm >= 0, `${target.name} rainfall must be usable`);
+    assert.ok(Number.isFinite(Date.parse(point.validTime || '')), `${target.name} valid time must parse`);
+  }
+
+  const expectedMissing = Array.from({ length:16 }, (_, frameIndex) => frameIndex).filter(frameIndex => !seen.has(frameIndex));
+  assert.deepEqual(data.missingFrames, expectedMissing, `${target.name} missingFrames must describe the partial series`);
+  assert.equal(data.complete, expectedMissing.length === 0, `${target.name} complete flag must match returned points`);
+  console.log(`${target.name} SWIRLS point-series production probe PASS: ${data.points.length} usable points${data.complete ? ' (complete)' : ' (partial accepted)'}`);
 }
