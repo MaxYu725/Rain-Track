@@ -1,7 +1,10 @@
-import { REQUEST_TIMEOUT_MS } from './config.js';
+import { DEFAULT_API_BASE, REQUEST_TIMEOUT_MS } from './config.js';
 import { state } from './state.js';
 
 const SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450;
+const SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS = 8_000;
+const SWIRLS_SERIES_TRANSPORT_TAG = 'swirls-series';
+let activeSeriesTransportController = null;
 
 function linkedAbortController(externalSignal, timeoutMs) {
   const controller = new AbortController();
@@ -12,8 +15,13 @@ function linkedAbortController(externalSignal, timeoutMs) {
   return { controller, cleanup:() => { clearTimeout(timer); externalSignal?.removeEventListener('abort', abort); } };
 }
 
-export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache } = {}) {
+function normalizeApiBase(value) {
+  return String(value || '').trim().replace(/\/$/, '');
+}
+
+async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache, transportTag } = {}) {
   const { controller, cleanup } = linkedAbortController(signal, timeoutMs);
+  if (transportTag === SWIRLS_SERIES_TRANSPORT_TAG) activeSeriesTransportController = controller;
   try {
     const fetchOptions = {
       signal:controller.signal,
@@ -21,7 +29,7 @@ export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache 
     };
     if (cache) fetchOptions.cache = cache;
 
-    const response = await fetch(state.apiBase + path, fetchOptions);
+    const response = await fetch(normalizeApiBase(base) + path, fetchOptions);
     let data = null;
     try { data = await response.json(); } catch {}
     if (!response.ok) {
@@ -39,7 +47,19 @@ export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache 
     }
     throw error;
   } finally {
+    if (activeSeriesTransportController === controller) activeSeriesTransportController = null;
     cleanup();
+  }
+}
+
+export async function api(path, options = {}) {
+  const configuredBase = normalizeApiBase(state.apiBase);
+  const canonicalBase = normalizeApiBase(DEFAULT_API_BASE);
+  try {
+    return await apiFromBase(configuredBase || canonicalBase, path, options);
+  } catch (error) {
+    if (!options.canonicalFallback || options.signal?.aborted || configuredBase === canonicalBase) throw error;
+    return apiFromBase(canonicalBase, path, options);
   }
 }
 
@@ -66,13 +86,27 @@ function waitForTransportRetry(signal, delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_D
   });
 }
 
+function abortActiveSeriesTransport() {
+  if (!activeSeriesTransportController || activeSeriesTransportController.signal.aborted) return;
+  activeSeriesTransportController.abort(new DOMException('Rain Home refresh requested', 'TimeoutError'));
+}
+
+if (typeof globalThis.window?.addEventListener === 'function') {
+  globalThis.window.addEventListener('rain:refresh', abortActiveSeriesTransport);
+}
+
 export function fetchPointForecast(point, radiusKm, options = {}) {
   return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
 }
 
 export async function fetchSwirlsPointSeries(point, options = {}) {
   const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:30_000, ...options };
+  const requestOptions = {
+    timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS,
+    transportTag:SWIRLS_SERIES_TRANSPORT_TAG,
+    canonicalFallback:true,
+    ...options
+  };
   try {
     return await api(path, requestOptions);
   } catch (error) {
