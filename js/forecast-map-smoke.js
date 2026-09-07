@@ -11,6 +11,7 @@ const OPTIONAL_MAP_MODULES = [
   './rain-home-observed-radar.js',
   './rain-home-ui-polish.js',
   './rain-home-ui-polish-v5.js',
+  './rain-home-wet-decision.js',
   './radar-entry.js',
   './radar-settings-mirror.js',
   './radar-analysis-runtime.js',
