@@ -5,6 +5,7 @@ const url = `${base}/api/rain/swirls/point-series?lat=22.3023&lon=114.1746`;
 const REQUEST_TIMEOUT_MS = 25_000;
 const controller = new AbortController();
 const timer = setTimeout(() => controller.abort('production point-series timeout'), REQUEST_TIMEOUT_MS);
+const startedAt = Date.now();
 
 let response;
 try {
@@ -19,6 +20,8 @@ try {
 
 assert.equal(response.status, 200, `point-series HTTP ${response.status}`);
 const data = await response.json();
+const elapsedMs = Date.now() - startedAt;
+console.log(`SWIRLS point-series production response: ${data.points?.length || 0}/16 points in ${elapsedMs} ms; missing=${JSON.stringify(data.missingFrames || [])}; run=${data.runTime || 'unknown'}`);
 assert.equal(data.ok, true);
 assert.equal(data.cadenceMinutes, 6);
 assert.equal(data.accumulationMinutes, 30);

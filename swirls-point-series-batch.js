@@ -2,13 +2,16 @@ import { SWIRLS_RAW_CONTRACT, bindSwirlsMdlFrame } from './swirls-data.js';
 import { SWIRLS_FETCH_POLICY, summarizeIndex } from './swirls-worker-runtime.js';
 
 const HARD_DEADLINE_GRACE_MS = 1_500;
-export const SWIRLS_POINT_SERIES_CONCURRENCY = 5;
+const RETRY_DELAY_MS = 120;
+export const SWIRLS_POINT_SERIES_CONCURRENCY = 3;
+export const SWIRLS_POINT_SERIES_ATTEMPTS = 2;
 
 export function createSwirlsPointSeriesBatchLoader({
   loadIndex,
   fetchText,
   policy = SWIRLS_FETCH_POLICY,
-  concurrency = SWIRLS_POINT_SERIES_CONCURRENCY
+  concurrency = SWIRLS_POINT_SERIES_CONCURRENCY,
+  attempts = SWIRLS_POINT_SERIES_ATTEMPTS
 } = {}) {
   if (typeof loadIndex !== 'function') throw new Error('SWIRLS batch loader requires loadIndex()');
   if (typeof fetchText !== 'function') throw new Error('SWIRLS batch loader requires fetchText()');
@@ -16,21 +19,21 @@ export function createSwirlsPointSeriesBatchLoader({
   return async function loadFrames(frameIndexes, { bypassCache = false } = {}) {
     const indexes = normalizeFrameIndexes(frameIndexes);
     const workerCount = Math.max(1, Math.min(indexes.length, Number(concurrency) || SWIRLS_POINT_SERIES_CONCURRENCY));
+    const attemptCount = Math.max(1, Math.min(2, Number(attempts) || SWIRLS_POINT_SERIES_ATTEMPTS));
     const fetchDeadlineMs = Math.max(1, Number(policy?.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs) + HARD_DEADLINE_GRACE_MS;
 
-    // One immutable index snapshot per request. The hard deadline is deliberately
-    // independent from AbortController so a stalled upstream fetch can never keep
-    // the compact point-series route pending indefinitely.
+    // Keep one immutable index snapshot across the entire request so every
+    // returned point belongs to the same SWIRLS run.
     const indexData = await withHardDeadline(
       () => loadIndex({ bypassCache }),
       fetchDeadlineMs,
       'SWIRLS index'
     );
 
-    // Cloudflare Workers only allows a small number of simultaneous outbound
-    // connections per invocation. Keep at most five MDL fetches active so the
-    // remaining frames actually get a connection slot instead of timing out in
-    // the queue. All frames still share the same immutable index snapshot.
+    // HKO MDL requests are deliberately capped below the Worker connection
+    // ceiling. A small pool is materially more reliable than launching all 16
+    // upstream fetches together, and failed frames get one bounded retry while
+    // preserving the same index snapshot.
     const results = Array(indexes.length);
     let nextPosition = 0;
 
@@ -44,7 +47,12 @@ export function createSwirlsPointSeriesBatchLoader({
           results[position] = {
             status:'fulfilled',
             value:await withHardDeadline(
-              () => loadFrameFromSnapshot(indexData, frameIndex, { fetchText, policy, bypassCache }),
+              () => loadFrameWithRetry(indexData, frameIndex, {
+                fetchText,
+                policy,
+                bypassCache,
+                attempts:attemptCount
+              }),
               fetchDeadlineMs,
               `SWIRLS frame ${frameIndex}`
             )
@@ -58,16 +66,29 @@ export function createSwirlsPointSeriesBatchLoader({
     await Promise.all(Array.from({ length:workerCount }, () => runWorker()));
 
     return {
-      index: summarizeIndex(indexData),
-      frames: results.map(result => result?.status === 'fulfilled' ? result.value : null),
-      failures: results.flatMap((result, resultIndex) => result?.status === 'rejected'
+      index:summarizeIndex(indexData),
+      frames:results.map(result => result?.status === 'fulfilled' ? result.value : null),
+      failures:results.flatMap((result, resultIndex) => result?.status === 'rejected'
         ? [{
-            frameIndex: indexes[resultIndex],
-            error: result.reason instanceof Error ? result.reason.message : String(result.reason)
+            frameIndex:indexes[resultIndex],
+            error:result.reason instanceof Error ? result.reason.message : String(result.reason)
           }]
         : [])
     };
   };
+}
+
+async function loadFrameWithRetry(indexData, frameIndex, options) {
+  let lastError;
+  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+    try {
+      return await loadFrameFromSnapshot(indexData, frameIndex, options);
+    } catch (error) {
+      lastError = error;
+      if (attempt < options.attempts) await delay(RETRY_DELAY_MS);
+    }
+  }
+  throw lastError;
 }
 
 async function loadFrameFromSnapshot(indexData, frameIndex, { fetchText, policy, bypassCache }) {
@@ -92,6 +113,10 @@ async function loadFrameFromSnapshot(indexData, frameIndex, { fetchText, policy,
     cacheStatus:text.cacheStatus,
     index:summarizeIndex(indexData)
   };
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
 function withHardDeadline(task, timeoutMs, label) {
