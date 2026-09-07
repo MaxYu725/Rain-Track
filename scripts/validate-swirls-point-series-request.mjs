@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { parseSwirlsIndex } from '../swirls-data.js';
 import { createSwirlsPointSeriesBatchLoader } from '../swirls-point-series-batch.js';
 import { createSwirlsPointSeriesRequestHandler } from '../swirls-point-series-request.js';
+import { SWIRLS_FETCH_POLICY } from '../swirls-worker-runtime.js';
 
 const runTime = '2026-08-19T12:00:00.000Z';
 const frameIndexes = Array.from({ length:16 }, (_, frameIndex) => frameIndex);
@@ -117,6 +118,22 @@ assert.equal(failedIndexCalls, 1);
 assert.equal(oneFailure.frames.filter(Boolean).length, 15);
 assert.equal(oneFailure.frames[5], null);
 assert.deepEqual(oneFailure.failures.map(item => item.frameIndex), [5]);
+
+const hungFrameLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: async () => parsedIndex,
+  fetchText: async (url, options) => {
+    if (options.frameIndex === 5) return new Promise(() => {});
+    return { body:mdl };
+  },
+  policy:{ ...SWIRLS_FETCH_POLICY, timeoutMs:20 }
+});
+const hungStartedAt = Date.now();
+const hungFrame = await hungFrameLoader(frameIndexes);
+assert.ok(Date.now() - hungStartedAt < 2_000, 'hard deadline must settle a hung frame promptly in deterministic QA');
+assert.equal(hungFrame.frames.filter(Boolean).length, 15, 'one hung frame must degrade to a partial series');
+assert.equal(hungFrame.frames[5], null);
+assert.deepEqual(hungFrame.failures.map(item => item.frameIndex), [5]);
+assert.match(hungFrame.failures[0].error, /hard deadline/);
 
 await assert.rejects(
   () => completeHandler(new URL('https://example.test/api/rain/swirls/point-series?lat=30&lon=113.5')),
