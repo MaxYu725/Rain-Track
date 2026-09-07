@@ -2,6 +2,19 @@ name: Deploy Worker production
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'worker.js'
+      - 'worker-phase3c-v2.js'
+      - 'swirls-data.js'
+      - 'swirls-point-sample.js'
+      - 'swirls-point-request.js'
+      - 'swirls-point-series-request.js'
+      - 'swirls-point-series-batch.js'
+      - 'swirls-worker-runtime.js'
+      - '.github/workflows/deploy-worker.yml'
 
 permissions:
   contents: read

@@ -1,49 +1,66 @@
 import { SWIRLS_RAW_CONTRACT, bindSwirlsMdlFrame } from './swirls-data.js';
 import { SWIRLS_FETCH_POLICY, summarizeIndex } from './swirls-worker-runtime.js';
 
+const HARD_DEADLINE_GRACE_MS = 1_500;
+export const SWIRLS_POINT_SERIES_CONCURRENCY = 5;
+
 export function createSwirlsPointSeriesBatchLoader({
   loadIndex,
   fetchText,
-  policy = SWIRLS_FETCH_POLICY
+  policy = SWIRLS_FETCH_POLICY,
+  concurrency = SWIRLS_POINT_SERIES_CONCURRENCY
 } = {}) {
   if (typeof loadIndex !== 'function') throw new Error('SWIRLS batch loader requires loadIndex()');
   if (typeof fetchText !== 'function') throw new Error('SWIRLS batch loader requires fetchText()');
 
   return async function loadFrames(frameIndexes, { bypassCache = false } = {}) {
     const indexes = normalizeFrameIndexes(frameIndexes);
+    const workerCount = Math.max(1, Math.min(indexes.length, Number(concurrency) || SWIRLS_POINT_SERIES_CONCURRENCY));
+    const fetchDeadlineMs = Math.max(1, Number(policy?.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs) + HARD_DEADLINE_GRACE_MS;
 
-    // One immutable index snapshot per request. All MDL tasks are created
-    // immediately from this snapshot; the platform owns connection scheduling.
-    const indexData = await loadIndex({ bypassCache });
-    const tasks = indexes.map(async frameIndex => {
-      const descriptor = indexData.frames.find(frame => frame.frameIndex === frameIndex);
-      if (!descriptor) throw new Error(`SWIRLS frame ${frameIndex} is not present in the current index`);
+    // One immutable index snapshot per request. The hard deadline is deliberately
+    // independent from AbortController so a stalled upstream fetch can never keep
+    // the compact point-series route pending indefinitely.
+    const indexData = await withHardDeadline(
+      () => loadIndex({ bypassCache }),
+      fetchDeadlineMs,
+      'SWIRLS index'
+    );
 
-      const result = await fetchText(descriptor.mdlUrl, {
-        kind: 'mdl',
-        frameIndex,
-        runTime: indexData.inferredRunTime,
-        ttlSeconds: policy.mdlTtlSeconds,
-        timeoutMs: policy.timeoutMs,
-        bypassCache
-      });
-      const text = normalizeFetchResult(result, `SWIRLS frame ${frameIndex}`);
-      const frame = bindSwirlsMdlFrame(indexData, frameIndex, text.body);
+    // Cloudflare Workers only allows a small number of simultaneous outbound
+    // connections per invocation. Keep at most five MDL fetches active so the
+    // remaining frames actually get a connection slot instead of timing out in
+    // the queue. All frames still share the same immutable index snapshot.
+    const results = Array(indexes.length);
+    let nextPosition = 0;
 
-      return {
-        ...frame,
-        sourceBytes: text.bytes,
-        sourceUpdatedAt: text.updatedAt,
-        cacheStatus: text.cacheStatus,
-        index: summarizeIndex(indexData)
-      };
-    });
+    const runWorker = async () => {
+      while (true) {
+        const position = nextPosition;
+        nextPosition += 1;
+        if (position >= indexes.length) return;
+        const frameIndex = indexes[position];
+        try {
+          results[position] = {
+            status:'fulfilled',
+            value:await withHardDeadline(
+              () => loadFrameFromSnapshot(indexData, frameIndex, { fetchText, policy, bypassCache }),
+              fetchDeadlineMs,
+              `SWIRLS frame ${frameIndex}`
+            )
+          };
+        } catch (error) {
+          results[position] = { status:'rejected', reason:error };
+        }
+      }
+    };
 
-    const settled = await Promise.allSettled(tasks);
+    await Promise.all(Array.from({ length:workerCount }, () => runWorker()));
+
     return {
       index: summarizeIndex(indexData),
-      frames: settled.map(result => result.status === 'fulfilled' ? result.value : null),
-      failures: settled.flatMap((result, resultIndex) => result.status === 'rejected'
+      frames: results.map(result => result?.status === 'fulfilled' ? result.value : null),
+      failures: results.flatMap((result, resultIndex) => result?.status === 'rejected'
         ? [{
             frameIndex: indexes[resultIndex],
             error: result.reason instanceof Error ? result.reason.message : String(result.reason)
@@ -51,6 +68,51 @@ export function createSwirlsPointSeriesBatchLoader({
         : [])
     };
   };
+}
+
+async function loadFrameFromSnapshot(indexData, frameIndex, { fetchText, policy, bypassCache }) {
+  const descriptor = indexData.frames.find(frame => frame.frameIndex === frameIndex);
+  if (!descriptor) throw new Error(`SWIRLS frame ${frameIndex} is not present in the current index`);
+
+  const result = await fetchText(descriptor.mdlUrl, {
+    kind:'mdl',
+    frameIndex,
+    runTime:indexData.inferredRunTime,
+    ttlSeconds:policy.mdlTtlSeconds,
+    timeoutMs:policy.timeoutMs,
+    bypassCache
+  });
+  const text = normalizeFetchResult(result, `SWIRLS frame ${frameIndex}`);
+  const frame = bindSwirlsMdlFrame(indexData, frameIndex, text.body);
+
+  return {
+    ...frame,
+    sourceBytes:text.bytes,
+    sourceUpdatedAt:text.updatedAt,
+    cacheStatus:text.cacheStatus,
+    index:summarizeIndex(indexData)
+  };
+}
+
+function withHardDeadline(task, timeoutMs, label) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+    const finish = callback => value => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      callback(value);
+    };
+    timer = setTimeout(
+      () => finish(reject)(new Error(`${label} exceeded hard deadline`)),
+      Math.max(1, Number(timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs)
+    );
+
+    Promise.resolve()
+      .then(task)
+      .then(finish(resolve), finish(reject));
+  });
 }
 
 function normalizeFrameIndexes(values) {
@@ -69,17 +131,17 @@ function normalizeFrameIndexes(values) {
 function normalizeFetchResult(result, label) {
   if (typeof result === 'string') {
     return {
-      body: result,
-      bytes: new TextEncoder().encode(result).byteLength,
-      updatedAt: null,
-      cacheStatus: null
+      body:result,
+      bytes:new TextEncoder().encode(result).byteLength,
+      updatedAt:null,
+      cacheStatus:null
     };
   }
   if (!result || typeof result.body !== 'string') throw new Error(`${label} fetch returned no text body`);
   return {
-    body: result.body,
-    bytes: Number.isFinite(result.bytes) ? result.bytes : new TextEncoder().encode(result.body).byteLength,
-    updatedAt: result.updatedAt || null,
-    cacheStatus: result.cacheStatus || null
+    body:result.body,
+    bytes:Number.isFinite(result.bytes) ? result.bytes : new TextEncoder().encode(result.body).byteLength,
+    updatedAt:result.updatedAt || null,
+    cacheStatus:result.cacheStatus || null
   };
 }
