@@ -3,6 +3,8 @@ import { state } from './state.js';
 
 const SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450;
 const SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS = 8_000;
+const SWIRLS_SERIES_TRANSPORT_TAG = 'swirls-series';
+let activeSeriesTransportController = null;
 
 function linkedAbortController(externalSignal, timeoutMs) {
   const controller = new AbortController();
@@ -17,8 +19,9 @@ function normalizeApiBase(value) {
   return String(value || '').trim().replace(/\/$/, '');
 }
 
-async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache } = {}) {
+async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache, transportTag } = {}) {
   const { controller, cleanup } = linkedAbortController(signal, timeoutMs);
+  if (transportTag === SWIRLS_SERIES_TRANSPORT_TAG) activeSeriesTransportController = controller;
   try {
     const fetchOptions = {
       signal:controller.signal,
@@ -44,6 +47,7 @@ async function apiFromBase(base, path, { signal, timeoutMs = REQUEST_TIMEOUT_MS,
     }
     throw error;
   } finally {
+    if (activeSeriesTransportController === controller) activeSeriesTransportController = null;
     cleanup();
   }
 }
@@ -85,13 +89,22 @@ async function fetchSeriesFromBase(base, path, requestOptions, signal) {
   }
 }
 
+function abortActiveSeriesTransport() {
+  if (!activeSeriesTransportController || activeSeriesTransportController.signal.aborted) return;
+  activeSeriesTransportController.abort(new DOMException('Rain Home refresh requested', 'TimeoutError'));
+}
+
+if (typeof window?.addEventListener === 'function') {
+  window.addEventListener('rain:refresh', abortActiveSeriesTransport);
+}
+
 export function fetchPointForecast(point, radiusKm, options = {}) {
   return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
 }
 
 export async function fetchSwirlsPointSeries(point, options = {}) {
   const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS, ...options };
+  const requestOptions = { timeoutMs:SWIRLS_SERIES_ATTEMPT_TIMEOUT_MS, transportTag:SWIRLS_SERIES_TRANSPORT_TAG, ...options };
   const configuredBase = normalizeApiBase(state.apiBase);
   const canonicalBase = normalizeApiBase(DEFAULT_API_BASE);
   const bases = configuredBase && configuredBase !== canonicalBase
