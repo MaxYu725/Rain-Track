@@ -2,7 +2,21 @@ import assert from 'node:assert/strict';
 
 const base = (process.env.WORKER_BASE_URL || 'https://radar.max-yu.workers.dev').replace(/\/$/, '');
 const url = `${base}/api/rain/swirls/point-series?lat=22.3023&lon=114.1746`;
-const response = await fetch(url, { headers:{ Accept:'application/json' }, cache:'no-store' });
+const REQUEST_TIMEOUT_MS = 25_000;
+const controller = new AbortController();
+const timer = setTimeout(() => controller.abort('production point-series timeout'), REQUEST_TIMEOUT_MS);
+
+let response;
+try {
+  response = await fetch(url, {
+    headers:{ Accept:'application/json' },
+    cache:'no-store',
+    signal:controller.signal
+  });
+} finally {
+  clearTimeout(timer);
+}
+
 assert.equal(response.status, 200, `point-series HTTP ${response.status}`);
 const data = await response.json();
 assert.equal(data.ok, true);
