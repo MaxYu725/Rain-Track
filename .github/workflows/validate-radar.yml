@@ -115,6 +115,9 @@ jobs:
         run: node scripts/validate-forecast-rain-motion.mjs
       - name: Validate context-aware Forecast Map analysis
         run: node scripts/validate-forecast-context-analysis.mjs
+      - name: Probe production SWIRLS point-series endpoint
+        if: github.event_name == 'pull_request'
+        run: node scripts/probe-swirls-point-series-production.mjs
       - name: Benchmark SWIRLS zero-base series path
         if: github.event_name == 'pull_request'
         continue-on-error: true
