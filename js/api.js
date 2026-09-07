@@ -91,8 +91,8 @@ function abortActiveSeriesTransport() {
   activeSeriesTransportController.abort(new DOMException('Rain Home refresh requested', 'TimeoutError'));
 }
 
-if (typeof window?.addEventListener === 'function') {
-  window.addEventListener('rain:refresh', abortActiveSeriesTransport);
+if (typeof globalThis.window?.addEventListener === 'function') {
+  globalThis.window.addEventListener('rain:refresh', abortActiveSeriesTransport);
 }
 
 export function fetchPointForecast(point, radiusKm, options = {}) {
