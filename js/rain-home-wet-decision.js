@@ -119,8 +119,9 @@ function readSeries(root) {
 function radarState(root) {
   const observed = root.querySelector('[data-rain-home-observed-radar]');
   if (!observed) return { known:false, currentEcho:false };
-  const currentEcho = [...observed.querySelectorAll('.rain-home-observed-segment')]
-    .some(node => /\blevel-[1-5]\b/.test(node.className));
+  const segments = [...observed.querySelectorAll('.rain-home-observed-segment')];
+  const latest = segments.at(-1);
+  const currentEcho = Boolean(latest && /\blevel-[1-5]\b/.test(latest.className));
   return { known:true, currentEcho };
 }
 
