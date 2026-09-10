@@ -7,6 +7,8 @@ import { createSwirlsRuntime, SWIRLS_FETCH_POLICY } from './swirls-worker-runtim
 const POINT_PATH = '/api/rain/swirls/point';
 const POINT_SERIES_PATH = '/api/rain/swirls/point-series';
 const ACCEPT = 'text/plain,*/*';
+const COMPACT_INDEX_CACHE_TTL_SECONDS = 30;
+const COMPACT_MDL_CACHE_TTL_SECONDS = 300;
 const jsonHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Content-Type': 'application/json; charset=utf-8'
@@ -19,17 +21,32 @@ export function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {
     const timeoutMs = Math.max(1, Number(options.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), timeoutMs);
+    const bypassCache = options.bypassCache === true;
 
     try {
       const requestOptions = {
         redirect: 'follow',
         headers: {
           Accept: ACCEPT,
-          'User-Agent': 'Rain-Track-SWIRLS-Point/3.0'
+          'User-Agent': 'Rain-Track-SWIRLS-Point/4.0'
         },
         signal: controller.signal
       };
-      if (options.bypassCache === true) requestOptions.cache = 'no-store';
+
+      if (bypassCache) {
+        requestOptions.cache = 'no-store';
+      } else {
+        // HKO MDL asset names change every 6-minute run and only repeat after
+        // one hour. A five-minute edge TTL therefore cannot cross forecast
+        // runs, while allowing every location request at the same edge to reuse
+        // the exact same source bytes instead of downloading 16 MDLs again.
+        requestOptions.cf = {
+          cacheEverything:true,
+          cacheTtl:options.kind === 'mdl'
+            ? COMPACT_MDL_CACHE_TTL_SECONDS
+            : COMPACT_INDEX_CACHE_TTL_SECONDS
+        };
+      }
 
       const response = await fetchImpl(url, requestOptions);
       if (!response.ok) throw new Error(`SWIRLS upstream HTTP ${response.status}`);
@@ -39,7 +56,7 @@ export function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {
         body,
         bytes: new TextEncoder().encode(body).byteLength,
         updatedAt: response.headers.get('last-modified'),
-        cacheStatus: response.headers.get('cf-cache-status') || null
+        cacheStatus: response.headers.get('cf-cache-status') || (bypassCache ? 'BYPASS' : null)
       };
     } finally {
       clearTimeout(timer);
