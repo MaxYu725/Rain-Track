@@ -4,6 +4,7 @@ const base = (process.env.WORKER_BASE_URL || 'https://radar.max-yu.workers.dev')
 const REQUEST_TIMEOUT_MS = 25_000;
 const targets = [
   { name:'HKO', lat:22.3023, lon:114.1746 },
+  { name:'Kowloon Bay reported device point', lat:22.3258, lon:114.2186 },
   { name:'Fanling reported device point', lat:22.4987, lon:114.1458 }
 ];
 

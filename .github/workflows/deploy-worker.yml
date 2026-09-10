@@ -13,6 +13,7 @@ on:
       - 'swirls-point-request.js'
       - 'swirls-point-series-request.js'
       - 'swirls-point-series-batch.js'
+      - 'swirls-point-series-sample.js'
       - 'swirls-worker-runtime.js'
       - '.github/workflows/deploy-worker.yml'
 
@@ -42,6 +43,7 @@ jobs:
           node --check swirls-point-request.js
           node --check swirls-point-series-request.js
           node --check swirls-point-series-batch.js
+          node --check swirls-point-series-sample.js
           node --check scripts/smoke-worker-production.mjs
           node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/probe-swirls-point-series-production.mjs

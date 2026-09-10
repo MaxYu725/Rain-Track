@@ -1,5 +1,4 @@
 import { SWIRLS_RAW_CONTRACT } from './swirls-data.js';
-import { sampleSwirlsPoint } from './swirls-point-sample.js';
 import { SwirlsPointRequestError } from './swirls-point-request.js';
 
 export function createSwirlsPointSeriesRequestHandler({ loadFrames } = {}) {
@@ -13,11 +12,9 @@ export function createSwirlsPointSeriesRequestHandler({ loadFrames } = {}) {
     assertSupportedCoverage(lat, lon);
 
     const frameIndexes = Array.from({ length:SWIRLS_RAW_CONTRACT.frameCount }, (_, frameIndex) => frameIndex);
-    const batch = await loadFrames(frameIndexes);
-    const frames = Array.isArray(batch?.frames) ? batch.frames : [];
-    const samples = frames
+    const batch = await loadFrames(frameIndexes, { point:{ lat, lon } });
+    const samples = (Array.isArray(batch?.samples) ? batch.samples : [])
       .filter(Boolean)
-      .map(frame => sampleSwirlsPoint(frame, lat, lon))
       .sort((a, b) => a.frameIndex - b.frameIndex);
 
     const missingFrames = frameIndexes.filter(frameIndex => !samples.some(sample => sample.frameIndex === frameIndex));
