@@ -1,8 +1,6 @@
 import { REQUEST_TIMEOUT_MS } from './config.js';
 import { state } from './state.js';
 
-const SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450;
-
 function linkedAbortController(externalSignal, timeoutMs) {
   const controller = new AbortController();
   const abort = () => controller.abort(externalSignal?.reason);
@@ -43,43 +41,15 @@ export async function api(path, { signal, timeoutMs = REQUEST_TIMEOUT_MS, cache 
   }
 }
 
-function isTransientTransportError(error) {
-  if (!error || Number.isFinite(Number(error.status))) return false;
-  if (error.name === 'AbortError') return false;
-  if (error.name === 'TimeoutError' || error.name === 'TypeError' || error.name === 'NetworkError') return true;
-  return /failed to fetch|network|連線逾時/i.test(String(error.message || error));
-}
-
-function waitForTransportRetry(signal, delayMs = SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS) {
-  if (signal?.aborted) return Promise.reject(signal.reason || new DOMException('Aborted', 'AbortError'));
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }, delayMs);
-    const onAbort = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      reject(signal.reason || new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', onAbort, { once:true });
-  });
-}
-
 export function fetchPointForecast(point, radiusKm, options = {}) {
   return api(`/api/rain/point?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}&radiusKm=${encodeURIComponent(radiusKm)}`, options);
 }
 
-export async function fetchSwirlsPointSeries(point, options = {}) {
-  const path = `/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`;
-  const requestOptions = { timeoutMs:30_000, ...options };
-  try {
-    return await api(path, requestOptions);
-  } catch (error) {
-    if (!isTransientTransportError(error) || options.signal?.aborted) throw error;
-    await waitForTransportRetry(options.signal);
-    return await api(path, requestOptions);
-  }
+export function fetchSwirlsPointSeries(point, options = {}) {
+  // Rain Home owns one request path. Do not add delayed retries or a separate
+  // long timeout here: healthy SWIRLS source bytes are reused at the Worker
+  // edge, and transport failure should settle this one request transparently.
+  return api(`/api/rain/swirls/point-series?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lon)}`, options);
 }
 
 export function fetchCapabilities(options = {}) { return api('/api/capabilities', options); }
