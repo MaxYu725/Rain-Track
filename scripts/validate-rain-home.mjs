@@ -11,16 +11,20 @@ const smoke = readFileSync(new URL('../js/forecast-map-smoke.js', import.meta.ur
 const sw = readFileSync(new URL('../service-worker.js', import.meta.url), 'utf8');
 
 assert.match(api, /fetchSwirlsPointSeries/);
-assert.match(api, /\/api\/rain\/swirls\/point-series/);
-assert.ok(!api.includes('fetchSwirlsPointFrame'), 'Rain Home API must not expose the 16-frame fallback helper');
+assert.match(api, /SWIRLS_FRAME_COUNT\s*=\s*16/);
+assert.match(api, /\/api\/rain\/swirls\/point\?frame=\$\{frameIndex\}/);
+assert.ok(!api.includes('fetchSwirlsPointFrame'), 'Rain Home API must not expose a second frame fallback helper');
 assert.ok(!api.includes("cache:'no-store'"), 'generic browser API requests must not force no-store');
 assert.ok(!api.includes('SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS'), 'Rain Home must not add an artificial transport retry delay');
 assert.ok(!api.includes('waitForTransportRetry'), 'Rain Home must not queue a delayed second request');
 assert.ok(!api.includes('isTransientTransportError'), 'Rain Home must not classify errors only to retry them');
-const seriesFunction = api.match(/export function fetchSwirlsPointSeries[\s\S]*?\n\}/)?.[0] || '';
-assert.ok(seriesFunction, 'fetchSwirlsPointSeries body missing');
-assert.equal((seriesFunction.match(/return api\(/g) || []).length, 1, 'point-series must use exactly one immediate browser request');
-assert.ok(!seriesFunction.includes('timeoutMs:30_000'), 'point-series must not replace the normal API timeout with a long special-case timeout');
+assert.ok(api.includes('void api(swirlsPointPath(load.point, frameIndex))'), 'all compact frame reads must start independently');
+assert.ok(api.includes('if (!load.points.size) await waitForFirstSwirlsPoint(load, options.signal)'), 'Home must return after the first usable point instead of waiting for every frame');
+assert.ok(api.includes('scheduleSwirlsProgressRefresh(load)'), 'later frames must progressively refresh the existing Home view');
+assert.ok(api.includes("window.dispatchEvent(new CustomEvent('rain:refresh'))"), 'progress completion must reuse the explicit Rain Home refresh event');
+assert.ok(api.includes('load.points.size > load.lastDeliveredCount'), 'progress refreshes must only run when more usable data exists');
+assert.ok(!api.includes('Promise.allSettled'), 'browser Rain Home path must not contain an all-frame completion barrier');
+assert.ok(!api.includes('timeoutMs:30_000'), 'Rain Home must not replace the normal transport guard with a long special-case timeout');
 
 assert.match(app, /const RAIN_HOME_OWNS_FORECAST = document\.body\.classList\.contains\('rain-home-v2'\)/);
 assert.match(app, /RAIN_HOME_OWNS_FORECAST \? Promise\.resolve\(\) : loadPointForecast\(\{ force:false \}\)/);
@@ -103,8 +107,8 @@ assert.ok(home.includes('.rain-home-chart-help[hidden]{display:none}'), 'hidden 
 
 assert.match(home, /setRainMapMode\('forecast'\)/);
 assert.match(home, /查看 2 小時雨區/);
-assert.ok(!home.includes('loadSeriesViaFrames'), 'Rain Home must not reconstruct a series through 16 /point requests');
-assert.ok(!home.includes('fetchSwirlsPointFrame'), 'Rain Home must have exactly one SWIRLS client path');
+assert.ok(!home.includes('loadSeriesViaFrames'), 'Rain Home view module must not own a hidden second series reconstruction path');
+assert.ok(!home.includes('fetchSwirlsPointFrame'), 'Rain Home view module must have exactly one API entry');
 assert.ok(!home.includes("window.addEventListener('online'"), 'network recovery must not create an online-event retry loop');
 assert.ok(!home.includes('data-rain-home-retry'), 'terminal error state must not create a hidden retry path');
 assert.ok(home.includes("window.addEventListener('rain:location-change'"), 'location change must be an explicit fetch trigger');
@@ -144,4 +148,4 @@ assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion && Number(shellVersion[1]) >= 49, 'Rain Home reliability fix requires PWA generation at least pwa49');
 
-console.log('Rain Home single-request transport + current-aware forecast semantics validation passed');
+console.log('Rain Home progressive non-blocking series + current-aware forecast semantics validation passed');
