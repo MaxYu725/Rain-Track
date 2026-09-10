@@ -4,6 +4,8 @@ import { SWIRLS_FETCH_POLICY, summarizeIndex } from './swirls-worker-runtime.js'
 export const SWIRLS_POINT_SERIES_CONCURRENCY = 4;
 export const SWIRLS_POINT_SERIES_INDEX_DEADLINE_MS = 8_000;
 export const SWIRLS_POINT_SERIES_FRAME_BUDGET_MS = 9_000;
+export const SWIRLS_POINT_SERIES_FRAME_TIMEOUT_MS = 5_000;
+const HARD_DEADLINE_GRACE_MS = 250;
 
 export function createSwirlsPointSeriesBatchLoader({
   loadIndex,
@@ -11,7 +13,8 @@ export function createSwirlsPointSeriesBatchLoader({
   policy = SWIRLS_FETCH_POLICY,
   concurrency = SWIRLS_POINT_SERIES_CONCURRENCY,
   indexDeadlineMs = SWIRLS_POINT_SERIES_INDEX_DEADLINE_MS,
-  frameBudgetMs = SWIRLS_POINT_SERIES_FRAME_BUDGET_MS
+  frameBudgetMs = SWIRLS_POINT_SERIES_FRAME_BUDGET_MS,
+  frameTimeoutMs = SWIRLS_POINT_SERIES_FRAME_TIMEOUT_MS
 } = {}) {
   if (typeof loadIndex !== 'function') throw new Error('SWIRLS batch loader requires loadIndex()');
   if (typeof fetchText !== 'function') throw new Error('SWIRLS batch loader requires fetchText()');
@@ -21,6 +24,7 @@ export function createSwirlsPointSeriesBatchLoader({
     const workerCount = Math.max(1, Math.min(indexes.length, Number(concurrency) || SWIRLS_POINT_SERIES_CONCURRENCY));
     const indexDeadline = Math.max(1, Number(indexDeadlineMs) || SWIRLS_POINT_SERIES_INDEX_DEADLINE_MS);
     const frameBudget = Math.max(1, Number(frameBudgetMs) || SWIRLS_POINT_SERIES_FRAME_BUDGET_MS);
+    const frameTimeout = Math.max(1, Number(frameTimeoutMs) || SWIRLS_POINT_SERIES_FRAME_TIMEOUT_MS);
 
     // Read exactly one immutable index snapshot. A compact Rain Home request
     // must never wait forever for the upstream index before it can fail closed.
@@ -31,9 +35,9 @@ export function createSwirlsPointSeriesBatchLoader({
     );
 
     // Keep concurrent HKO MDL work below the Worker outbound connection ceiling.
-    // The whole frame phase also has one shared budget: completed frames are
-    // returned as a coherent partial series instead of allowing one hung frame
-    // to pin Promise.allSettled() and the Rain Home skeleton indefinitely.
+    // Each frame has its own hard deadline and the whole frame phase has one
+    // shared budget. Completed frames can therefore return as one coherent
+    // partial series without a stalled upstream request pinning Rain Home.
     const deadlineAt = Date.now() + frameBudget;
     const results = Array(indexes.length);
     let nextPosition = 0;
@@ -57,7 +61,12 @@ export function createSwirlsPointSeriesBatchLoader({
         try {
           const fetchTimeoutMs = Math.max(1, Math.min(
             Number(policy?.timeoutMs) || SWIRLS_FETCH_POLICY.timeoutMs,
+            frameTimeout,
             remainingMs
+          ));
+          const hardDeadlineMs = Math.max(1, Math.min(
+            remainingMs,
+            fetchTimeoutMs + HARD_DEADLINE_GRACE_MS
           ));
           results[position] = {
             status:'fulfilled',
@@ -68,7 +77,7 @@ export function createSwirlsPointSeriesBatchLoader({
                 bypassCache,
                 timeoutMs:fetchTimeoutMs
               }),
-              remainingMs,
+              hardDeadlineMs,
               `SWIRLS frame ${frameIndex}`
             )
           };

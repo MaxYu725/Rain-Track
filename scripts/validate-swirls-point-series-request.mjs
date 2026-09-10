@@ -125,13 +125,14 @@ const hungFrameLoader = createSwirlsPointSeriesBatchLoader({
     if (options.frameIndex === 5) return new Promise(() => {});
     return { body:mdl };
   },
-  policy:{ mdlTtlSeconds:45, timeoutMs:20 },
+  policy:{ mdlTtlSeconds:45, timeoutMs:500 },
   concurrency:4,
-  frameBudgetMs:120
+  frameTimeoutMs:80,
+  frameBudgetMs:2_000
 });
 const hungStartedAt = Date.now();
 const hungFrame = await hungFrameLoader(frameIndexes);
-assert.ok(Date.now() - hungStartedAt < 1_000, 'a hung MDL frame must not pin the point-series response');
+assert.ok(Date.now() - hungStartedAt < 1_500, 'a hung MDL frame must not pin the point-series response');
 assert.equal(hungFrame.frames.filter(Boolean).length, 15, 'a hung frame must degrade to a partial series');
 assert.equal(hungFrame.frames[5], null);
 assert.ok(hungFrame.failures.some(item => item.frameIndex === 5 && /hard deadline/.test(item.error)));
@@ -139,13 +140,14 @@ assert.ok(hungFrame.failures.some(item => item.frameIndex === 5 && /hard deadlin
 const allHungLoader = createSwirlsPointSeriesBatchLoader({
   loadIndex: async () => parsedIndex,
   fetchText: async () => new Promise(() => {}),
-  policy:{ mdlTtlSeconds:45, timeoutMs:20 },
+  policy:{ mdlTtlSeconds:45, timeoutMs:500 },
   concurrency:4,
-  frameBudgetMs:40
+  frameTimeoutMs:20,
+  frameBudgetMs:800
 });
 const allHungStartedAt = Date.now();
 const allHung = await allHungLoader(frameIndexes);
-assert.ok(Date.now() - allHungStartedAt < 1_000, 'the shared frame budget must bound a fully stalled upstream');
+assert.ok(Date.now() - allHungStartedAt < 1_500, 'the shared frame budget must bound a fully stalled upstream');
 assert.equal(allHung.frames.filter(Boolean).length, 0);
 assert.equal(allHung.failures.length, 16, 'deadline must account for active and not-yet-started frames');
 
