@@ -14,13 +14,13 @@ assert.match(api, /fetchSwirlsPointSeries/);
 assert.match(api, /\/api\/rain\/swirls\/point-series/);
 assert.ok(!api.includes('fetchSwirlsPointFrame'), 'Rain Home API must not expose the 16-frame fallback helper');
 assert.ok(!api.includes("cache:'no-store'"), 'generic browser API requests must not force no-store');
-assert.ok(api.includes('SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS = 450'), 'point-series must use one small bounded transport retry delay');
-assert.ok(api.includes('isTransientTransportError'), 'point-series retry must be limited to transport failures');
-assert.ok(api.includes('Number.isFinite(Number(error.status))'), 'HTTP failures must not enter the transport retry path');
-assert.ok(api.includes('await waitForTransportRetry(options.signal)'), 'transport retry must remain abort-aware');
-const seriesFunction = api.match(/export async function fetchSwirlsPointSeries[\s\S]*?\n\}/)?.[0] || '';
+assert.ok(!api.includes('SWIRLS_SERIES_TRANSPORT_RETRY_DELAY_MS'), 'Rain Home must not add an artificial transport retry delay');
+assert.ok(!api.includes('waitForTransportRetry'), 'Rain Home must not queue a delayed second request');
+assert.ok(!api.includes('isTransientTransportError'), 'Rain Home must not classify errors only to retry them');
+const seriesFunction = api.match(/export function fetchSwirlsPointSeries[\s\S]*?\n\}/)?.[0] || '';
 assert.ok(seriesFunction, 'fetchSwirlsPointSeries body missing');
-assert.equal((seriesFunction.match(/await api\(path, requestOptions\)/g) || []).length, 2, 'point-series must make at most two transport attempts');
+assert.equal((seriesFunction.match(/return api\(/g) || []).length, 1, 'point-series must use exactly one immediate browser request');
+assert.ok(!seriesFunction.includes('timeoutMs:30_000'), 'point-series must not replace the normal API timeout with a long special-case timeout');
 
 assert.match(app, /const RAIN_HOME_OWNS_FORECAST = document\.body\.classList\.contains\('rain-home-v2'\)/);
 assert.match(app, /RAIN_HOME_OWNS_FORECAST \? Promise\.resolve\(\) : loadPointForecast\(\{ force:false \}\)/);
@@ -77,14 +77,13 @@ assert.ok(home.includes("title = '目前預報仍有雨訊號'"), 'wet signal sp
 assert.ok(!home.includes('`最早 ${formatClock(first.validTime)} 可能有雨`'), 'window end must not be mislabeled as earliest onset');
 assert.ok(!home.includes('`最早可用時間 ${formatClock(first.validTime)} 可能有雨`'), 'partial data must not invent an onset from a rolling window end');
 
-// Bounded load recovery invariants.
+// Short fallback invariants. This is presentation recovery only, not a second network path.
 assert.ok(home.includes('SERIES_FALLBACK_CACHE_MS = 12 * 60 * 1000'), 'session fallback must have a strict short lifetime');
 assert.ok(home.includes("SERIES_SESSION_PREFIX = 'rain-home-series-v1:'"), 'session fallback key must be versioned');
 assert.ok(home.includes('sessionStorage.getItem(sessionSeriesKey(key))'), 'Rain Home must be able to recover a recent successful series after reload');
 assert.ok(home.includes('sessionStorage.setItem(sessionSeriesKey(key)'), 'successful series must populate the short session fallback');
 assert.ok(home.includes('seriesStillRelevant'), 'cached series must still overlap the forecast horizon');
 assert.ok(home.includes('const fallback = sessionFallback || readSessionSeries(key)'), 'failed current fetch may use one recent successful series');
-assert.ok(home.includes('短暫連線問題已嘗試重新連線'), 'terminal error copy must reflect the bounded transport retry');
 
 // Fifth-pass mobile readability invariants.
 assert.ok(home.includes('@media(max-width:700px)'), 'Rain Home must retain an explicit mobile presentation breakpoint');
@@ -145,4 +144,4 @@ assert.match(smoke, /import '\.\/rain-home-shell\.js';/);
 const shellVersion = sw.match(/const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa(\d+)'/);
 assert.ok(shellVersion && Number(shellVersion[1]) >= 49, 'Rain Home reliability fix requires PWA generation at least pwa49');
 
-console.log('Rain Home bounded transport recovery + current-aware forecast semantics validation passed');
+console.log('Rain Home single-request transport + current-aware forecast semantics validation passed');
