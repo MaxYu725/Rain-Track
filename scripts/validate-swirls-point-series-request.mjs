@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { parseSwirlsIndex } from '../swirls-data.js';
-import { createSwirlsPointSeriesBatchLoader } from '../swirls-point-series-batch.js';
+import {
+  createSwirlsPointSeriesBatchLoader,
+  SWIRLS_POINT_SERIES_CONCURRENCY
+} from '../swirls-point-series-batch.js';
 import { createSwirlsPointSeriesRequestHandler } from '../swirls-point-series-request.js';
 
 const runTime = '2026-08-19T12:00:00.000Z';
@@ -78,27 +81,25 @@ const parsedIndex = parseSwirlsIndex(makeIndex());
 const mdl = makeMdl();
 let indexCalls = 0;
 let mdlStarts = 0;
-let releaseAll;
-const allStarted = new Promise(resolve => { releaseAll = resolve; });
-const pendingResolvers = [];
+let activeFetches = 0;
+let maxActiveFetches = 0;
 const productionBatchLoader = createSwirlsPointSeriesBatchLoader({
   loadIndex: async () => { indexCalls += 1; return parsedIndex; },
   fetchText: async (url, options) => {
     assert.match(url, /\.af\.mdl$/);
     assert.equal(options.kind, 'mdl');
     mdlStarts += 1;
-    if (mdlStarts === 16) releaseAll();
-    await allStarted;
-    return new Promise(resolve => pendingResolvers.push(() => resolve({ body:mdl, cacheStatus:null })));
+    activeFetches += 1;
+    maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+    await new Promise(resolve => setTimeout(resolve, 4));
+    activeFetches -= 1;
+    return { body:mdl, cacheStatus:null };
   }
 });
-const batchPromise = productionBatchLoader(frameIndexes);
-await allStarted;
+const productionBatch = await productionBatchLoader(frameIndexes);
 assert.equal(indexCalls, 1, 'point-series must read exactly one index snapshot');
-assert.equal(mdlStarts, 16, 'all 16 MDL tasks must start without manual batch throttling');
-while (pendingResolvers.length < 16) await new Promise(resolve => setTimeout(resolve, 0));
-pendingResolvers.splice(0).forEach(resolve => resolve());
-const productionBatch = await batchPromise;
+assert.equal(mdlStarts, 16, 'all 16 MDL frames must still be attempted when the upstream is healthy');
+assert.ok(maxActiveFetches <= SWIRLS_POINT_SERIES_CONCURRENCY, 'MDL concurrency must stay below the Worker outbound connection ceiling');
 assert.equal(productionBatch.frames.length, 16);
 assert.equal(productionBatch.failures.length, 0);
 assert.deepEqual(productionBatch.frames.map(frame => frame.frameIndex), frameIndexes);
@@ -118,6 +119,48 @@ assert.equal(oneFailure.frames.filter(Boolean).length, 15);
 assert.equal(oneFailure.frames[5], null);
 assert.deepEqual(oneFailure.failures.map(item => item.frameIndex), [5]);
 
+const hungFrameLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: async () => parsedIndex,
+  fetchText: async (url, options) => {
+    if (options.frameIndex === 5) return new Promise(() => {});
+    return { body:mdl };
+  },
+  policy:{ mdlTtlSeconds:45, timeoutMs:20 },
+  concurrency:4,
+  frameBudgetMs:120
+});
+const hungStartedAt = Date.now();
+const hungFrame = await hungFrameLoader(frameIndexes);
+assert.ok(Date.now() - hungStartedAt < 1_000, 'a hung MDL frame must not pin the point-series response');
+assert.equal(hungFrame.frames.filter(Boolean).length, 15, 'a hung frame must degrade to a partial series');
+assert.equal(hungFrame.frames[5], null);
+assert.ok(hungFrame.failures.some(item => item.frameIndex === 5 && /hard deadline/.test(item.error)));
+
+const allHungLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: async () => parsedIndex,
+  fetchText: async () => new Promise(() => {}),
+  policy:{ mdlTtlSeconds:45, timeoutMs:20 },
+  concurrency:4,
+  frameBudgetMs:40
+});
+const allHungStartedAt = Date.now();
+const allHung = await allHungLoader(frameIndexes);
+assert.ok(Date.now() - allHungStartedAt < 1_000, 'the shared frame budget must bound a fully stalled upstream');
+assert.equal(allHung.frames.filter(Boolean).length, 0);
+assert.equal(allHung.failures.length, 16, 'deadline must account for active and not-yet-started frames');
+
+const hungIndexLoader = createSwirlsPointSeriesBatchLoader({
+  loadIndex: async () => new Promise(() => {}),
+  fetchText: async () => ({ body:mdl }),
+  indexDeadlineMs:30
+});
+const hungIndexStartedAt = Date.now();
+await assert.rejects(
+  () => hungIndexLoader(frameIndexes),
+  error => /SWIRLS index exceeded hard deadline/.test(String(error?.message))
+);
+assert.ok(Date.now() - hungIndexStartedAt < 1_000, 'a hung index request must fail closed promptly');
+
 await assert.rejects(
   () => completeHandler(new URL('https://example.test/api/rain/swirls/point-series?lat=30&lon=113.5')),
   error => error?.status === 422
@@ -125,4 +168,4 @@ await assert.rejects(
 assert.throws(() => createSwirlsPointSeriesRequestHandler({}), /requires loadFrames\(frameIndexes\)/);
 assert.throws(() => createSwirlsPointSeriesBatchLoader({ loadIndex:async () => parsedIndex }), /requires fetchText\(\)/);
 
-console.log('SWIRLS zero-base point-series validation passed');
+console.log('SWIRLS bounded partial-first point-series validation passed');
