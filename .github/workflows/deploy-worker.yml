@@ -15,6 +15,7 @@ on:
       - 'swirls-point-series-batch.js'
       - 'swirls-point-series-sample.js'
       - 'swirls-worker-runtime.js'
+      - 'scripts/probe-rain-home-progressive-production.mjs'
       - '.github/workflows/deploy-worker.yml'
 
 permissions:
@@ -47,6 +48,7 @@ jobs:
           node --check scripts/smoke-worker-production.mjs
           node --check scripts/probe-swirls-point-production.mjs
           node --check scripts/probe-swirls-point-series-production.mjs
+          node --check scripts/probe-rain-home-progressive-production.mjs
           node scripts/validate-swirls-point-sample.mjs
           node scripts/validate-swirls-point-request.mjs
           node scripts/validate-swirls-point-series-request.mjs
@@ -72,3 +74,6 @@ jobs:
 
       - name: Smoke SWIRLS point-series endpoint
         run: node scripts/probe-swirls-point-series-production.mjs
+
+      - name: Smoke progressive Rain Home path
+        run: node scripts/probe-rain-home-progressive-production.mjs
