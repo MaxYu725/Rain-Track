@@ -133,7 +133,10 @@ async function requestSeries({ force = false } = {}) {
   if (!content || !validPoint(point)) return;
 
   const key = pointKey(point);
-  if (activeLoadKey === key) return;
+  // Only passive duplicate loads are coalesced. An explicit location change or
+  // refresh must always be able to supersede a request that is still pending;
+  // otherwise a lost request leaves Rain Home permanently locked in loading.
+  if (!force && activeLoadKey === key) return;
 
   const cached = seriesCache.get(key);
   if (!force && cached && Date.now() - cached.savedAt < SERIES_CACHE_MS && seriesStillRelevant(cached.data)) {
@@ -150,15 +153,18 @@ async function requestSeries({ force = false } = {}) {
     return;
   }
 
-  activeController?.abort();
-  activeController = new AbortController();
+  if (activeController && !activeController.signal.aborted) {
+    activeController.abort(new DOMException('Superseded by a newer Rain Home request', 'AbortError'));
+  }
+  const controller = new AbortController();
+  activeController = controller;
   activeLoadKey = key;
   const token = ++requestToken;
   viewState = { kind:'loading', key, point:{ ...point }, data:null, error:null, cached:false };
   renderCurrentView(content);
 
   try {
-    const data = normalizeSeries(await fetchSwirlsPointSeries(point, { signal:activeController.signal }));
+    const data = normalizeSeries(await fetchSwirlsPointSeries(point, { signal:controller.signal }));
     if (token !== requestToken || pointKey(state.selected) !== key) return;
     const savedAt = Date.now();
     seriesCache.set(key, { data, savedAt });
@@ -166,7 +172,7 @@ async function requestSeries({ force = false } = {}) {
     viewState = { kind:'ready', key, point:{ ...state.selected }, data, error:null, cached:false };
     renderCurrentView(content);
   } catch (error) {
-    if (error?.name === 'AbortError' || token !== requestToken) return;
+    if (controller.signal.aborted || error?.name === 'AbortError' || token !== requestToken) return;
     const fallback = sessionFallback || readSessionSeries(key);
     if (fallback && seriesStillRelevant(fallback.data)) {
       seriesCache.set(key, fallback);
@@ -177,7 +183,10 @@ async function requestSeries({ force = false } = {}) {
     viewState = { kind:'error', key, point:{ ...state.selected }, data:null, error, cached:false };
     renderCurrentView(content);
   } finally {
-    if (token === requestToken) activeLoadKey = '';
+    if (token === requestToken) {
+      activeLoadKey = '';
+      if (activeController === controller) activeController = null;
+    }
   }
 }
 
@@ -244,7 +253,7 @@ function renderUnavailable(content, point, error) {
   content.innerHTML = `
     <section class="rain-home-root" data-rain-home-owned="series" data-view-kind="error" data-point-key="${escapeHtml(pointKey(point))}">
       ${locationMarkup(point)}
-      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">資料暫時不可用</div><h1 class="rain-home-verdict">定位序列未能載入</h1><p class="rain-home-detail">短暫連線問題已嘗試重新連線；如仍失敗，可使用頁面更新按鈕或重新定位後再讀取。</p></div>
+      <div class="rain-home-summary"><div class="rain-home-verdict-kicker">資料暫時不可用</div><h1 class="rain-home-verdict">定位序列未能載入</h1><p class="rain-home-detail">目前讀取未能完成。可使用頁面更新按鈕或重新定位，新的讀取會直接取代仍未完成的舊請求。</p></div>
       <div class="rain-home-error" role="alert"><strong>SWIRLS 資料讀取失敗</strong><span class="rain-home-error-detail">${escapeHtml(error?.message || String(error))}</span></div>
       ${mapActionMarkup()}
     </section>`;
