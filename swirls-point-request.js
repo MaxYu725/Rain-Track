@@ -9,9 +9,9 @@ export class SwirlsPointRequestError extends Error {
   }
 }
 
-export function createSwirlsPointRequestHandler({ loadFrame }) {
-  if (typeof loadFrame !== 'function') {
-    throw new Error('SWIRLS point request handler requires loadFrame(frameIndex)');
+export function createSwirlsPointRequestHandler({ loadFrame, loadPoint } = {}) {
+  if (typeof loadFrame !== 'function' && typeof loadPoint !== 'function') {
+    throw new Error('SWIRLS point request handler requires loadPoint(frameIndex, point) or loadFrame(frameIndex)');
   }
 
   return async function handleSwirlsPointRequest(url) {
@@ -28,15 +28,28 @@ export function createSwirlsPointRequestHandler({ loadFrame }) {
       throw new SwirlsPointRequestError('SWIRLS point is outside supported coverage', 422);
     }
 
-    // Non-regression invariant: one request loads exactly one requested frame.
-    // There is deliberately no series aggregation, fan-out, snapshot or retry loop here.
+    const point = { lat, lon };
+    if (typeof loadPoint === 'function') {
+      // Rain Home progressive path: one Worker request reads one MDL and samples
+      // only the local interpolation neighbourhood. No 121x121 frame is built.
+      const sample = await loadPoint(frameIndex, point);
+      if (!sample || Number(sample.frameIndex) !== frameIndex || !Number.isFinite(Number(sample.amountMm))) {
+        throw new Error(`SWIRLS compact point ${frameIndex} is invalid`);
+      }
+      return {
+        ok: true,
+        contractVersion: sample.contractVersion || SWIRLS_RAW_CONTRACT.version,
+        ...sample
+      };
+    }
+
+    // Stable fallback for callers/tests that still provide decoded frame data.
     const frame = await loadFrame(frameIndex);
     const sample = sampleSwirlsPoint(frame, lat, lon);
-
     return {
       ok: true,
       contractVersion: frame?.contractVersion || SWIRLS_RAW_CONTRACT.version,
-      ...sample,
+      ...sample
     };
   };
 }

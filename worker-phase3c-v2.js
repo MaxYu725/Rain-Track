@@ -28,7 +28,7 @@ export function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {
         redirect: 'follow',
         headers: {
           Accept: ACCEPT,
-          'User-Agent': 'Rain-Track-SWIRLS-Point/4.0'
+          'User-Agent': 'Rain-Track-SWIRLS-Point/4.1'
         },
         signal: controller.signal
       };
@@ -39,7 +39,7 @@ export function createWorkerSwirlsFetchText({ fetchImpl = globalThis.fetch } = {
         // HKO MDL asset names change every 6-minute run and only repeat after
         // one hour. A five-minute edge TTL therefore cannot cross forecast
         // runs, while allowing every location request at the same edge to reuse
-        // the exact same source bytes instead of downloading 16 MDLs again.
+        // the exact same source bytes instead of downloading the same MDL again.
         requestOptions.cf = {
           cacheEverything:true,
           cacheTtl:options.kind === 'mdl'
@@ -75,8 +75,16 @@ const pointSeriesBatchLoader = createSwirlsPointSeriesBatchLoader({
   policy: SWIRLS_FETCH_POLICY
 });
 
+async function loadCompactPoint(frameIndex, point) {
+  const batch = await pointSeriesBatchLoader([frameIndex], { point });
+  const sample = batch?.samples?.[0];
+  if (sample) return sample;
+  const failure = batch?.failures?.[0]?.error;
+  throw new Error(failure || `SWIRLS compact point ${frameIndex} is unavailable`);
+}
+
 const pointRequestHandler = createSwirlsPointRequestHandler({
-  loadFrame: frameIndex => pointRuntime.loadFrame(frameIndex)
+  loadPoint:loadCompactPoint
 });
 
 const pointSeriesRequestHandler = createSwirlsPointSeriesRequestHandler({

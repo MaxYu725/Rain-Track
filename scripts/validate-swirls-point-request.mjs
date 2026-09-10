@@ -43,6 +43,33 @@ assert.equal(result.accumulationMinutes, 30);
 assert.equal(result.unit, 'mm / 30 min');
 assert.deepEqual(loaded, [3], 'one point request must load exactly one requested SWIRLS frame');
 
+const compactCalls = [];
+const compactHandler = createSwirlsPointRequestHandler({
+  loadPoint: async (frameIndex, point) => {
+    compactCalls.push({ frameIndex, point });
+    return {
+      contractVersion:SWIRLS_RAW_CONTRACT.version,
+      frameIndex,
+      runTime:'2026-08-14T02:00:00.000Z',
+      validTime:'2026-08-14T02:48:00.000Z',
+      leadMinutes:48,
+      windowStart:'2026-08-14T02:18:00.000Z',
+      windowEnd:'2026-08-14T02:48:00.000Z',
+      cadenceMinutes:6,
+      accumulationMinutes:30,
+      unit:SWIRLS_RAW_CONTRACT.unit,
+      location:point,
+      interpolation:'bilinear-grid-centres',
+      amountMm:1.25,
+      clampedToGridCentreBoundary:false
+    };
+  }
+});
+const compact = await compactHandler(new URL('https://example.test/api/rain/swirls/point?frame=3&lat=22.326&lon=114.2185'));
+assert.equal(compact.ok, true);
+assert.equal(compact.amountMm, 1.25);
+assert.deepEqual(compactCalls, [{ frameIndex:3, point:{ lat:22.326, lon:114.2185 } }], 'compact point path must sample exactly the requested frame and coordinate');
+
 for (const invalidUrl of [
   'https://example.test/api/rain/swirls/point?lat=22.5&lon=114.0',
   'https://example.test/api/rain/swirls/point?frame=16&lat=22.5&lon=114.0',
@@ -57,4 +84,4 @@ for (const invalidUrl of [
   assert.equal(loaded.length, before, 'invalid point requests must fail before any frame load');
 }
 
-console.log('SWIRLS single-frame point request gate PASS');
+console.log('SWIRLS single-frame point request + compact point loader gate PASS');
