@@ -4,11 +4,13 @@ import { createPhase3Cv2Worker, createWorkerSwirlsFetchText } from '../worker-ph
 import { SwirlsPointRequestError } from '../swirls-point-request.js';
 
 const workerSource = readFileSync(new URL('../worker-phase3c-v2.js', import.meta.url), 'utf8');
-assert.ok(!workerSource.includes('caches.default'), 'compact SWIRLS critical path must not use Cache API');
-assert.ok(!workerSource.includes('cache.match('), 'compact SWIRLS critical path must not call cache.match');
-assert.ok(!workerSource.includes('cache.put('), 'compact SWIRLS critical path must not call cache.put');
+assert.ok(!workerSource.includes('caches.default'), 'compact SWIRLS critical path should use fetch edge caching rather than manual Cache API bookkeeping');
+assert.ok(!workerSource.includes('cache.match('), 'compact SWIRLS critical path must not synchronously wait on cache.match');
+assert.ok(!workerSource.includes('cache.put('), 'compact SWIRLS critical path must not synchronously wait on cache.put');
 assert.ok(!workerSource.includes("cache: 'no-cache'"), 'normal SWIRLS fetch must not force revalidation');
 assert.ok(!workerSource.includes("'Cache-Control': 'no-cache'"), 'normal SWIRLS fetch must not send Cache-Control:no-cache');
+assert.ok(workerSource.includes('COMPACT_MDL_CACHE_TTL_SECONDS = 300'), 'MDL source bytes should be reusable across location requests within one forecast cadence');
+assert.ok(workerSource.includes('COMPACT_INDEX_CACHE_TTL_SECONDS = 30'), 'the mutable index needs only a short edge cache');
 
 const fetchCalls = [];
 const fetchText = createWorkerSwirlsFetchText({
@@ -17,12 +19,22 @@ const fetchText = createWorkerSwirlsFetchText({
     return new Response('sample', { status:200, headers:{ 'Last-Modified':'Wed, 19 Aug 2026 12:00:00 GMT' } });
   }
 });
-const fetched = await fetchText('https://example.test/frame.af.mdl', { timeoutMs:1000 });
+const fetched = await fetchText('https://example.test/frame.af.mdl', { kind:'mdl', timeoutMs:1000 });
 assert.equal(fetched.body, 'sample');
 assert.equal(fetchCalls.length, 1);
-assert.equal(fetchCalls[0].options.cache, undefined, 'normal SWIRLS fetch should use ordinary fetch semantics');
-assert.equal(fetchCalls[0].options.cf, undefined, 'first zero-base version must not add an extra Cloudflare cache strategy');
+assert.equal(fetchCalls[0].options.cache, undefined, 'normal SWIRLS fetch should not use browser cache modes');
+assert.deepEqual(fetchCalls[0].options.cf, { cacheEverything:true, cacheTtl:300 }, 'MDL fetches must reuse immutable source bytes at the Cloudflare edge');
 assert.equal(fetchCalls[0].options.headers['Cache-Control'], undefined);
+
+const indexCalls = [];
+const indexFetchText = createWorkerSwirlsFetchText({
+  fetchImpl: async (url, options) => {
+    indexCalls.push({ url, options });
+    return new Response('index', { status:200 });
+  }
+});
+await indexFetchText('https://example.test/index.txt', { kind:'index', timeoutMs:1000 });
+assert.deepEqual(indexCalls[0].options.cf, { cacheEverything:true, cacheTtl:30 }, 'index fetches must retain a short freshness window');
 
 const bypassCalls = [];
 const bypassFetchText = createWorkerSwirlsFetchText({
@@ -31,8 +43,9 @@ const bypassFetchText = createWorkerSwirlsFetchText({
     return new Response('fresh', { status:200 });
   }
 });
-await bypassFetchText('https://example.test/frame.af.mdl', { bypassCache:true, timeoutMs:1000 });
+await bypassFetchText('https://example.test/frame.af.mdl', { kind:'mdl', bypassCache:true, timeoutMs:1000 });
 assert.equal(bypassCalls[0].options.cache, 'no-store');
+assert.equal(bypassCalls[0].options.cf, undefined, 'explicit bypass must also bypass the Worker edge cache');
 
 const forwarded = [];
 const baseWorker = {
@@ -134,4 +147,4 @@ assert.equal(unavailable.status, 502);
 const seriesUnavailable = await upstreamWorker.fetch(new Request('https://example.test/api/rain/swirls/point-series?lat=22.3&lon=114.17'));
 assert.equal(seriesUnavailable.status, 502);
 
-console.log('Phase 3C zero-base compact SWIRLS Worker gate PASS');
+console.log('Phase 3C compact SWIRLS edge-reuse gate PASS');
