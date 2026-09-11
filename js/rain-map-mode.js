@@ -1,5 +1,3 @@
-import { state } from './state.js';
-
 let heavyModule = null;
 let heavyPromise = null;
 let defaultForecastStarting = false;
@@ -95,7 +93,7 @@ function ensureMapDetailsButton() {
 }
 
 async function activateDefaultForecastMap() {
-  if (!state.map || defaultForecastStarting || getRainMapMode() === 'forecast') return;
+  if (defaultForecastStarting || getRainMapMode() === 'forecast') return;
   defaultForecastStarting = true;
   try {
     await setRainMapMode('forecast');
@@ -129,8 +127,10 @@ function initMapFirstHome() {
     bodyObserver.observe(document.body, { attributes:true, attributeFilter:['class'] });
   }
 
+  // app.js initializes Leaflet after this lightweight facade. The map-ready
+  // event is the single authoritative point at which the forecast overlay may
+  // touch Leaflet, so this module needs no static dependency on app state.
   window.addEventListener('rain:map-ready', () => void activateDefaultForecastMap(), { once:true });
-  if (state.map) queueMicrotask(() => void activateDefaultForecastMap());
   warmHeavyModuleAfterHomeBoot();
 }
 
