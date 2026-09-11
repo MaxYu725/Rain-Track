@@ -55,7 +55,7 @@ for (const forbidden of ['/api/rain/swirls', 'data-rain-critical-fallback', '正
   assert.ok(!boot.includes(forbidden), `first-paint watchdog must not become a second weather client: ${forbidden}`);
 }
 
-assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa62'/);
+assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa61'/);
 assert.ok(!sw.includes('const CORE_SHELL = ['), 'first paint must not trigger a PWA core prefetch storm');
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
@@ -71,4 +71,4 @@ assert.ok(appShell.includes("'./js/radar-analysis-image.js'"), 'shared Radar ima
 assert.ok(appShell.includes("'./js/radar-entry.js'"), 'Radar entry must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-runtime.js'"), 'optional Radar analysis must remain in dependency inventory');
 
-console.log('Rain Home map-first first paint + on-demand details + pwa62 regression gate PASS');
+console.log('Rain Home map-first first paint + on-demand details + pwa61 regression gate PASS');
