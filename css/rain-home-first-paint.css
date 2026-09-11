@@ -1,22 +1,25 @@
 /* Critical first-paint shell for Rain Home.
-   This file is render-blocking by design: the first browser paint must already
-   match the location-first Home layout before any module executes. */
-body.rain-home-v2:not(.rain-map-view) .pivot-content-wrapper{overflow:auto!important;background:#000}
-body.rain-home-v2:not(.rain-map-view) #map-container{height:auto!important;min-height:100%;overflow:visible!important;background:#000}
-body.rain-home-v2:not(.rain-map-view) #rain-map{visibility:hidden!important;pointer-events:none!important}
-body.rain-home-v2:not(.rain-map-view) .source-badges,
-body.rain-home-v2:not(.rain-map-view) .map-hint,
-body.rain-home-v2:not(.rain-map-view) #coordinate-readout,
-body.rain-home-v2:not(.rain-map-view) #mobile-status,
-body.rain-home-v2:not(.rain-map-view) #radar-timeline,
-body.rain-home-v2:not(.rain-map-view) #desktop-drawer-button{display:none!important}
-body.rain-home-v2:not(.rain-map-view) #forecast-panel{
+   Map-first is intentional: before modules execute, keep the forecast panel
+   hidden and let the normal map layout own the first browser paint. */
+body.rain-home-v2 #forecast-panel{display:none!important}
+
+body.rain-home-v2.rain-home-details-view .pivot-content-wrapper{overflow:auto!important;background:#000}
+body.rain-home-v2.rain-home-details-view #map-container{height:auto!important;min-height:100%;overflow:visible!important;background:#000}
+body.rain-home-v2.rain-home-details-view #rain-map{visibility:hidden!important;pointer-events:none!important}
+body.rain-home-v2.rain-home-details-view .source-badges,
+body.rain-home-v2.rain-home-details-view .map-hint,
+body.rain-home-v2.rain-home-details-view #coordinate-readout,
+body.rain-home-v2.rain-home-details-view #mobile-status,
+body.rain-home-v2.rain-home-details-view #radar-timeline,
+body.rain-home-v2.rain-home-details-view #desktop-drawer-button{display:none!important}
+body.rain-home-v2.rain-home-details-view #forecast-panel{
+  display:block!important;
   position:relative!important;left:auto!important;right:auto!important;top:auto!important;bottom:auto!important;
   width:min(760px,100%)!important;max-width:none!important;max-height:none!important;height:auto!important;
   margin:0 auto!important;border:0!important;background:#000!important;box-shadow:none!important;overflow:visible!important;
   transform:none!important;transition:none!important
 }
-body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:18px 20px calc(30px + var(--safe-bottom))!important}
+body.rain-home-v2.rain-home-details-view #forecast-panel .panel-inner{padding:18px 20px calc(30px + var(--safe-bottom))!important}
 
 .rain-home-first-paint{max-width:720px;margin:0 auto;padding:6px 0 28px}
 .rain-home-first-paint-location{padding:6px 0 20px;border-bottom:1px solid #252525}
@@ -39,7 +42,7 @@ body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:18px 
 @keyframes rain-home-first-paint-shimmer{100%{transform:translateX(100%)}}
 
 @media(max-width:700px){
-  body.rain-home-v2:not(.rain-map-view) #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}
+  body.rain-home-v2.rain-home-details-view #forecast-panel .panel-inner{padding:12px 16px calc(26px + var(--safe-bottom))!important}
   .rain-home-first-paint{padding-top:2px}
   .rain-home-first-paint-location{padding-top:2px;padding-bottom:17px}
   .rain-home-first-paint .rain-home-loading{min-height:300px}
