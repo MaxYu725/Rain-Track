@@ -50,9 +50,13 @@
 .radar-height-chip.radar-quick-chip.hidden{display:none!important}
 
 @media(max-width:700px){
-  .settings-drawer-phase1a{top:calc(50px + var(--safe-top));height:calc(100dvh - 50px - var(--safe-top));width:min(94vw,390px);padding:18px 14px calc(18px + var(--safe-bottom));scroll-padding-top:12px}
-  .settings-drawer-phase1a .drawer-heading{display:none}
-  .settings-section-primary{margin-top:8px;padding-left:10px;padding-right:10px}
+  .settings-drawer-phase1a{top:calc(50px + var(--safe-top));height:calc(100dvh - 50px - var(--safe-top));width:min(94vw,390px);padding:8px 14px calc(18px + var(--safe-bottom));scroll-padding-top:58px}
+  /* Mobile must keep an always-visible exit path. The previous redesign hid
+     the whole heading, which also hid #drawer-close and trapped the user. */
+  .settings-drawer-phase1a .drawer-heading{display:flex;min-height:50px;margin:0 0 8px;padding:3px 0 7px}
+  .settings-drawer-phase1a .drawer-heading h2{font-size:1rem;font-weight:600}
+  .settings-drawer-phase1a .panel-close{flex:0 0 42px;width:42px;height:42px;font-size:1.7rem}
+  .settings-section-primary{margin-top:4px;padding-left:10px;padding-right:10px}
   .settings-section{margin-bottom:4px}
   .settings-drawer-phase1a .panel-title{margin:14px 0 9px;padding-bottom:6px;font-size:.9rem}
   .settings-drawer-phase1a .toggle-row,.settings-drawer-phase1a .setting-row{min-height:40px;font-size:.86rem}
