@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const index = readFileSync('index.html', 'utf8');
 const criticalCss = readFileSync('css/rain-home-first-paint.css', 'utf8');
+const settingsCss = readFileSync('css/settings-phase1a.css', 'utf8');
 const boot = readFileSync('js/boot-watchdog.js', 'utf8');
 const mapMode = readFileSync('js/rain-map-mode.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
@@ -29,6 +30,7 @@ for (const legacyMarker of [
 for (const marker of [
   'body.rain-home-v2 #forecast-panel{display:none!important}',
   'body.rain-home-v2.rain-home-details-view #rain-map{visibility:hidden!important',
+  'body.rain-home-v2.rain-home-details-view #map-container > :not(#forecast-panel):not(#settings-drawer):not(#drawer-backdrop){display:none!important}',
   'body.rain-home-v2.rain-home-details-view #forecast-panel{',
   'display:block!important',
   'position:relative!important',
@@ -41,13 +43,31 @@ for (const marker of [
   "document.body.classList.add('rain-map-view')",
   "document.body.classList.remove('rain-home-details-view')",
   "button.textContent = '預報詳情'",
+  "button.textContent = '← 返回 2 小時雨區'",
   "body.classList.add('rain-home-details-view')",
   "body.classList.remove('rain-map-view')",
+  "body.classList.remove('rain-home-details-view')",
+  "body.classList.add('rain-map-view')",
   "window.addEventListener('rain:map-ready'",
   "await setRainMapMode('forecast')",
   "bodyObserver.observe(document.body, { attributes:true, attributeFilter:['class'] })"
 ]) assert.ok(mapMode.includes(marker), `map-first Rain Home marker missing: ${marker}`);
-assert.ok(mapMode.includes("body.rain-home-v2.rain-map-view #rain-home-back-map{display:none!important}"), 'legacy map back button must be hidden in favor of the Details action');
+assert.ok(mapMode.includes("body.rain-home-v2.rain-map-view #rain-home-back-map{display:none!important}"), 'legacy map back button must stay hidden in favor of the explicit Details action');
+assert.ok(mapMode.includes("body.rain-home-v2.rain-map-view #rain-map-quickviews{max-width:calc(100% - 154px)!important}"), 'Details action must reserve space instead of covering map quick views');
+
+const showDetails = mapMode.match(/function showForecastDetails\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+assert.ok(showDetails, 'showForecastDetails implementation missing');
+assert.ok(
+  showDetails.indexOf("body.classList.remove('rain-map-view')") < showDetails.indexOf("body.classList.add('rain-home-details-view')"),
+  'entering details must remove map view before setting details state so the state observer cannot undo the transition'
+);
+const bodySync = mapMode.match(/function syncMapFirstBodyState\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+assert.ok(bodySync.includes("if (body.classList.contains('rain-map-view'))"), 'explicit return-to-map state must win over stale details state');
+assert.ok(bodySync.includes("body.classList.remove('rain-home-details-view')"), 'return-to-map must clear the details state');
+
+assert.ok(settingsCss.includes('.settings-drawer-phase1a .drawer-heading{display:flex;'), 'mobile settings drawer must keep its close heading visible');
+assert.ok(!settingsCss.includes('.settings-drawer-phase1a .drawer-heading{display:none}'), 'mobile settings drawer must never hide its only close control');
+assert.ok(settingsCss.includes('.settings-drawer-phase1a .panel-close{flex:0 0 42px'), 'mobile settings close button must retain a stable touch target');
 
 assert.ok(boot.includes('data-rain-boot-recovery'), 'classic watchdog must provide a reload-only recovery UI');
 assert.ok(boot.includes('.rain-home-root[data-rain-home-owned="series"]'), 'watchdog must detect normal Rain Home takeover');
@@ -59,6 +79,7 @@ assert.match(sw, /const CACHE_VERSION = 'point-rain-pwa-v1\.6\.4-pwa61'/);
 assert.ok(!sw.includes('const CORE_SHELL = ['), 'first paint must not trigger a PWA core prefetch storm');
 const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
+assert.ok(appShell.includes("'./css/settings-phase1a.css'"), 'settings CSS must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/boot-watchdog.js'"), 'boot watchdog must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home.js'"), 'normal Rain Home module must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-map-mode.js'"), 'map-first mode controller must remain in dependency inventory');
@@ -71,4 +92,4 @@ assert.ok(appShell.includes("'./js/radar-analysis-image.js'"), 'shared Radar ima
 assert.ok(appShell.includes("'./js/radar-entry.js'"), 'Radar entry must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-runtime.js'"), 'optional Radar analysis must remain in dependency inventory');
 
-console.log('Rain Home map-first first paint + on-demand details + pwa61 regression gate PASS');
+console.log('Rain Home map-first first paint + mobile escape paths + on-demand details + pwa61 regression gate PASS');

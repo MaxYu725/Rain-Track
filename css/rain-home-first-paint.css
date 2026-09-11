@@ -6,6 +6,10 @@ body.rain-home-v2 #forecast-panel{display:none!important}
 body.rain-home-v2.rain-home-details-view .pivot-content-wrapper{overflow:auto!important;background:#000}
 body.rain-home-v2.rain-home-details-view #map-container{height:auto!important;min-height:100%;overflow:visible!important;background:#000}
 body.rain-home-v2.rain-home-details-view #rain-map{visibility:hidden!important;pointer-events:none!important}
+/* Details is a separate surface. Hide every map-layer HUD/direct child so
+   quick views, rain-area summary and the forecast scrubber cannot cover it.
+   Keep only the forecast content and the settings modal infrastructure. */
+body.rain-home-v2.rain-home-details-view #map-container > :not(#forecast-panel):not(#settings-drawer):not(#drawer-backdrop){display:none!important}
 body.rain-home-v2.rain-home-details-view .source-badges,
 body.rain-home-v2.rain-home-details-view .map-hint,
 body.rain-home-v2.rain-home-details-view #coordinate-readout,
