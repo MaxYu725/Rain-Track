@@ -4,14 +4,15 @@ import { readFileSync } from 'node:fs';
 const index = readFileSync('index.html', 'utf8');
 const criticalCss = readFileSync('css/rain-home-first-paint.css', 'utf8');
 const boot = readFileSync('js/boot-watchdog.js', 'utf8');
+const mapMode = readFileSync('js/rain-map-mode.js', 'utf8');
 const sw = readFileSync('service-worker.js', 'utf8');
 
 assert.ok(index.includes('<body class="rain-home-v2">'), 'Rain Home mode must exist before first paint');
 assert.ok(index.includes('<link rel="stylesheet" href="./css/rain-home-first-paint.css">'), 'first-paint CSS must remain render-blocking');
-assert.ok(index.includes('data-rain-home-first-paint'), 'index.html must contain Rain Home static loading markup');
-assert.ok(index.includes('正在整理未來兩小時雨勢'), 'static first paint must use Rain Home loading language');
-assert.ok(index.includes('rain-home-skeleton-chart'), 'static first paint must include the Rain Home skeleton');
-assert.ok(index.indexOf('data-rain-home-first-paint') < index.indexOf('<script type="module"'), 'static Rain Home must exist before modules execute');
+assert.ok(index.includes('data-rain-home-first-paint'), 'index.html must retain the deferred Rain Home detail markup');
+assert.ok(index.includes('正在整理未來兩小時雨勢'), 'deferred detail shell must retain Rain Home loading language');
+assert.ok(index.includes('rain-home-skeleton-chart'), 'deferred detail shell must retain the Rain Home skeleton');
+assert.ok(index.indexOf('data-rain-home-first-paint') < index.indexOf('<script type="module"'), 'deferred detail markup must exist before modules execute');
 
 const homeScript = index.indexOf('<script type="module" src="./js/rain-home.js"></script>');
 const appScript = index.indexOf('<script type="module" src="./js/app.js"></script>');
@@ -26,13 +27,27 @@ for (const legacyMarker of [
 ]) assert.ok(!index.includes(legacyMarker), `legacy first-paint marker must not return: ${legacyMarker}`);
 
 for (const marker of [
-  'body.rain-home-v2:not(.rain-map-view) #rain-map{visibility:hidden!important',
-  'body.rain-home-v2:not(.rain-map-view) #forecast-panel{',
+  'body.rain-home-v2 #forecast-panel{display:none!important}',
+  'body.rain-home-v2.rain-home-details-view #rain-map{visibility:hidden!important',
+  'body.rain-home-v2.rain-home-details-view #forecast-panel{',
+  'display:block!important',
   'position:relative!important',
   '.rain-home-first-paint .rain-home-loading{',
   '.rain-home-first-paint .rain-home-skeleton-chart{',
   '@media(prefers-reduced-motion:reduce)'
-]) assert.ok(criticalCss.includes(marker), `critical first-paint CSS marker missing: ${marker}`);
+]) assert.ok(criticalCss.includes(marker), `critical map-first CSS marker missing: ${marker}`);
+
+for (const marker of [
+  "document.body.classList.add('rain-map-view')",
+  "document.body.classList.remove('rain-home-details-view')",
+  "button.textContent = '預報詳情'",
+  "body.classList.add('rain-home-details-view')",
+  "body.classList.remove('rain-map-view')",
+  "window.addEventListener('rain:map-ready'",
+  "await setRainMapMode('forecast')",
+  "bodyObserver.observe(document.body, { attributes:true, attributeFilter:['class'] })"
+]) assert.ok(mapMode.includes(marker), `map-first Rain Home marker missing: ${marker}`);
+assert.ok(mapMode.includes("body.rain-home-v2.rain-map-view #rain-home-back-map{display:none!important}"), 'legacy map back button must be hidden in favor of the Details action');
 
 assert.ok(boot.includes('data-rain-boot-recovery'), 'classic watchdog must provide a reload-only recovery UI');
 assert.ok(boot.includes('.rain-home-root[data-rain-home-owned="series"]'), 'watchdog must detect normal Rain Home takeover');
@@ -46,6 +61,7 @@ const appShell = sw.match(/const APP_SHELL = \[([\s\S]*?)\];/)?.[1] || '';
 assert.ok(appShell.includes("'./css/rain-home-first-paint.css'"), 'first-paint CSS must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/boot-watchdog.js'"), 'boot watchdog must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home.js'"), 'normal Rain Home module must remain in dependency inventory');
+assert.ok(appShell.includes("'./js/rain-map-mode.js'"), 'map-first mode controller must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-scale.js'"), 'Rain Home chart scale model must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-scale-polish.js'"), 'optional Rain Home chart scale polish must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/rain-home-chart-intensity.js'"), 'optional Rain Home chart intensity must remain in dependency inventory');
@@ -55,4 +71,4 @@ assert.ok(appShell.includes("'./js/radar-analysis-image.js'"), 'shared Radar ima
 assert.ok(appShell.includes("'./js/radar-entry.js'"), 'Radar entry must remain in dependency inventory');
 assert.ok(appShell.includes("'./js/radar-analysis-runtime.js'"), 'optional Radar analysis must remain in dependency inventory');
 
-console.log('Rain Home first paint + optional scale/Now + Next/chart polish inventory + pwa61 regression gate PASS');
+console.log('Rain Home map-first first paint + on-demand details + pwa61 regression gate PASS');
