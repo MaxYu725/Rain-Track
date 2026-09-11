@@ -63,7 +63,14 @@ function injectMapFirstStyles() {
 function syncMapFirstBodyState() {
   const body = document.body;
   if (!body) return;
-  if (body.classList.contains('rain-map-view')) body.classList.remove('rain-home-details-view');
+  if (body.classList.contains('rain-home-details-view')) {
+    if (body.classList.contains('rain-map-view')) body.classList.remove('rain-map-view');
+    return;
+  }
+  // Layer mode changes may remove rain-map-view through legacy listeners. In
+  // the map-first product, turning a layer off must still leave the base map as
+  // Home rather than exposing (or blanking into) the detail surface.
+  if (!body.classList.contains('rain-map-view')) body.classList.add('rain-map-view');
 }
 
 function showForecastDetails() {
